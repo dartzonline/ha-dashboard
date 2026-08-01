@@ -86,15 +86,15 @@ export function EntityHistory({ entityId, unit, currentState }: EntityHistoryPro
             <AreaChart data={points} margin={{ top: 8, right: 8, left: -25, bottom: 0 }}>
               <defs>
                 <linearGradient id="entityHistoryFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--accent)" stopOpacity={.44} />
-                  <stop offset="95%" stopColor="var(--accent)" stopOpacity={.02} />
+                  <stop offset="5%" stopColor="var(--chart-line)" stopOpacity={.38} />
+                  <stop offset="95%" stopColor="var(--chart-line)" stopOpacity={.02} />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
               <XAxis dataKey="time" tickFormatter={formatTime} tick={{ fontSize: 11, fill: 'var(--muted)' }} minTickGap={44} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={(value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(Number(value))} tick={{ fontSize: 11, fill: 'var(--muted)' }} width={54} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
               <Tooltip formatter={(value) => formatValue(Number(value), unit)} labelFormatter={(label) => formatTime(Number(label))} contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12 }} />
-              <Area type="monotone" dataKey="value" stroke="var(--accent)" strokeWidth={3} fill="url(#entityHistoryFill)" dot={false} activeDot={{ r: 5 }} />
+              <Area type="monotone" dataKey="value" stroke="var(--chart-line)" strokeWidth={2} fill="url(#entityHistoryFill)" dot={false} activeDot={{ r: 5, stroke: 'var(--surface)', strokeWidth: 2 }} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (

@@ -1,6 +1,6 @@
 # Home Panel
 
-A React and FastAPI dashboard for Home Assistant. Home Assistant remains the device, automation, and recorder engine; this project provides a fast, information-rich wall-dashboard interface with live controls, alerts, world clocks, visual analytics, and a confirmed Night Mode routine. The interface is tuned for wall tablets such as Amazon Fire tablets: navigation stays hidden until you need it, and text scales up for arm's-length reading.
+A React and FastAPI dashboard for Home Assistant. Home Assistant remains the device, automation, and recorder engine; this project provides a fast, information-rich wall-dashboard interface with live controls, alerts, world clocks, visual analytics, a confirmed Night Mode routine, a nearby/on-demand flight tracker, energy usage, and kiosk-friendly extras like a screensaver and sundown dimming. The interface is tuned for wall tablets such as Amazon Fire tablets: navigation stays hidden until you need it, text scales up for arm's-length reading, and every control is touch-first (swipe between sections, no hover-only affordances).
 
 ## Quick run modes
 
@@ -147,6 +147,55 @@ Rotation rules across the whole dashboard:
 
 Recorder requests remain bounded to 24 hours, 7 days, or 30 days depending on the chart.
 
+## Dashboard configuration editor
+
+Tap **Configure** at the bottom of the sidebar to open a live editor instead of hand-editing source:
+
+- **Dashboard tiles** — add, remove, reorder, relabel, and re-icon tiles per section, with entity-ID autocomplete drawn from your live Home Assistant entities.
+- **Night Mode lights** — a checklist of your real `light.*` entities controls which lights Night Mode is allowed to switch off, replacing the old hardcoded allowlist in source.
+
+Changes are saved through the backend (`GET`/`PUT`/`DELETE /api/config`) to `/data/dashboard-config.json` in the Home Assistant add-on (Supervisor's persistent storage) or `backend/data/` for native/Compose runs — a named Docker volume keeps that directory across container rebuilds. **Reset to defaults** clears the override and reverts to the bundled configuration. The physical-security protection filter behind Night Mode (which switches are never touched, regardless of name) stays in source, not the editor, on purpose.
+
+## Every tile tells a story
+
+- Numeric sensor tiles carry an inline 24-hour sparkline; the doors-open tile instead names which door or window is open (a sparkline of a door count isn't useful).
+- Discrete entities (lights, locks, covers, media players, vacuums, fans, climate) show a 24-hour on/off activity strip in their detail sheet, with per-state totals.
+- An activity log (the clock icon next to the time) keeps a running, timestamped history of every state change the dashboard has seen this session.
+
+## Presence, media, and moments
+
+- **Presence** — `person.*` entities appear as a row of chips on the Home page (home/away, with a relative "since" time).
+- **Now playing** — a persistent bar appears at the bottom of the screen whenever a `media_player.*` is playing, with artwork, title, and transport controls. Artwork is proxied through `GET /api/entity-picture/{entity_id}` since Home Assistant's `entity_picture` path needs the backend's auth token, which the browser never receives.
+- **Night Mode** and the thermostat quick-access button remain the two one-tap **Moments**.
+
+## Energy usage
+
+The Energy section (sidebar) discovers every `device_class: energy` sensor. Devices that report `_energy_yesterday` / `_energy_this_month` / `_energy_last_month` siblings (common with smart plugs and appliance monitors) render directly as stat cards; a bare cumulative counter falls back to deriving daily usage from 30 days of recorder history. A whole-home utility-meter sensor (matched by name — "smarthub", "utility", "grid", etc.) is broken out separately from per-device totals. Empty gracefully when no energy sensors exist yet.
+
+## Weather radar
+
+The Weather section's fourth slide overlays an animated precipitation radar from [RainViewer](https://www.rainviewer.com/) (free, no API key) centered on your home coordinates, cycling through the last several frames with play/pause and an "as of" timestamp.
+
+## Flight tracker
+
+The Flights section is a from-scratch port of [FlyInk-Board](https://github.com/dartzonline/FlyInk-Board-)'s aircraft-tracking data layer — OpenSky live positions, adsbdb route/aircraft enrichment, and optional AirLabs schedules — reimplemented as FastAPI endpoints (`backend/app/flights.py`) with no e-ink rendering, no Raspberry Pi, and no background polling loop.
+
+- **Radar & Nearby** — a custom SVG radar scope over real dark map tiles ([CARTO](https://carto.com/) dark, free/keyless), plotting nearby aircraft by bearing and distance, colour-coded by climb/cruise/descend/ground. A live list below shows callsign, airline (with logo, sourced from [Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos)), aircraft type, route, altitude, speed, and distance. **Tap any aircraft to track it.**
+- **Track a Flight** — type a flight number (IATA or ICAO) to pin it: a progress bar with live position, scheduled/actual times, a delay badge, and telemetry. The currently tracked flight also appears as a small badge in the header next to the clock.
+
+No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Two optional env vars in `backend/.env` improve it further:
+
+```bash
+OPENSKY_CLIENT_ID=...      # free OpenSky account -> API client credentials; raises the anonymous rate limit
+OPENSKY_CLIENT_SECRET=...
+AIRLABS_KEY=...            # free tier from airlabs.co; adds scheduled times and delay status to tracked flights only
+```
+
+## Kiosk mode
+
+- **Screensaver** — after 5 minutes idle, a full-screen clock fades in (dismissed by any touch) and slowly drifts position to avoid screen burn-in on a permanently mounted display.
+- **Auto-dim** — the whole UI dims automatically after sunset, driven by Home Assistant's `sun.sun` entity.
+
 ## Native one-command start
 
 If Node.js, Python dependencies, and `backend/.env` are already configured, this command rebuilds the current frontend and starts FastAPI:
@@ -209,6 +258,10 @@ Edit `frontend/src/dashboardConfig.ts` to reorganize entity tiles. The bridge ex
 - `POST /api/services/{domain}/{service}`
 - `POST /api/actions/night-mode` with explicit `{"confirm": true}`
 - `GET /api/history/{entity_id}?hours=24`
+- `GET /api/entity-picture/{entity_id}` — proxies a `media_player`'s artwork with the backend's Home Assistant auth attached
+- `GET`/`PUT`/`DELETE /api/config` — the dashboard tile layout and Night Mode light allowlist, editable from the in-app **Configure** panel
+- `GET /api/flights/nearby?latitude=&longitude=&limit=` and `GET`/`POST`/`DELETE /api/flights/track` — the flight tracker's data layer (see **Flight tracker** above)
+- `GET /api/weather/external?latitude=&longitude=` — Open-Meteo forecast proxy
 - `WS /api/ws` for live `state_changed` events
 
 For native/Compose use, set `HA_URL` and `HA_TOKEN`. In the Home Assistant add-on, leave those unset so the automatic `SUPERVISOR_TOKEN` path is used. Keep Home Assistant running as the integration and automation engine; this project replaces its presentation layer, not its protocol adapters, integrations, recorder, or automations.

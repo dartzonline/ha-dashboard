@@ -46,6 +46,10 @@ class HomeAssistantClient:
         response.raise_for_status()
         return response.json()
 
+    async def raw_get(self, path: str) -> httpx.Response:
+        """Fetch an arbitrary Home-Assistant-relative path (e.g. an entity_picture) with auth attached."""
+        return await self.client.get(path)
+
     async def history(self, entity_id: str, hours: int = 24) -> list[list[dict[str, Any]]]:
         start = datetime.now(timezone.utc) - timedelta(hours=hours)
         response = await self.client.get(

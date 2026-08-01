@@ -33,6 +33,16 @@ export const dashboardSections: DashboardSection[] = [
     tiles: [],
   },
   {
+    id: 'flights',
+    label: 'Flights',
+    tiles: [],
+  },
+  {
+    id: 'energy',
+    label: 'Energy',
+    tiles: [],
+  },
+  {
     id: 'weather',
     label: 'Weather',
     tiles: [

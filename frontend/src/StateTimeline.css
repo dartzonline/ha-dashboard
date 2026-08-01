@@ -1,0 +1,23 @@
+/* Discrete-state history strip: color identifies state, the legend chips name it. */
+.state-timeline { margin-bottom: 16px; padding: 14px 12px 12px; border-radius: 10px; background: var(--surface-raised); }
+.state-timeline > header { display: flex; align-items: center; justify-content: space-between; padding: 0 2px 10px; }
+.state-timeline > header > div { display: flex; align-items: center; gap: 7px; color: var(--accent-strong); }
+.state-timeline h3 { margin: 0; color: var(--text); font-size: .82rem; }
+.state-timeline > header > span { color: var(--muted); font-size: .65rem; }
+.timeline-strip { display: flex; gap: 2px; height: 30px; border-radius: 7px; overflow: hidden; }
+.timeline-segment { min-width: 2px; flex-basis: 0; }
+.timeline-segment.tone-active { background: var(--chart-line); }
+.timeline-segment.tone-inactive { background: color-mix(in srgb, var(--surface) 55%, var(--surface-raised)); }
+.timeline-segment.tone-unknown { background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(147, 166, 186, .16) 4px, rgba(147, 166, 186, .16) 8px); }
+.timeline-scale { display: flex; justify-content: space-between; margin-top: 5px; color: var(--muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .05em; }
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.timeline-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 7px; background: var(--surface); font-size: .68rem; }
+.timeline-chip i { width: 9px; height: 9px; border-radius: 3px; }
+.timeline-chip i.tone-active { background: var(--chart-line); }
+.timeline-chip i.tone-inactive { background: color-mix(in srgb, var(--muted) 42%, var(--surface)); }
+.timeline-chip i.tone-unknown { background: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(147, 166, 186, .35) 2px, rgba(147, 166, 186, .35) 4px); }
+.timeline-chip strong { color: var(--text); text-transform: capitalize; }
+.timeline-chip em { color: var(--muted); font-style: normal; }
+.timeline-empty { min-height: 68px; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: .72rem; }
+.timeline-empty.loading svg { animation: timeline-pulse 1.2s ease-in-out infinite; }
+@keyframes timeline-pulse { 50% { opacity: .35; transform: translateY(-2px); } }

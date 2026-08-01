@@ -1,49 +1,41 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import type { LucideIcon } from 'lucide-react'
 import {
-  Activity, AlertTriangle, Baby, Battery, BedDouble, BellRing, Bot, BriefcaseBusiness, Car, ChartNoAxesCombined,
-  ArrowDown, ArrowUp, ChevronDown, CircleDot, CloudSun, DoorOpen, Droplets, Filter, Gauge, Lamp, Lightbulb,
-  Home, Globe2, Info, Lock, LockOpen, Menu, MonitorSmartphone, Moon, PanelLeftClose, Pause, Play,
-  Projector, Refrigerator, RotateCw, Send,
-  ScanLine, Shield, SkipBack, SkipForward, Sparkles, Sprout, Square, SunMedium, Thermometer, Tv, Volume2, Warehouse,
-  WashingMachine, Waves, Wifi, Wind, Wrench, X,
+  Activity, AlertTriangle, Battery, BellRing, Bot, ChartNoAxesCombined,
+  ArrowDown, ArrowUp, ChevronDown, CloudSun, History, Lightbulb,
+  Info, Lock, LockOpen, Menu, MonitorSmartphone, Moon, PanelLeftClose, Pause, Play,
+  RotateCw, Send,
+  Shield, SkipBack, SkipForward, Square, SunMedium, Thermometer, Volume2,
+  Wifi, Wind, Wrench, X,
 } from 'lucide-react'
 import './App.css'
-import { dashboardSections } from './dashboardConfig'
+import { icons, sectionIcons } from './icons'
 import type { HAEntity, TileConfig } from './types'
 import { useHomeAssistant } from './useHomeAssistant'
 import type { HAStateChange } from './useHomeAssistant'
 import { useInsights } from './useInsights'
+import { useDashboardConfig } from './useDashboardConfig'
 import { insightsSlides, rotationInterval } from './insightsSlides'
+import { flightsSlideCount } from './flightsSlides'
+import { ConfigPanel } from './ConfigPanel'
+import { EventLog } from './EventLog'
+import { useEventLog } from './useEventLog'
+import { MediaBar } from './MediaBar'
+import { PresenceRow } from './PresenceRow'
+import { Screensaver } from './Screensaver'
 import { SecurityPanel } from './SecurityPanel'
+import { Sparkline } from './Sparkline'
+import { useSparkline } from './useSparkline'
+import { StateTimeline } from './StateTimeline'
 import { ThermostatKnob } from './ThermostatKnob'
+import { TrackedAircraftBadge } from './TrackedAircraftBadge'
+import { useAutoDim } from './useAutoDim'
 import { WeatherView } from './WeatherView'
 import { WorldTimeMap } from './WorldTimeMap'
 
 const InsightsView = lazy(() => import('./InsightsView').then((module) => ({ default: module.InsightsView })))
 const EntityHistory = lazy(() => import('./EntityHistory').then((module) => ({ default: module.EntityHistory })))
-
-const icons: Record<string, LucideIcon> = {
-  baby: Baby, battery: Battery, bed: BedDouble, bot: Bot, briefcase: BriefcaseBusiness,
-  car: Car, 'circle-dot': CircleDot, 'cloud-sun': CloudSun, 'door-open': DoorOpen,
-  droplets: Droplets, filter: Filter, gauge: Gauge, lamp: Lamp, lightbulb: Lightbulb, lock: Lock,
-  moon: Moon, projector: Projector, refrigerator: Refrigerator, 'rotate-cw': RotateCw,
-  scan: ScanLine, shield: Shield, sparkles: Sparkles, thermometer: Thermometer,
-  sprout: Sprout, tv: Tv, warehouse: Warehouse, waves: Waves, 'washing-machine': WashingMachine, wifi: Wifi, wind: Wind,
-}
-
-const sectionIcons: Record<string, LucideIcon> = {
-  insights: ChartNoAxesCombined,
-  home: Home,
-  world: Globe2,
-  weather: CloudSun,
-  climate: Thermometer,
-  security: Shield,
-  lights: Lightbulb,
-  appliances: WashingMachine,
-  roborock: Bot,
-  scenes: Sparkles,
-}
+const EnergyView = lazy(() => import('./EnergyView').then((module) => ({ default: module.EnergyView })))
+const FlightsView = lazy(() => import('./FlightsView').then((module) => ({ default: module.FlightsView })))
 
 function formatEntityState(entity: HAEntity, state: string) {
   const domain = entity.entity_id.split('.')[0]
@@ -83,6 +75,21 @@ function isHazard(entity: HAEntity | undefined) {
   if (domain === 'lock') return ['unlocked', 'jammed', 'open'].includes(entity.state)
   if (domain === 'cover') return ['open', 'opening'].includes(entity.state)
   return domain === 'binary_sensor' && entity.state === 'on' && ['door', 'garage_door', 'window', 'opening', 'moisture', 'smoke', 'gas', 'problem', 'safety'].includes(deviceClass)
+}
+
+const doorOpeningClasses = ['door', 'garage_door', 'window', 'opening']
+
+/** A count sensor has nothing worth charting — name the open doors/windows instead. */
+function openDoorSummary(entities: Map<string, HAEntity>): string {
+  const open = Array.from(entities.values()).filter((entity) => {
+    const deviceClass = String(entity.attributes.device_class ?? '')
+    return entity.entity_id.startsWith('binary_sensor.') && doorOpeningClasses.includes(deviceClass) && entity.state === 'on'
+  })
+  if (!open.length) return 'All closed'
+  const names = open.map((entity) => String(entity.attributes.friendly_name ?? entity.entity_id.split('.')[1].replaceAll('_', ' ')))
+  const shown = names.slice(0, 2).join(', ')
+  const label = `${open.length} open`
+  return names.length > 2 ? `${label}: ${shown} +${names.length - 2} more` : `${label}: ${shown}`
 }
 
 interface StateAlert {
@@ -235,9 +242,11 @@ interface TileProps {
   entity?: HAEntity
   onService: (domain: string, service: string, data: Record<string, unknown>) => Promise<void>
   onExpand: () => void
+  subtitle?: string
+  noSparkline?: boolean
 }
 
-function EntityTile({ config, entity, onService, onExpand }: TileProps) {
+function EntityTile({ config, entity, onService, onExpand, subtitle, noSparkline }: TileProps) {
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const Icon = icons[config.icon] ?? Square
@@ -245,6 +254,8 @@ function EntityTile({ config, entity, onService, onExpand }: TileProps) {
   const domain = config.entityId.split('.')[0]
   const lightOn = domain === 'light' && entity?.state === 'on'
   const hazard = isHazard(entity)
+  const showSparkline = !noSparkline && config.kind === 'sensor' && Boolean(entity) && Number.isFinite(Number(entity?.state))
+  const sparkPoints = useSparkline(config.entityId, showSparkline)
   const longPressTimer = useRef<number | undefined>(undefined)
   const longPressTriggered = useRef(false)
 
@@ -297,9 +308,10 @@ function EntityTile({ config, entity, onService, onExpand }: TileProps) {
     >
       <div className="tile-heading">
         <span className="tile-icon"><Icon size={24} aria-hidden="true" /></span>
-        <div><h3>{config.label}</h3><p>{displayState(entity)}</p></div>
+        <div><h3>{config.label}</h3><p>{subtitle ?? displayState(entity)}</p></div>
       </div>
 
+      {showSparkline && <Sparkline points={sparkPoints} />}
       {config.kind === 'toggle' && (
         <button className={`toggle ${active ? 'is-on' : ''}`} onClick={(event) => { event.stopPropagation(); void toggle() }} onPointerDown={(event) => event.stopPropagation()} disabled={pending || !entity} title={`Turn ${config.label} ${active ? 'off' : 'on'}`}><span /></button>
       )}
@@ -467,6 +479,9 @@ function EntityDetails({ config, entity, onService, onClose }: { config: TileCon
             <EntityHistory entityId={entity.entity_id} unit={unit} currentState={entity.state} />
           </Suspense>
         )}
+        {!hasNumericHistory && entity && ['light', 'switch', 'lock', 'cover', 'binary_sensor', 'media_player', 'vacuum', 'fan', 'climate'].includes(domain) && (
+          <StateTimeline entityId={entity.entity_id} currentState={entity.state} formatState={(state) => formatEntityState(entity, state)} />
+        )}
         <h3 className="detail-subheading">Details</h3>
         <div className="attribute-grid">
           {attributes.length ? attributes.map(([name, value]) => <div key={name}><span>{name.replaceAll('_', ' ')}</span><strong>{String(value)}</strong></div>) : <p>No additional attributes available.</p>}
@@ -487,24 +502,40 @@ function App() {
   const [weatherSlide, setWeatherSlide] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [securityOpen, setSecurityOpen] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
+  const [eventLogOpen, setEventLogOpen] = useState(false)
+  const [flightsSlide, setFlightsSlide] = useState(0)
   const [nightModeStatus, setNightModeStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
   const [nightModeMessage, setNightModeMessage] = useState('Locks, garage, and indoor lighting')
+  const { events, addEvent } = useEventLog()
   const alertTimers = useRef<Map<number, number>>(new Map())
   const handleStateChange = useCallback((change: HAStateChange) => {
     const alert = createStateAlert(change)
     if (!alert) return
+    addEvent(alert)
     setAlerts((current) => [...current.filter((item) => item.id !== alert.id), alert].slice(-3))
     const timer = window.setTimeout(() => {
       setAlerts((current) => current.filter((item) => item.id !== alert.id))
       alertTimers.current.delete(alert.id)
     }, 5_000)
     alertTimers.current.set(alert.id, timer)
-  }, [])
+  }, [addEvent])
   const { entities, health, loading, error, callService, runNightMode } = useHomeAssistant(handleStateChange)
+  const autoDimClass = useAutoDim(entities)
+  // MediaBar fixes itself to the bottom of the viewport; reserve space so it never covers bottom-anchored
+  // controls like the Insights/Weather/Flights slide pagers.
+  const hasActiveMedia = Array.from(entities.values()).some((entity) => entity.entity_id.startsWith('media_player.') && entity.state === 'playing')
+  const {
+    sections: dashboardSections,
+    nightModeIndoorLights,
+    customized: configCustomized,
+    save: saveDashboardConfig,
+    reset: resetDashboardConfig,
+  } = useDashboardConfig()
   const section = dashboardSections.find((item) => item.id === activeSection) ?? dashboardSections[0]
   const insights = useInsights(activeSection === 'insights')
   const connectionStatus = health === null ? 'Connecting' : health.home_assistant.connected ? 'Connected' : 'Offline'
-  const weatherSlideCount = 3
+  const weatherSlideCount = 4
   const weatherRotationInterval = 10_000
 
   useEffect(() => {
@@ -515,7 +546,7 @@ function App() {
   // Insights advances through its own panels first, so it holds for slides x interval before the next section.
   useEffect(() => {
     if (!autoRotate || expandedTile) return
-    const interval = activeSection === 'weather' ? weatherRotationInterval : rotationInterval
+    const interval = activeSection === 'weather' || activeSection === 'flights' ? weatherRotationInterval : rotationInterval
     const timer = window.setTimeout(() => {
       if (activeSection === 'insights' && insightsSlide < insightsSlides.length - 1) {
         setInsightsSlide(insightsSlide + 1)
@@ -525,13 +556,18 @@ function App() {
         setWeatherSlide(weatherSlide + 1)
         return
       }
+      if (activeSection === 'flights' && flightsSlide < flightsSlideCount - 1) {
+        setFlightsSlide(flightsSlide + 1)
+        return
+      }
       const currentIndex = dashboardSections.findIndex((item) => item.id === activeSection)
       setInsightsSlide(0)
       setWeatherSlide(0)
+      setFlightsSlide(0)
       setActiveSection(dashboardSections[(currentIndex + 1) % dashboardSections.length].id)
     }, interval)
     return () => window.clearTimeout(timer)
-  }, [autoRotate, expandedTile, activeSection, insightsSlide, weatherSlide])
+  }, [autoRotate, expandedTile, activeSection, insightsSlide, weatherSlide, flightsSlide, dashboardSections])
 
   useEffect(() => () => {
     alertTimers.current.forEach((timer) => window.clearTimeout(timer))
@@ -551,8 +587,27 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [sidebarOpen])
 
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+
   function stopRotation() {
     setAutoRotate(false)
+  }
+
+  // Touch-first navigation: horizontal swipes on the page move between sections.
+  function handleSwipeStart(event: React.TouchEvent) {
+    const target = event.target as Element
+    swipeStart.current = target.closest('input, [role="slider"], .thermo-knob') ? null : { x: event.touches[0].clientX, y: event.touches[0].clientY }
+  }
+
+  function handleSwipeEnd(event: React.TouchEvent) {
+    if (!swipeStart.current) return
+    const deltaX = event.changedTouches[0].clientX - swipeStart.current.x
+    const deltaY = event.changedTouches[0].clientY - swipeStart.current.y
+    swipeStart.current = null
+    if (Math.abs(deltaX) < 72 || Math.abs(deltaY) > 56) return
+    const currentIndex = dashboardSections.findIndex((item) => item.id === activeSection)
+    const nextIndex = (currentIndex + (deltaX < 0 ? 1 : -1) + dashboardSections.length) % dashboardSections.length
+    selectSection(dashboardSections[nextIndex].id)
   }
 
   function selectSection(sectionId: string) {
@@ -562,6 +617,7 @@ function App() {
     if (sectionId !== activeSection) {
       setInsightsSlide(0)
       setWeatherSlide(0)
+      setFlightsSlide(0)
     }
   }
 
@@ -573,6 +629,11 @@ function App() {
   function selectWeatherSlide(index: number) {
     stopRotation()
     setWeatherSlide(index)
+  }
+
+  function selectFlightsSlide(index: number) {
+    stopRotation()
+    setFlightsSlide(index)
   }
 
   async function activateNightMode() {
@@ -600,7 +661,7 @@ function App() {
   }
 
   return (
-    <div className="command-center">
+    <div className={`command-center ${autoDimClass}`.trim()}>
       <div className="alert-stack" aria-live="polite" aria-atomic="false">
         {alerts.map((alert) => (
           <button key={alert.id} className={`state-alert ${alert.tone}`} onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))}>
@@ -619,10 +680,10 @@ function App() {
             return <button key={item.id} className={item.id === activeSection ? 'active' : ''} onClick={() => selectSection(item.id)}><SectionIcon size={20} aria-hidden="true" /><span>{item.label}</span></button>
           })}
         </nav>
-        <button className="settings-button" title="Customize entities in dashboardConfig.ts"><Wrench size={20} /><span>Configure</span></button>
+        <button className="settings-button" onClick={() => { stopRotation(); setSidebarOpen(false); setConfigOpen(true) }} title="Customize dashboard tiles and Night Mode lights"><Wrench size={20} /><span>Configure{configCustomized ? '' : ' (default)'}</span></button>
       </aside>
 
-      <main className={activeSection === 'insights' || activeSection === 'weather' ? 'is-fixed-view' : ''} onPointerDownCapture={(event) => {
+      <main className={`${activeSection === 'insights' || activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''} ${hasActiveMedia ? 'has-media-bar' : ''}`.trim()} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onPointerDownCapture={(event) => {
         if (!(event.target as Element).closest('.rotation-status')) stopRotation()
       }}>
         <header className="topbar">
@@ -638,8 +699,10 @@ function App() {
             </button>
             <div><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p><h1>{section.label}</h1></div>
           </div>
+          <TrackedAircraftBadge />
           <div className="clock-block">
-            <button className={`rotation-status ${autoRotate ? 'is-running' : ''}`} onClick={(event) => { event.stopPropagation(); setAutoRotate((current) => !current) }} title={autoRotate ? 'Pause automatic page rotation' : 'Resume automatic page rotation'}><RotateCw size={15} /><span>{autoRotate ? (activeSection === 'insights' ? `20s · ${insightsSlide + 1}/${insightsSlides.length}` : activeSection === 'weather' ? `10s · ${weatherSlide + 1}/${weatherSlideCount}` : '20s') : 'Paused'}</span></button>
+            <button className="nav-toggle" onClick={() => { stopRotation(); setEventLogOpen(true) }} title="View activity log" aria-label="View activity log"><History size={18} /></button>
+            <button className={`rotation-status ${autoRotate ? 'is-running' : ''}`} onClick={(event) => { event.stopPropagation(); setAutoRotate((current) => !current) }} title={autoRotate ? 'Pause automatic page rotation' : 'Resume automatic page rotation'}><RotateCw size={15} /><span>{autoRotate ? (activeSection === 'insights' ? `20s · ${insightsSlide + 1}/${insightsSlides.length}` : activeSection === 'weather' ? `10s · ${weatherSlide + 1}/${weatherSlideCount}` : activeSection === 'flights' ? `10s · ${flightsSlide + 1}/${flightsSlideCount}` : '20s') : 'Paused'}</span></button>
             <strong>{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
             <span className={connectionStatus === 'Connected' ? 'connected' : connectionStatus === 'Offline' ? 'disconnected' : 'connecting'}><i />{connectionStatus}</span>
           </div>
@@ -683,6 +746,14 @@ function App() {
           <WorldTimeMap now={now} />
         ) : activeSection === 'weather' ? (
           <WeatherView entities={entities} slide={weatherSlide} onSelectSlide={selectWeatherSlide} />
+        ) : activeSection === 'flights' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing flights</span></div>}>
+            <FlightsView entities={entities} slide={flightsSlide} onSelectSlide={selectFlightsSlide} />
+          </Suspense>
+        ) : activeSection === 'energy' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing energy usage</span></div>}>
+            <EnergyView entities={entities} />
+          </Suspense>
         ) : (
           <section className="overview" aria-label={`${section.label} entities`}>
             {activeSection === 'climate' && entities.has('climate.mainfoor_thermostat') && (
@@ -690,12 +761,26 @@ function App() {
                 <ThermostatKnob entity={entities.get('climate.mainfoor_thermostat')} pending={false} size="large" onSet={(value) => void callService('climate', 'set_temperature', { entity_id: 'climate.mainfoor_thermostat', temperature: value })} />
               </div>
             )}
+            {activeSection === 'home' && <PresenceRow entities={entities} />}
             <div className="section-heading">
               <div><span>My home</span><h2>{section.label} devices</h2></div>
               <p>{loading ? 'Loading entities...' : `${section.tiles.filter((tile) => entities.has(tile.entityId)).length} available`}</p>
             </div>
             <div className="entity-grid">
-              {section.tiles.filter((tile) => !(activeSection === 'climate' && tile.entityId === 'climate.mainfoor_thermostat')).map((tile) => <EntityTile key={tile.entityId} config={tile} entity={entities.get(tile.entityId)} onService={callService} onExpand={() => { stopRotation(); setExpandedTile(tile) }} />)}
+              {section.tiles.filter((tile) => !(activeSection === 'climate' && tile.entityId === 'climate.mainfoor_thermostat')).map((tile) => {
+                const isDoorCount = tile.entityId === 'sensor.doors_open_count'
+                return (
+                  <EntityTile
+                    key={tile.entityId}
+                    config={tile}
+                    entity={entities.get(tile.entityId)}
+                    onService={callService}
+                    onExpand={() => { stopRotation(); setExpandedTile(tile) }}
+                    subtitle={isDoorCount ? openDoorSummary(entities) : undefined}
+                    noSparkline={isDoorCount}
+                  />
+                )
+              })}
             </div>
           </section>
         )}
@@ -711,6 +796,19 @@ function App() {
         />
       )}
       {expandedTile && <EntityDetails config={expandedTile} entity={entities.get(expandedTile.entityId)} onService={callService} onClose={() => setExpandedTile(null)} />}
+      {configOpen && (
+        <ConfigPanel
+          entities={entities}
+          sections={dashboardSections}
+          nightModeIndoorLights={nightModeIndoorLights}
+          onSave={saveDashboardConfig}
+          onReset={resetDashboardConfig}
+          onClose={() => setConfigOpen(false)}
+        />
+      )}
+      {eventLogOpen && <EventLog events={events} onClose={() => setEventLogOpen(false)} />}
+      <MediaBar entities={entities} onService={callService} />
+      <Screensaver />
     </div>
   )
 }

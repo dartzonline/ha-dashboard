@@ -26,6 +26,11 @@ export interface HealthResponse {
   home_assistant: { configured: boolean; connected: boolean }
 }
 
+export interface DashboardConfigResponse {
+  sections: DashboardSection[] | null
+  nightModeIndoorLights: string[]
+}
+
 export interface NightModeResponse {
   status: 'completed' | 'partial'
   locked: string[]
