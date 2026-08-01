@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --canvas: #090d14;
+  --surface: #121826;
+  --surface-raised: #1a2332;
+  --border: #2a3447;
+  --text: #e5ebf4;
+  --muted: #96a4b8;
+  --accent: #8fb2f0;
+  --accent-strong: #c6d7f8;
+  --accent-soft: #1c2a44;
+  --rail: #0b111c;
+  --rail-text: #9aa7b8;
+  --rail-active: #d6e2f5;
+  --good: #6dc59b;
+  --good-soft: #17372d;
+  --danger: #ef7c86;
+  --danger-soft: #3f2028;
+  --warn: #dcb677;
+  --warn-soft: #3f3320;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .28), inset 0 1px rgba(255, 255, 255, .02);
+  --sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-family: var(--sans);
+  color: var(--text);
+  background: var(--canvas);
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 80% 2%, rgba(108, 138, 196, .14), transparent 34rem),
+    radial-gradient(circle at 12% 96%, rgba(98, 79, 52, .11), transparent 28rem),
+    linear-gradient(rgba(118, 134, 162, .02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(118, 134, 162, .02) 1px, transparent 1px),
+    var(--canvas);
+  background-size: auto, auto, 34px 34px, 34px 34px, auto;
+}
+button, input { font: inherit; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Mid-size touch screens such as Fire tablets get larger base text for arm's-length reading. */
+@media (min-width: 700px) and (max-width: 1440px) {
+  :root { font-size: 18px; }
+}
+@media (min-width: 1100px) and (max-width: 1366px) and (orientation: landscape) {
+  :root { font-size: 19px; }
+}

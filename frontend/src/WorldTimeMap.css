@@ -1,0 +1,63 @@
+.world-view { padding-top: 20px; }
+.world-heading { margin-bottom: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.world-heading h2 { margin: 4px 0 3px; font-size: clamp(1.35rem, 2.4vw, 2rem); letter-spacing: -.04em; }
+.world-heading p { margin: 0; color: var(--muted); font-size: .79rem; }
+.eyebrow { color: var(--accent); display: flex; align-items: center; gap: 6px; font-size: .66rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+.world-selection { min-width: 166px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--accent); background: rgba(8, 19, 29, .82); display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; }
+.world-selection svg { grid-row: span 2; }
+.world-selection span { color: var(--muted); font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; }
+.world-selection strong { color: var(--text); font-size: .76rem; }
+.world-map-shell { border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); border-radius: 12px; background: #020714; overflow: hidden; box-shadow: 0 22px 60px rgba(0, 0, 0, .38), inset 0 1px rgba(255, 255, 255, .04); }
+.timezone-ruler { height: 34px; padding: 0 1px; border-bottom: 1px solid rgba(103, 167, 194, .28); color: #a5b6c7; background: #07101e; display: grid; grid-template-columns: repeat(24, 1fr); align-items: center; font: 650 .62rem var(--mono); }
+.timezone-ruler span { text-align: center; }
+.timezone-ruler .is-noon { color: var(--warn); }
+.timezone-ruler .is-midnight { color: #71a9ff; }
+.world-map { position: relative; aspect-ratio: 2 / 1; min-height: 340px; overflow: hidden; background: #020714; }
+.world-map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.map-ocean { fill: #030a18; }
+.satellite-layer { filter: saturate(.94) contrast(1.08) brightness(.9); }
+.map-grid line { stroke: rgba(200, 226, 237, .2); stroke-width: .8; vector-effect: non-scaling-stroke; }
+.route-line { fill: none; stroke: rgba(96, 236, 241, .52); stroke-width: 1.3; stroke-dasharray: 5 7; vector-effect: non-scaling-stroke; }
+.map-marker { --marker-color: var(--accent); position: absolute; z-index: 2; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: #051018; background: transparent; transform: translate(-50%, -50%); cursor: pointer; }
+.marker-dot { position: relative; z-index: 2; width: 28px; height: 28px; border: 2px solid #f3fdff; border-radius: 50%; background: var(--marker-color); display: grid; place-items: center; box-shadow: 0 0 6px #020711, 0 0 18px color-mix(in srgb, var(--marker-color) 82%, transparent); transition: transform .18s ease; }
+.marker-pulse { position: absolute; z-index: 1; inset: -7px; border: 1px solid var(--marker-color); border-radius: 50%; opacity: .24; }
+.map-marker:hover .marker-dot, .map-marker.is-selected .marker-dot { transform: scale(1.18); }
+.map-marker.is-selected .marker-pulse { animation: marker-pulse 1.8s ease-out infinite; }
+.marker-label { position: absolute; left: 36px; top: -3px; min-width: 82px; padding: 5px 7px; border: 1px solid color-mix(in srgb, var(--marker-color) 60%, #20394c); border-radius: 7px; color: var(--text); background: rgba(2, 7, 17, .88); display: grid; text-align: left; white-space: nowrap; box-shadow: 0 5px 16px rgba(0, 0, 0, .32); backdrop-filter: blur(8px); }
+.marker-label strong { font-size: .67rem; line-height: 1.2; }
+.marker-label small { margin-top: 2px; color: var(--marker-color); font: 700 .61rem var(--mono); }
+.marker-auckland .marker-label { right: 36px; left: auto; text-align: right; }
+.map-credit { position: absolute; left: 10px; bottom: 9px; z-index: 2; color: rgba(226, 239, 244, .66); font-size: .55rem; text-decoration: none; text-shadow: 0 1px 3px #000; }
+.map-credit:hover { color: #fff; text-decoration: underline; }
+.map-legend { position: absolute; right: 12px; bottom: 10px; z-index: 2; padding: 6px 8px; border: 1px solid rgba(117, 167, 194, .28); border-radius: 7px; color: #a5b4c3; background: rgba(3, 9, 19, .74); display: flex; gap: 12px; font-size: .61rem; backdrop-filter: blur(8px); }
+.map-legend span { display: flex; align-items: center; gap: 4px; }
+.world-clock-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.world-clock-card { min-width: 0; min-height: 100px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; text-align: left; cursor: pointer; box-shadow: var(--shadow); transition: border-color .18s ease, transform .18s ease, background .18s ease; }
+.world-clock-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.world-clock-card.is-selected { border-color: var(--accent); background: linear-gradient(135deg, color-mix(in srgb, var(--surface) 82%, var(--accent-soft)), var(--surface)); box-shadow: 0 0 0 1px rgba(42, 222, 228, .08), 0 10px 28px rgba(0, 0, 0, .22); }
+.clock-card-icon { width: 36px; height: 36px; border-radius: 50%; color: var(--marker-color); background: color-mix(in srgb, var(--marker-color) 16%, transparent); display: grid; place-items: center; }
+.clock-card-place, .clock-card-time { min-width: 0; display: grid; }
+.clock-card-place strong { overflow: hidden; font-size: .76rem; text-overflow: ellipsis; }
+.clock-card-place small, .clock-card-time small { margin-top: 2px; color: var(--muted); font-size: .6rem; }
+.clock-card-time { text-align: right; }
+.clock-card-time strong { font: 750 .94rem var(--mono); white-space: nowrap; }
+.clock-card-meta { grid-column: 1 / -1; padding-top: 7px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .6rem; }
+@keyframes marker-pulse { from { opacity: .65; transform: scale(.65); } to { opacity: 0; transform: scale(1.5); } }
+@media (max-width: 1040px) { .world-clock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 680px) {
+  .world-view { padding-top: 14px; }
+  .world-heading { align-items: stretch; flex-direction: column; gap: 8px; }
+  .world-selection { width: 100%; }
+  .timezone-ruler { display: none; }
+  .world-map { min-height: 270px; aspect-ratio: 1.35 / 1; }
+  .world-map svg { width: 138%; max-width: none; transform: translateX(-18%); }
+  .marker-home { left: 16% !important; }
+  .marker-frankfurt { left: 47% !important; }
+  .marker-hyderabad { left: 74% !important; }
+  .marker-auckland { left: 94% !important; }
+  .marker-label { left: 31px; padding: 4px 6px; }
+  .marker-home .marker-label, .marker-auckland .marker-label { right: 31px; left: auto; text-align: right; }
+  .map-legend { display: none; }
+  .world-clock-grid { grid-template-columns: 1fr; }
+  .world-clock-card { min-height: 90px; }
+}
