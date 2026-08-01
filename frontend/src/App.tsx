@@ -21,7 +21,6 @@ import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
 import { MediaBar } from './MediaBar'
 import { PresenceRow } from './PresenceRow'
-import { Screensaver } from './Screensaver'
 import { SecurityPanel } from './SecurityPanel'
 import { Sparkline } from './Sparkline'
 import { useSparkline } from './useSparkline'
@@ -808,7 +807,6 @@ function App() {
       )}
       {eventLogOpen && <EventLog events={events} onClose={() => setEventLogOpen(false)} />}
       <MediaBar entities={entities} onService={callService} />
-      <Screensaver />
     </div>
   )
 }

@@ -36,8 +36,9 @@ OPENSKY_TOKEN_URL = (
 ADSBDB_BASE_URL = "https://api.adsbdb.com/v0"
 AIRLABS_FLIGHT_URL = "https://airlabs.co/api/v9/flight"
 
-# Expanding bbox search radii (km), mirrors the source project's SEARCH_RADII.
-SEARCH_RADII: list[float] = [120, 300, 700]
+# Expanding bbox search radii (km): starts tight so the radar/map stay at a legible
+# local scale, and only widens if nothing is found nearby.
+SEARCH_RADII: list[float] = [75, 150, 300, 700]
 
 # Cache TTLs (seconds), mirroring the source project's cache lifetimes.
 STATES_CACHE_TTL = 60.0

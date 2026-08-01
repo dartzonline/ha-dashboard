@@ -18,15 +18,23 @@
 .satellite-layer { filter: saturate(.94) contrast(1.08) brightness(.9); }
 .map-grid line { stroke: rgba(200, 226, 237, .2); stroke-width: .8; vector-effect: non-scaling-stroke; }
 .route-line { fill: none; stroke: rgba(96, 236, 241, .52); stroke-width: 1.3; stroke-dasharray: 5 7; vector-effect: non-scaling-stroke; }
-.map-marker { --marker-color: var(--accent); position: absolute; z-index: 2; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: #051018; background: transparent; transform: translate(-50%, -50%); cursor: pointer; }
-.marker-dot { position: relative; z-index: 2; width: 28px; height: 28px; border: 2px solid #f3fdff; border-radius: 50%; background: var(--marker-color); display: grid; place-items: center; box-shadow: 0 0 6px #020711, 0 0 18px color-mix(in srgb, var(--marker-color) 82%, transparent); transition: transform .18s ease; }
-.marker-pulse { position: absolute; z-index: 1; inset: -7px; border: 1px solid var(--marker-color); border-radius: 50%; opacity: .24; }
-.map-marker:hover .marker-dot, .map-marker.is-selected .marker-dot { transform: scale(1.18); }
-.map-marker.is-selected .marker-pulse { animation: marker-pulse 1.8s ease-out infinite; }
-.marker-label { position: absolute; left: 36px; top: -3px; min-width: 82px; padding: 5px 7px; border: 1px solid color-mix(in srgb, var(--marker-color) 60%, #20394c); border-radius: 7px; color: var(--text); background: rgba(2, 7, 17, .88); display: grid; text-align: left; white-space: nowrap; box-shadow: 0 5px 16px rgba(0, 0, 0, .32); backdrop-filter: blur(8px); }
-.marker-label strong { font-size: .67rem; line-height: 1.2; }
-.marker-label small { margin-top: 2px; color: var(--marker-color); font: 700 .61rem var(--mono); }
-.marker-auckland .marker-label { right: 36px; left: auto; text-align: right; }
+/* Refined jewel-tone dots instead of thick-bordered map pins: a small glass-highlight
+   circle, a soft glow ring, and a pill label matching the app's chip/badge language. */
+.map-marker { --marker-color: var(--accent); position: absolute; z-index: 2; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); cursor: pointer; }
+.marker-dot {
+  position: relative; z-index: 2; width: 12px; height: 12px; margin: 4px; border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--marker-color) 55%, #fff), color-mix(in srgb, var(--marker-color) 88%, #04070d) 68%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--marker-color) 16%, transparent), 0 2px 7px rgba(0, 0, 0, .45);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.marker-pulse { position: absolute; z-index: 1; inset: 2px; border: 1px solid color-mix(in srgb, var(--marker-color) 60%, transparent); border-radius: 50%; opacity: .3; }
+.map-marker:hover .marker-dot, .map-marker.is-selected .marker-dot { transform: scale(1.3); box-shadow: 0 0 0 5px color-mix(in srgb, var(--marker-color) 22%, transparent), 0 3px 10px rgba(0, 0, 0, .5); }
+.map-marker.is-selected .marker-pulse { animation: marker-pulse 2.2s ease-out infinite; }
+.marker-label { position: absolute; left: 24px; top: -5px; min-width: 76px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--marker-color) 32%, var(--border)); border-radius: 8px; color: var(--text); background: color-mix(in srgb, var(--surface) 90%, var(--canvas)); display: grid; text-align: left; white-space: nowrap; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); backdrop-filter: blur(10px); }
+.marker-label strong { font-size: .66rem; font-weight: 700; line-height: 1.2; }
+.marker-label small { margin-top: 2px; color: color-mix(in srgb, var(--marker-color) 80%, var(--text)); font: 700 .6rem var(--mono); }
+.marker-auckland .marker-label { right: 24px; left: auto; text-align: right; }
 .map-credit { position: absolute; left: 10px; bottom: 9px; z-index: 2; color: rgba(226, 239, 244, .66); font-size: .55rem; text-decoration: none; text-shadow: 0 1px 3px #000; }
 .map-credit:hover { color: #fff; text-decoration: underline; }
 .map-legend { position: absolute; right: 12px; bottom: 10px; z-index: 2; padding: 6px 8px; border: 1px solid rgba(117, 167, 194, .28); border-radius: 7px; color: #a5b4c3; background: rgba(3, 9, 19, .74); display: flex; gap: 12px; font-size: .61rem; backdrop-filter: blur(8px); }

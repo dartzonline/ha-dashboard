@@ -83,10 +83,11 @@ const TICK_COUNT = 12
 
 // Real-map backdrop behind the radar overlay: free, keyless CARTO dark tiles (the same
 // source FlyInk-Board's own web dashboard used for its radar map), positioned by ordinary
-// slippy-map tile math and sized to roughly match the currently plotted range.
+// slippy-map tile math. Fixed at a legible local-street zoom rather than derived from the
+// (much larger) search radius — matching the radar's exact range would zoom the map out
+// to the point of showing almost no recognizable detail.
 const MAP_GRID = 5
-const MAP_ZOOM_MIN = 4
-const MAP_ZOOM_MAX = 10
+const MAP_ZOOM = 12
 
 function lonToTileX(lon: number, zoom: number) {
   return Math.floor(((lon + 180) / 360) * 2 ** zoom)
@@ -95,12 +96,6 @@ function lonToTileX(lon: number, zoom: number) {
 function latToTileY(lat: number, zoom: number) {
   const rad = (lat * Math.PI) / 180
   return Math.floor(((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * 2 ** zoom)
-}
-
-/** Zoom level whose 5x5 tile grid roughly spans 2x the given range. */
-function zoomForRangeKm(rangeKm: number) {
-  const raw = Math.round(Math.log2((MAP_GRID / 2) * 40_075 / Math.max(rangeKm, 1)))
-  return Math.min(MAP_ZOOM_MAX, Math.max(MAP_ZOOM_MIN, raw))
 }
 
 function toNumber(value: unknown): number | null {
@@ -310,18 +305,17 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
   const rangeKm = nearby?.home.rangeKm ?? 100
   const aircraftSorted = [...(nearby?.aircraft ?? [])].sort((left, right) => (left.distanceKm ?? Infinity) - (right.distanceKm ?? Infinity))
 
-  const mapZoom = zoomForRangeKm(rangeKm)
   const mapTiles = useMemo(() => {
     if (latitude === null || longitude === null) return []
-    const centerX = lonToTileX(longitude, mapZoom)
-    const centerY = latToTileY(latitude, mapZoom)
+    const centerX = lonToTileX(longitude, MAP_ZOOM)
+    const centerY = latToTileY(latitude, MAP_ZOOM)
     const edge = Math.floor(MAP_GRID / 2)
     return Array.from({ length: MAP_GRID * MAP_GRID }, (_, index) => {
       const row = Math.floor(index / MAP_GRID)
       const col = index % MAP_GRID
       return { key: `${row}-${col}`, x: centerX - edge + col, y: centerY - edge + row }
     })
-  }, [latitude, longitude, mapZoom])
+  }, [latitude, longitude])
 
   const ringRadii = Array.from({ length: RING_COUNT }, (_, index) => (RADAR_RADIUS / RING_COUNT) * (index + 1))
   const ticks = Array.from({ length: TICK_COUNT }, (_, index) => index * (360 / TICK_COUNT))
@@ -346,7 +340,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                 {mapTiles.length > 0 && (
                   <div className="radar-map" aria-hidden="true" style={{ gridTemplateColumns: `repeat(${MAP_GRID}, 1fr)`, gridTemplateRows: `repeat(${MAP_GRID}, 1fr)` }}>
                     {mapTiles.map((tile) => (
-                      <img key={tile.key} src={`https://a.basemaps.cartocdn.com/dark_nolabels/${mapZoom}/${tile.x}/${tile.y}.png`} alt="" loading="eager" />
+                      <img key={tile.key} src={`https://a.basemaps.cartocdn.com/dark_nolabels/${MAP_ZOOM}/${tile.x}/${tile.y}.png`} alt="" loading="eager" />
                     ))}
                   </div>
                 )}

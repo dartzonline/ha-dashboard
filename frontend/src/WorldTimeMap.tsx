@@ -1,4 +1,4 @@
-import { Clock3, Home, MapPin, MoonStar, Navigation, SunMedium } from 'lucide-react'
+import { Clock3, MapPin, MoonStar, Navigation, SunMedium } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import './WorldTimeMap.css'
 
@@ -20,11 +20,14 @@ interface Location {
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago'
 const satelliteMapUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74218/world.200412.3x5400x2700.jpg'
 
+// Jewel-tone accents drawn from the app's own palette (warn/accent/good, plus the violet
+// already used for the Night Mode moment) rather than arbitrary neon hex, so the map reads
+// as part of the same system instead of a generic map-pin widget.
 const locations: Location[] = [
-  { id: 'home', city: 'Home', country: 'Local time', timeZone: browserTimeZone, x: 23.1, y: 34.2, accent: '#ffb142', isHome: true },
-  { id: 'frankfurt', city: 'Frankfurt', country: 'Germany', timeZone: 'Europe/Berlin', x: 52.4, y: 27.1, accent: '#57d6ff' },
-  { id: 'hyderabad', city: 'Hyderabad', country: 'India', timeZone: 'Asia/Kolkata', x: 71.8, y: 43.1, accent: '#57e6b1' },
-  { id: 'auckland', city: 'Auckland', country: 'New Zealand', timeZone: 'Pacific/Auckland', x: 97.1, y: 72.4, accent: '#bb8cff' },
+  { id: 'home', city: 'Home', country: 'Local time', timeZone: browserTimeZone, x: 23.1, y: 34.2, accent: 'var(--warn)', isHome: true },
+  { id: 'frankfurt', city: 'Frankfurt', country: 'Germany', timeZone: 'Europe/Berlin', x: 52.4, y: 27.1, accent: 'var(--accent)' },
+  { id: 'hyderabad', city: 'Hyderabad', country: 'India', timeZone: 'Asia/Kolkata', x: 71.8, y: 43.1, accent: 'var(--good)' },
+  { id: 'auckland', city: 'Auckland', country: 'New Zealand', timeZone: 'Pacific/Auckland', x: 97.1, y: 72.4, accent: '#a99eff' },
 ]
 
 function formatTime(date: Date, timeZone: string) {
@@ -112,7 +115,7 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
                 aria-label={`${location.city}, ${formatTime(now, location.timeZone)}`}
               >
                 <span className="marker-pulse" />
-                <span className="marker-dot">{location.isHome ? <Home size={13} /> : <MapPin size={13} />}</span>
+                <span className="marker-dot" />
                 <span className="marker-label"><strong>{location.city}</strong><small>{formatTime(now, location.timeZone)}</small></span>
               </button>
             )

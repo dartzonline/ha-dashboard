@@ -22,16 +22,18 @@
 .radar-scope { position: relative; height: 100%; max-height: 460px; width: auto; max-width: 100%; aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 50%; overflow: hidden; }
 
 .radar-map { position: absolute; inset: 0; display: grid; }
-.radar-map img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(.85) brightness(.7); }
-.radar-map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, rgba(7, 12, 19, .12) 32%, rgba(7, 12, 19, .68) 100%); }
+.radar-map img { width: 100%; height: 100%; object-fit: cover; display: block; filter: brightness(2.5) contrast(1.3); }
+/* The CARTO tile is greyscale; tint it toward the accent hue so it reads as "our" map rather than plain grey. */
+.radar-map::before { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 28%, transparent); mix-blend-mode: color; }
+.radar-map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, transparent 55%, rgba(7, 12, 19, .55) 100%); }
 
 .radar-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-.radar-ring { fill: none; stroke: color-mix(in srgb, var(--accent) 16%, var(--border)); stroke-width: 1; }
+.radar-ring { fill: none; stroke: color-mix(in srgb, var(--accent-strong) 55%, transparent); stroke-width: 1; }
 
-.radar-tick { stroke: color-mix(in srgb, var(--accent) 26%, var(--border)); stroke-width: 1.4; }
+.radar-tick { stroke: color-mix(in srgb, var(--accent-strong) 70%, transparent); stroke-width: 1.4; }
 
-.radar-compass-label { fill: var(--muted); font-family: var(--sans); font-size: 9px; font-weight: 700; letter-spacing: .04em; }
+.radar-compass-label { fill: var(--text); font-family: var(--sans); font-size: 9px; font-weight: 800; letter-spacing: .04em; paint-order: stroke; stroke: rgba(7, 12, 19, .75); stroke-width: 3px; stroke-linejoin: round; }
 
 .radar-home-glow { fill: color-mix(in srgb, var(--accent) 24%, transparent); }
 
