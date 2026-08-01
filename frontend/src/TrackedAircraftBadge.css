@@ -1,0 +1,34 @@
+/* Small header status chip, sized to match .rotation-status in App.css. */
+.tracked-aircraft-badge {
+  height: 30px;
+  padding: 0 10px 0 9px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tracked-aircraft-badge svg { flex: 0 0 auto; color: currentColor; opacity: .85; }
+
+.tracked-aircraft-badge strong { font: 800 .72rem var(--mono); letter-spacing: .02em; }
+
+.tracked-aircraft-badge span { color: var(--muted); font-size: .64rem; font-weight: 600; }
+
+.tracked-aircraft-badge.tone-good { border-left-color: var(--good); }
+.tracked-aircraft-badge.tone-good svg { color: var(--good); }
+
+.tracked-aircraft-badge.tone-accent { border-left-color: var(--accent); }
+.tracked-aircraft-badge.tone-accent svg { color: var(--accent); }
+
+.tracked-aircraft-badge.tone-muted { border-left-color: var(--muted); }
+
+@media (max-width: 900px) {
+  .tracked-aircraft-badge span { display: none; }
+}

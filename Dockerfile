@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 COPY backend/app ./backend/app
 COPY --from=frontend-build /build/frontend/dist ./frontend/dist
 
+RUN mkdir -p backend/data && chown -R 10001:10001 backend/data
 USER 10001:10001
 EXPOSE 8000
 

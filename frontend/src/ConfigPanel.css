@@ -1,0 +1,77 @@
+/* Lets you retarget tiles and Night Mode's light allowlist without touching source code. */
+.detail-sheet.config-sheet { width: min(760px, 100%); }
+.detail-sheet.config-sheet {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, #fff);
+  background:
+    radial-gradient(circle at 84% 6%, rgba(145, 172, 226, .12), transparent 34%),
+    linear-gradient(155deg, #111a28, #0d1420 56%, #0b121c);
+}
+
+.config-tabs { display: flex; gap: 8px; margin: 16px 0 14px; }
+.config-tabs button {
+  flex: 1; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9px;
+  color: var(--muted); background: var(--surface-raised); display: flex; align-items: center;
+  justify-content: center; gap: 7px; font-weight: 750; font-size: .82rem; cursor: pointer;
+}
+.config-tabs button.active { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+
+.config-section-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+.config-section-pills button {
+  min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: 999px;
+  color: var(--muted); background: var(--surface); font-size: .74rem; font-weight: 700; cursor: pointer;
+}
+.config-section-pills button.active { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-soft); }
+
+.config-tile-rows { display: grid; gap: 8px; margin-bottom: 12px; }
+.config-tile-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1.3fr) minmax(0, 1.4fr) auto auto auto;
+  align-items: center; gap: 8px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 9px;
+  background: linear-gradient(140deg, rgba(26, 36, 52, .94), rgba(20, 29, 43, .84));
+}
+.config-tile-move { display: grid; gap: 3px; }
+.config-tile-move button, .config-remove {
+  width: 26px; height: 22px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+  background: var(--surface-raised); display: grid; place-items: center; cursor: pointer;
+}
+.config-tile-move button:disabled { opacity: .35; cursor: default; }
+.config-remove { width: 34px; height: 34px; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); background: var(--danger-soft); }
+.config-tile-icon { display: grid; place-items: center; color: var(--accent); }
+.config-entity-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-family: var(--mono); font-size: .68rem; }
+.config-tile-row input, .config-tile-row select, .config-add-row input, .config-add-row select {
+  min-height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; color: var(--text);
+  background: var(--surface); font: inherit; font-size: .78rem; min-width: 0;
+}
+.config-label-input { width: 100%; }
+
+.config-add-row {
+  display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto auto auto;
+  gap: 8px; align-items: center; padding-top: 4px; border-top: 1px dashed var(--border);
+}
+.config-add-row .detail-action { min-height: 36px; padding: 0 14px; white-space: nowrap; }
+.config-entity-input { font-family: var(--mono); }
+.config-empty { margin: 4px 0 12px; color: var(--muted); font-size: .78rem; }
+
+.config-hint { margin: 0 0 14px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.config-light-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-bottom: 14px; max-height: 320px; overflow: auto; }
+.config-light-check {
+  display: flex; align-items: center; gap: 9px; min-height: 42px; padding: 0 12px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--surface-raised); font-size: .78rem; cursor: pointer;
+}
+.config-light-check input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+.config-light-check span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.config-light-check.is-offline { border-style: dashed; border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.config-light-check.is-offline em { margin-left: 5px; color: var(--warn); font-style: normal; font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; }
+.config-add-light { grid-template-columns: minmax(0, 1fr) auto; }
+
+.config-success { margin: -8px 0 16px; padding: 10px 12px; border-radius: 8px; color: var(--good); background: var(--good-soft); font-size: .76rem; }
+
+.config-footer { display: flex; gap: 10px; padding-top: 6px; border-top: 1px solid var(--border); }
+.config-footer .detail-action { flex: 1; }
+
+@media (max-width: 760px) {
+  .detail-sheet.config-sheet { width: 100%; }
+  .config-tile-row { grid-template-columns: auto auto 1fr auto; }
+  .config-tile-row .config-entity-id, .config-tile-row .config-label-input, .config-tile-row select { grid-column: 1 / -1; }
+  .config-add-row, .config-add-light { grid-template-columns: 1fr; }
+}
