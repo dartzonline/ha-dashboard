@@ -1,0 +1,48 @@
+/* Names the exact doors, locks, and covers behind the banner count. */
+.detail-sheet.security-sheet { width: min(600px, 100%); }
+.detail-sheet.security-sheet {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, #fff);
+  background:
+    radial-gradient(circle at 84% 6%, rgba(145, 172, 226, .12), transparent 34%),
+    linear-gradient(155deg, #111a28, #0d1420 56%, #0b121c);
+}
+.security-groups { display: grid; gap: 12px; padding: 16px 0 4px; }
+.security-group { padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; background: linear-gradient(140deg, rgba(26, 36, 52, .94), rgba(20, 29, 43, .84)); }
+.security-group h3 { margin: 0 0 9px; display: flex; align-items: center; gap: 7px; font-size: .74rem; letter-spacing: .04em; text-transform: uppercase; }
+.security-group h3 em { margin-left: auto; padding: 2px 8px; border-radius: 12px; font-size: .68rem; font-style: normal; font-weight: 800; }
+.security-group.tone-danger h3 { color: var(--danger); }
+.security-group.tone-danger h3 em { color: var(--danger); background: var(--danger-soft); }
+.security-group.tone-warn h3 { color: var(--warn); }
+.security-group.tone-warn h3 em { color: var(--warn); background: var(--warn-soft); }
+.security-rows { display: grid; gap: 7px; }
+.security-rows button { min-height: 52px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--surface); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; text-align: left; cursor: pointer; transition: transform .16s ease, border-color .16s ease, background .16s ease; }
+.security-rows button:hover { transform: translateX(2px); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-soft); }
+.security-rows button:disabled {
+  opacity: 1;
+  cursor: default;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn-soft) 28%, var(--surface));
+}
+.security-rows button:disabled:hover {
+  transform: none;
+}
+.security-rows button > div { min-width: 0; display: grid; gap: 2px; }
+.security-rows strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.security-rows small { color: var(--muted); font-size: .68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.security-rows svg { color: var(--muted); }
+.security-hint {
+  color: #d9bf8a;
+  font-size: .62rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.security-clear { padding: 26px 16px; border: 1px solid color-mix(in srgb, var(--good) 40%, var(--border)); border-radius: 11px; background: var(--good-soft); color: var(--good); display: grid; justify-items: center; gap: 8px; text-align: center; margin: 16px 0 4px; }
+.security-clear strong { font-size: .92rem; }
+.security-clear p { margin: 0; max-width: 380px; color: var(--muted); font-size: .74rem; line-height: 1.45; }
+.security-section-link { width: 100%; min-height: 50px; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; color: var(--accent-strong); background: var(--surface-raised); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 750; cursor: pointer; }
+.security-section-link:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-soft); }
+@media (max-width: 760px) {
+  .detail-sheet.security-sheet { width: 100%; }
+  .security-rows strong { font-size: .8rem; }
+}
