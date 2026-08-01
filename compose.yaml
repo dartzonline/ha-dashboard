@@ -9,5 +9,10 @@ services:
       - ./backend/.env
     ports:
       - "${PORT:-8000}:8000"
+    volumes:
+      - dashboard-data:/app/backend/data
     init: true
     restart: unless-stopped
+
+volumes:
+  dashboard-data:

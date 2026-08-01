@@ -1,0 +1,64 @@
+/* Horizontal, touch-scrollable row of household presence chips. */
+.presence-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.presence-row::-webkit-scrollbar { display: none; }
+
+.presence-chip {
+  flex: 0 0 auto;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(8, 19, 29, .9);
+  box-shadow: inset 0 1px rgba(255, 255, 255, .025);
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.presence-avatar {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.presence-chip.is-home .presence-avatar { background: var(--good-soft); color: var(--good); }
+.presence-chip.is-away .presence-avatar { background: var(--surface-raised); color: var(--muted); }
+
+.presence-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.presence-copy strong {
+  font-size: .82rem;
+  color: var(--text);
+  font-weight: 700;
+}
+.presence-copy small {
+  font-size: .68rem;
+  color: var(--muted);
+}
+.presence-chip.is-home .presence-copy small { color: var(--good); }
+
+@media (min-width: 700px) {
+  .presence-chip { min-height: 66px; }
+}

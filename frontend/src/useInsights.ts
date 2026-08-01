@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiUrl } from './api'
+
+/** Insights re-enters this hook every time the section is revisited during rotation; skip refetching the recorder within this window. */
+const CACHE_TTL_MS = 5 * 60_000
 
 export interface HistoryPoint {
   time: number
@@ -50,9 +53,11 @@ function parseHistory(payload: unknown, entityId: string): HistoryPoint[] {
 export function useInsights(enabled: boolean) {
   const [series, setSeries] = useState<Map<string, HistoryPoint[]>>(new Map())
   const [loading, setLoading] = useState(true)
+  const lastFetchedAt = useRef(0)
 
   useEffect(() => {
     if (!enabled) return
+    if (lastFetchedAt.current && Date.now() - lastFetchedAt.current < CACHE_TTL_MS) return
     let stopped = false
     const controller = new AbortController()
     queueMicrotask(() => {
@@ -69,7 +74,10 @@ export function useInsights(enabled: boolean) {
       }
     }))
       .then((results) => {
-        if (!stopped) setSeries(new Map(results.map((result) => [result.entityId, result.points])))
+        if (!stopped) {
+          setSeries(new Map(results.map((result) => [result.entityId, result.points])))
+          lastFetchedAt.current = Date.now()
+        }
       })
       .finally(() => {
         if (!stopped) setLoading(false)

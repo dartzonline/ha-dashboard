@@ -1,21 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --canvas: #090d14;
-  --surface: #121826;
-  --surface-raised: #1a2332;
-  --border: #2a3447;
-  --text: #e5ebf4;
-  --muted: #96a4b8;
-  --accent: #8fb2f0;
-  --accent-strong: #c6d7f8;
-  --accent-soft: #1c2a44;
-  --rail: #0b111c;
+  --canvas: #070c13;
+  --surface: #0f1722;
+  --surface-raised: #17232f;
+  --border: #263849;
+  --text: #e7edf5;
+  --muted: #93a6ba;
+  --accent: #2bd0da;
+  --accent-strong: #a8eef4;
+  --accent-soft: #0c2b34;
+  --accent-ink: #04262c;
+  --chart-line: #0fa3b1;
+  --chart-grid: rgba(125, 155, 180, .14);
+  --rail: #0a101a;
   --rail-text: #9aa7b8;
-  --rail-active: #d6e2f5;
+  --rail-active: #d9ecf2;
   --good: #6dc59b;
   --good-soft: #17372d;
   --danger: #ef7c86;
+  --danger-ink: #40151b;
   --danger-soft: #3f2028;
   --warn: #dcb677;
   --warn-soft: #3f3320;
@@ -45,6 +49,8 @@ body {
 }
 button, input { font: inherit; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Touch-first: no double-tap zoom delay on controls, and pressed-state feedback replaces hover. */
+button, [role='button'], select, label { touch-action: manipulation; }
 
 /* Mid-size touch screens such as Fire tablets get larger base text for arm's-length reading. */
 @media (min-width: 700px) and (max-width: 1440px) {

@@ -544,3 +544,33 @@ nav button.active {
     bottom: 10px;
   }
 }
+
+/* Unified cyan accent: dark ink on solid-accent surfaces (white text fails contrast on cyan). */
+.is-active .tile-icon { color: var(--accent-ink); }
+.detail-icon { color: var(--accent-ink); }
+.detail-action.primary { color: var(--accent-ink); }
+.detail-action.primary:hover { color: var(--accent-ink); }
+.mode-buttons button.active { color: var(--accent-ink); }
+.entity-tile.is-hazard .tile-icon { color: var(--danger-ink); }
+.toggle.is-on span { background: var(--accent-ink); }
+nav button.active { background: linear-gradient(100deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 4%, transparent)); }
+
+/* Inline 24-hour sparkline at the foot of sensor tiles. */
+.tile-spark { height: 34px; margin-top: 10px; }
+.tile-spark svg { display: block; }
+.entity-tile:has(.tile-spark) { min-height: 148px; }
+
+/* Touch-first: hover transforms are pointer-only, pressed states carry the feedback. */
+@media (hover: none) {
+  .entity-tile:hover, .utility-cell:hover, .security-rows button:hover,
+  .thermostat-quick:hover, .night-mode-moment:hover:not(:disabled) { transform: none; }
+}
+.utility-cell:active, .attention-strip:active, .night-mode-moment:active:not(:disabled),
+.thermostat-quick:active, .detail-action:active, .security-rows button:active,
+.mode-buttons button:active, .config-tabs button:active { transform: scale(.97); }
+.icon-action:active, .step-button:active, .toggle:active { transform: scale(.92); }
+.icon-action, .step-button { min-width: 44px; min-height: 42px; }
+
+/* Reserves space above the fixed MediaBar so it never covers bottom-anchored pagers/dots. */
+main.has-media-bar { padding-bottom: 82px; transition: padding-bottom .2s ease; }
+@media (max-width: 760px) { main.has-media-bar { padding-bottom: 150px; } }

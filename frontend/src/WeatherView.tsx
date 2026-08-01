@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { apiUrl } from './api'
+import { RadarPanel } from './RadarPanel'
 import type { HAEntity } from './types'
 import './WeatherView.css'
 
@@ -390,10 +391,12 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
             </section>
           </section>
         )}
+
+        {slide === 3 && <RadarPanel latitude={latitude} longitude={longitude} />}
       </section>
 
       <div className="weather-pager" role="tablist" aria-label="Weather panels">
-        {['Today', 'Hourly', '6-day'].map((label, index) => (
+        {['Today', 'Hourly', '6-day', 'Radar'].map((label, index) => (
           <button
             key={label}
             role="tab"

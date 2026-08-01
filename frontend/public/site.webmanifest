@@ -1,0 +1,14 @@
+{
+  "name": "Home Panel",
+  "short_name": "Home Panel",
+  "description": "Information-rich Home Assistant wall dashboard",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#090d14",
+  "theme_color": "#090d14",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -6,20 +6,22 @@ from typing import Any, AsyncIterator
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .config import load_settings
+from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .event_bridge import EventBridge
+from .flights import router as flights_router
 from .ha_client import HomeAssistantClient
 
 settings = load_settings()
 bridge = EventBridge(settings)
 ha_client = HomeAssistantClient(settings)
 
-NIGHT_MODE_INDOOR_LIGHTS = {
+NIGHT_MODE_INDOOR_LIGHTS_DEFAULT = {
     "light.smart_wi_fi_switch_2",
     "light.media_room_media_hue",
     "light.media_room_media_room",
@@ -60,6 +62,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(flights_router)
 
 
 def get_client() -> HomeAssistantClient:
@@ -215,6 +218,30 @@ async def health(client: HomeAssistantClient = Depends(get_client)) -> dict[str,
     }
 
 
+@app.get("/api/config")
+async def get_dashboard_config() -> dict[str, Any]:
+    overrides = load_overrides()
+    return {
+        "sections": overrides.get("sections"),
+        "nightModeIndoorLights": overrides.get("nightModeIndoorLights") or sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT),
+    }
+
+
+@app.put("/api/config")
+async def put_dashboard_config(payload: DashboardConfigPayload) -> dict[str, Any]:
+    saved = save_overrides(payload)
+    return {
+        "sections": saved.get("sections"),
+        "nightModeIndoorLights": saved.get("nightModeIndoorLights") or sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT),
+    }
+
+
+@app.delete("/api/config")
+async def delete_dashboard_config() -> dict[str, Any]:
+    clear_overrides()
+    return {"sections": None, "nightModeIndoorLights": sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT)}
+
+
 @app.get("/api/states", dependencies=[Depends(require_configuration)])
 async def states(client: HomeAssistantClient = Depends(get_client)) -> list[dict[str, Any]]:
     try:
@@ -229,6 +256,27 @@ async def state(entity_id: str, client: HomeAssistantClient = Depends(get_client
         return await client.state(entity_id)
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
+
+
+@app.get("/api/entity-picture/{entity_id}", dependencies=[Depends(require_configuration)])
+async def entity_picture(entity_id: str, client: HomeAssistantClient = Depends(get_client)) -> Response:
+    try:
+        entity = await client.state(entity_id)
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+
+    picture = entity.get("attributes", {}).get("entity_picture")
+    if not picture:
+        raise HTTPException(404, "Entity has no picture")
+
+    try:
+        response = await client.raw_get(picture)
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+
+    media_type = response.headers.get("content-type", "image/jpeg")
+    return Response(content=response.content, media_type=media_type)
 
 
 @app.get("/api/weather/external")
@@ -369,10 +417,11 @@ async def night_mode(
             or "garrage" in entity_name(entity)
         )
     ]
+    indoor_lights = set(load_overrides().get("nightModeIndoorLights") or NIGHT_MODE_INDOOR_LIGHTS_DEFAULT)
     lights = [
         str(entity["entity_id"])
         for entity in all_states
-        if entity.get("entity_id") in NIGHT_MODE_INDOOR_LIGHTS and entity.get("state") == "on"
+        if entity.get("entity_id") in indoor_lights and entity.get("state") == "on"
     ]
     switches = [str(entity["entity_id"]) for entity in all_states if safe_lighting_switch(entity)]
 

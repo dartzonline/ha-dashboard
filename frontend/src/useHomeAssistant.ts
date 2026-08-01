@@ -28,6 +28,8 @@ export function useHomeAssistant(onStateChange?: (change: HAStateChange) => void
     let stopped = false
     let socket: WebSocket | undefined
     let reconnectTimer: number | undefined
+    let retryTimer: number | undefined
+    let retryDelay = reconnectDelay
 
     async function load() {
       try {
@@ -42,8 +44,14 @@ export function useHomeAssistant(onStateChange?: (change: HAStateChange) => void
           setEntities(new Map(states.map((entity) => [entity.entity_id, entity])))
           setError(null)
         }
+        retryDelay = reconnectDelay
       } catch (requestError) {
-        if (!stopped) setError(requestError instanceof Error ? requestError.message : 'Backend unavailable')
+        if (!stopped) {
+          setError(requestError instanceof Error ? requestError.message : 'Backend unavailable')
+          // Self-heals on a wall-mounted kiosk that nobody will manually reload after a transient outage.
+          retryTimer = window.setTimeout(load, retryDelay)
+          retryDelay = Math.min(retryDelay * 2, 30_000)
+        }
       } finally {
         if (!stopped) setLoading(false)
       }
@@ -66,6 +74,7 @@ export function useHomeAssistant(onStateChange?: (change: HAStateChange) => void
     return () => {
       stopped = true
       if (reconnectTimer) window.clearTimeout(reconnectTimer)
+      if (retryTimer) window.clearTimeout(retryTimer)
       socket?.close()
     }
   }, [])
