@@ -47,7 +47,7 @@ const pinAccent = '#7fd4ff'
 // already used for the Night Mode moment) rather than arbitrary neon hex, so the map reads
 // as part of the same system instead of a generic map-pin widget.
 const locations: Location[] = [
-  { id: 'home', city: 'Home', country: 'Texas, United States', code: 'US', timeZone: browserTimeZone, lat: 30.64, lon: -97.68, accent: 'var(--warn)', isHome: true },
+  { id: 'home', city: 'Georgetown', country: 'Texas, United States', code: 'US', timeZone: browserTimeZone, lat: 30.64, lon: -97.68, accent: 'var(--warn)', isHome: true },
   { id: 'frankfurt', city: 'Frankfurt', country: 'Hesse, Germany', code: 'DE', timeZone: 'Europe/Berlin', lat: 50.11, lon: 8.68, accent: 'var(--accent)' },
   { id: 'khammam', city: 'Khammam', country: 'Telangana, India', code: 'IN', timeZone: 'Asia/Kolkata', lat: 17.25, lon: 80.15, accent: 'var(--good)' },
   { id: 'auckland', city: 'Auckland', country: 'New Zealand', code: 'NZ', timeZone: 'Pacific/Auckland', lat: -36.85, lon: 174.76, accent: '#a99eff' },
@@ -145,7 +145,8 @@ function formatDay(date: Date, timeZone: string) {
 }
 
 function getHour(date: Date, timeZone: string) {
-  return Number(new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hourCycle: 'h23' }).format(date))
+  const raw = Number(new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hourCycle: 'h23' }).format(date))
+  return Number.isFinite(raw) ? ((raw % 24) + 24) % 24 : 0
 }
 
 function getOffset(date: Date, timeZone: string) {

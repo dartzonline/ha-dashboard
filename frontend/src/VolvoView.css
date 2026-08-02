@@ -1,0 +1,50 @@
+.volvo-view { margin-bottom: 16px; padding: 14px 12px 12px; border-radius: 10px; background: var(--surface-raised); }
+.volvo-header { padding: 0 2px 10px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+.volvo-header > div { display: flex; align-items: center; gap: 7px; color: var(--accent-strong); }
+.volvo-header h3 { margin: 0; color: var(--text); font-size: .82rem; }
+.volvo-header > span { color: var(--muted); font-size: .65rem; }
+
+.volvo-hero-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.volvo-hero-card { min-width: 0; padding: 10px 11px; border-radius: 9px; background: var(--surface); display: flex; align-items: center; gap: 10px; }
+.volvo-hero-card > div { min-width: 0; display: grid; }
+.volvo-hero-card span { color: var(--muted); font-size: .6rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.volvo-hero-card strong { font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.volvo-hero-card.tone-battery svg { color: #39df8b; }
+.volvo-hero-card.tone-range svg { color: #55a8ff; }
+.volvo-hero-card.tone-odometer svg { color: var(--warn); }
+.volvo-hero-card.tone-lock svg { color: var(--muted); }
+.volvo-hero-card.tone-lock.is-locked svg { color: var(--good); }
+.volvo-hero-card.tone-lock.is-unlocked svg { color: var(--danger); }
+
+.volvo-metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin-bottom: 10px; }
+.volvo-metric-card { min-width: 0; padding: 8px; border-radius: 7px; background: var(--surface); display: flex; flex-direction: column; }
+.volvo-metric-card span { color: var(--muted); font-size: .58rem; text-transform: uppercase; letter-spacing: .04em; }
+.volvo-metric-card strong { margin-top: 2px; font-size: .78rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.volvo-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.volvo-status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: .68rem; }
+.volvo-status-chip svg { color: var(--muted); }
+.volvo-status-chip.is-on { color: var(--good); background: var(--good-soft); }
+.volvo-status-chip.is-on svg { color: var(--good); }
+.volvo-status-chip em { margin-left: 2px; font-style: normal; font-weight: 700; }
+
+.volvo-chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 1000px) { .volvo-chart-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+.volvo-chart { height: 196px; border-top: 1px solid var(--border); padding-top: 6px; display: flex; flex-direction: column; }
+.volvo-chart header { display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px; color: var(--accent-strong); }
+.volvo-chart h4 { margin: 0; color: var(--accent-strong); font-size: .72rem; }
+.volvo-chart header span { color: var(--muted); font-size: .62rem; margin-left: auto; }
+.volvo-chart-body { flex: 1 1 auto; min-height: 0; }
+.volvo-chart-empty { height: 100%; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: .72rem; }
+
+.volvo-view-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 16px; color: var(--muted); text-align: center; }
+.volvo-view-empty svg { color: var(--accent-strong); }
+.volvo-view-empty p { margin: 0; color: var(--text); font-size: .9rem; font-weight: 600; }
+.volvo-view-empty span { font-size: .74rem; max-width: 340px; }
+
+@media (max-width: 680px) {
+  .volvo-view { margin-inline: -4px; padding-inline: 8px; }
+  .volvo-chart { height: 184px; }
+  .volvo-hero-card strong { font-size: 1rem; }
+}
