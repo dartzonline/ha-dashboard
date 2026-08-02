@@ -14,7 +14,11 @@ class HomeAssistantClient:
             headers={"Authorization": f"Bearer {self.settings.ha_token}"},
             timeout=15,
             trust_env=False,
-            limits=httpx.Limits(max_connections=1, max_keepalive_connections=1),
+            # A wall dashboard fires many concurrent HA calls (states poll, several tiles'
+            # history fetches, service calls) -- a 1-connection pool serialized all of them
+            # through a single socket. Home Assistant's own HTTP API handles concurrent
+            # requests fine, so this was pure self-inflicted queueing.
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
 
     async def close(self) -> None:

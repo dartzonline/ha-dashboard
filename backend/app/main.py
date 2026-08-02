@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .event_bridge import EventBridge
+from .flights import close_http_client, get_http_client
 from .flights import router as flights_router
 from .ha_client import HomeAssistantClient
 
@@ -54,9 +55,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     with contextlib.suppress(asyncio.CancelledError):
         await task
     await ha_client.close()
+    await close_http_client()
 
 
-app = FastAPI(title="Home Panel", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Home Panel", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -341,9 +343,10 @@ async def external_weather(latitude: float, longitude: float, units: str = "impe
 
     url = f"https://api.open-meteo.com/v1/forecast?{urlencode(query)}"
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            response = await client.get(url)
-            response.raise_for_status()
+        # Shared, keep-alive client rather than a fresh connection per call -- every open city
+        # weather sheet and the Weather section's own poll hit this endpoint repeatedly.
+        response = await get_http_client().get(url, timeout=8)
+        response.raise_for_status()
     except httpx.HTTPError as error:
         raise weather_upstream_error(error) from error
 

@@ -25,6 +25,36 @@ from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/flights")
 
+# A module-wide client reuses TCP/TLS connections across requests instead of paying a fresh
+# handshake to OpenSky/adsbdb/AirLabs on every poll -- these endpoints are hit constantly while
+# the Flights section is on screen. Mirrors HomeAssistantClient's single shared client.
+_http_client: httpx.AsyncClient | None = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=15, limits=httpx.Limits(max_connections=20, max_keepalive_connections=10))
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+
+
+class _SharedClient:
+    """`async with _SharedClient() as client:` hands out the shared client without closing it on
+    exit, so existing call sites keep their `async with` shape and indentation."""
+
+    async def __aenter__(self) -> httpx.AsyncClient:
+        return get_http_client()
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
 # ---------------------------------------------------------------------------
 # Upstream endpoints
 # ---------------------------------------------------------------------------
@@ -806,32 +836,32 @@ async def build_aircraft_entry(
 
 @router.get("/nearby")
 async def nearby_aircraft(latitude: float, longitude: float, limit: int = 15) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=15) as client:
-        states: list[list[Any]] = []
-        used_radius = SEARCH_RADII[-1]
-        for radius in SEARCH_RADII:
-            used_radius = radius
-            states = await fetch_states_in_radius(client, latitude, longitude, radius)
-            if states:
-                break
+    client = get_http_client()
+    states: list[list[Any]] = []
+    used_radius = SEARCH_RADII[-1]
+    for radius in SEARCH_RADII:
+        used_radius = radius
+        states = await fetch_states_in_radius(client, latitude, longitude, radius)
+        if states:
+            break
 
-        candidates: list[tuple[float, list[Any]]] = []
-        for row in states:
-            if not isinstance(row, list) or len(row) < 17:
-                continue
-            lat, lon = row[6], row[5]
-            if lat is None or lon is None:
-                continue
-            candidates.append((haversine(latitude, longitude, lat, lon), row))
+    candidates: list[tuple[float, list[Any]]] = []
+    for row in states:
+        if not isinstance(row, list) or len(row) < 17:
+            continue
+        lat, lon = row[6], row[5]
+        if lat is None or lon is None:
+            continue
+        candidates.append((haversine(latitude, longitude, lat, lon), row))
 
-        candidates.sort(key=lambda item: item[0])
-        top_rows = [row for _, row in candidates[:limit]]
+    candidates.sort(key=lambda item: item[0])
+    top_rows = [row for _, row in candidates[:limit]]
 
-        aircraft = list(
-            await asyncio.gather(
-                *(build_aircraft_entry(client, row, latitude, longitude) for row in top_rows)
-            )
+    aircraft = list(
+        await asyncio.gather(
+            *(build_aircraft_entry(client, row, latitude, longitude) for row in top_rows)
         )
+    )
 
     return {
         "home": {"lat": latitude, "lon": longitude, "rangeKm": used_radius},
@@ -894,7 +924,7 @@ async def _build_track_context() -> dict[str, Any]:
         await _clear_pin()
         return _empty_track_context()
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with _SharedClient() as client:
         schedule = await airlabs_schedule(client, iata_number)
         airlabs_icao24 = schedule.pop("_icao24", None)
 
@@ -1023,7 +1053,7 @@ async def flights_status() -> dict[str, Any]:
     token_ok = False
     states_ok = False
     if has_opensky:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _SharedClient() as client:
             token_ok = bool(await get_opensky_token(client))
             if token_ok:
                 headers = await _opensky_headers(client)

@@ -34,6 +34,7 @@ import { WorldTimeMap } from './WorldTimeMap'
 const InsightsView = lazy(() => import('./InsightsView').then((module) => ({ default: module.InsightsView })))
 const EntityHistory = lazy(() => import('./EntityHistory').then((module) => ({ default: module.EntityHistory })))
 const EnergyView = lazy(() => import('./EnergyView').then((module) => ({ default: module.EnergyView })))
+const VolvoView = lazy(() => import('./VolvoView').then((module) => ({ default: module.VolvoView })))
 const FlightsView = lazy(() => import('./FlightsView').then((module) => ({ default: module.FlightsView })))
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
 
@@ -798,6 +799,10 @@ function App() {
         ) : activeSection === 'energy' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing energy usage</span></div>}>
             <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveEnergyRate} />
+          </Suspense>
+        ) : activeSection === 'volvo' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing Volvo</span></div>}>
+            <VolvoView entities={entities} />
           </Suspense>
         ) : (
           <section className="overview" aria-label={`${section.label} entities`}>
