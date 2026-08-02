@@ -20,5 +20,11 @@ ports:
   8000/tcp: 8000
 ports_description:
   8000/tcp: Direct web access on your LAN at http://<home-assistant-ip>:8000 (in addition to authenticated ingress)
-options: {}
-schema: {}
+options:
+  opensky_client_id: ""
+  opensky_client_secret: ""
+  airlabs_key: ""
+schema:
+  opensky_client_id: str?
+  opensky_client_secret: password?
+  airlabs_key: password?

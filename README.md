@@ -185,7 +185,10 @@ The Flights section is a from-scratch port of [FlyInk-Board](https://github.com/
 
 **Route accuracy.** adsbdb's callsign lookup (`fromCode`/`toCode`) is a generic, undated historical mapping for that flight number — airlines reuse numeric designators across different city pairs on different days, so it's a guess, not a live fact. `backend/app/flights.py` resolves the actual origin/destination by priority: **live climb/descent-based inference** (is this plane actually climbing out of / descending into a known nearby airport right now?) → **real OpenSky flight history** for that aircraft (needs `OPENSKY_CLIENT_ID`/`SECRET` below) → the adsbdb guess, but only if the plane's current position and heading are geometrically plausible for that route at all. If none of that lines up, it shows no route rather than a wrong one. The live-motion airport list (`AIRPORTS` in `flights.py`) is seeded for the Austin/Central Texas region — extend it for your own area.
 
-No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Two optional env vars in `backend/.env` improve it further:
+No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Three optional credentials improve it further — where you set them depends on how you're running the dashboard:
+
+- **Home Assistant add-on:** the add-on's **Configuration** tab (Settings → Apps/Add-ons → Home Panel → Configuration) has fields for `opensky_client_id`, `opensky_client_secret`, and `airlabs_key`. Fill them in and restart the add-on — `backend/addon_entrypoint.py` reads Supervisor's `/data/options.json` and exports them as the environment variables below before the backend starts.
+- **Native/Compose:** set the same values as env vars in `backend/.env`:
 
 ```bash
 OPENSKY_CLIENT_ID=...      # free OpenSky account -> API client credentials; raises the anonymous rate limit
