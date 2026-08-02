@@ -45,10 +45,10 @@ interface TrackSchedule {
 }
 
 interface TrackRoute {
-  fromCode: string
-  fromCity: string
-  toCode: string
-  toCity: string
+  fromCode: string | null
+  fromCity: string | null
+  toCode: string | null
+  toCity: string | null
 }
 
 interface TrackResponse {
@@ -492,13 +492,13 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                 {track.route && (
                   <div className="track-route">
                     <div className="track-route-end">
-                      <strong>{track.route.fromCode}</strong>
-                      <span>{track.route.fromCity}</span>
+                      <strong>{track.route.fromCode ?? '—'}</strong>
+                      <span>{track.route.fromCity ?? 'Not yet known'}</span>
                     </div>
                     <span className="track-route-arrow"><Plane size={16} /></span>
                     <div className="track-route-end">
-                      <strong>{track.route.toCode}</strong>
-                      <span>{track.route.toCity}</span>
+                      <strong>{track.route.toCode ?? '—'}</strong>
+                      <span>{track.route.toCity ?? 'Not yet known'}</span>
                     </div>
                   </div>
                 )}

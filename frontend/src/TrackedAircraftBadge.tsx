@@ -4,10 +4,10 @@ import { apiUrl } from './api'
 import './TrackedAircraftBadge.css'
 
 interface TrackRoute {
-  fromCode: string
-  fromCity: string
-  toCode: string
-  toCity: string
+  fromCode: string | null
+  fromCity: string | null
+  toCode: string | null
+  toCity: string | null
 }
 
 interface TrackResponse {
@@ -53,7 +53,9 @@ export function TrackedAircraftBadge() {
   if (!track || !track.query || !track.mode) return null
 
   const callsign = track.flight?.callsign ?? track.query
-  const routeLabel = track.route ? `${track.route.fromCode} → ${track.route.toCode}` : null
+  const routeLabel = track.route && (track.route.fromCode || track.route.toCode)
+    ? `${track.route.fromCode ?? '—'} → ${track.route.toCode ?? '—'}`
+    : null
 
   return (
     <div className={`tracked-aircraft-badge tone-${modeTone(track.mode)}`} title={`Tracking ${callsign}`}>
