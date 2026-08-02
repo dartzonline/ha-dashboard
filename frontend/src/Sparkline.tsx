@@ -11,20 +11,24 @@ interface SparklineProps {
 }
 
 /** Inline 24-hour trend: 2px line, ~10% area wash, end-dot with a surface ring. Decorative — the tile text carries the value. */
-export function Sparkline({ points, height = 34 }: SparklineProps) {
+export function Sparkline({ points, height: fallbackHeight = 34 }: SparklineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [width, setWidth] = useState(0)
+  const [size, setSize] = useState({ width: 0, height: 0 })
 
   useEffect(() => {
     const node = containerRef.current
     if (!node) return
     const observer = new ResizeObserver((entries) => {
-      setWidth(Math.round(entries[0]?.contentRect.width ?? 0))
+      const box = entries[0]?.contentRect
+      setSize({ width: Math.round(box?.width ?? 0), height: Math.round(box?.height ?? 0) })
     })
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
 
+  // Tiles stretch to fill the wall layout, so the trend takes whatever height the tile gives it.
+  const width = size.width
+  const height = size.height > 16 ? size.height : fallbackHeight
   const drawable = width > 24 && points.length > 1
   let linePath = ''
   let areaPath = ''

@@ -102,7 +102,8 @@ Do **not** expose this application's port `8000` directly to the public internet
 ## Wall tablet layout
 
 - The navigation panel is hidden on load. Tap the menu button next to the page title to slide it in; picking a section, tapping the backdrop, or pressing Escape closes it again.
-- Base text scales up between 700px and 1440px wide, with a further bump for the ~1280x800 landscape range that Fire tablets report, so values stay readable at arm's length.
+- Base text scales fluidly with the panel above 700px wide (`clamp(17px, .95vw + .75vh, 22px)`) rather than through capped breakpoints. A Fire HD 10 in landscape reports about 1443 CSS px, which fell outside every `max-width: 1440px` rule and left the panel at phone-sized text; the fluid ramp cannot be missed that way.
+- Device pages fill the viewport height: the tile grid stretches its rows into the space that is left instead of ending in a dead band, and each tile leads with its reading in large type with the label above it in small caps. Household presence sits on the section heading line rather than owning a band of its own.
 - The top banner carries six live cells including connected-device counts derived from router `device_tracker` entities. When a device joins within the last 30 minutes, its name appears there and alternates through up to three recent arrivals.
 - Tapping the security cell or the alert strip names the exact open doors, windows, covers, unlocked locks, leaks, and faulting devices, with how long each has been that way. Each row opens that entity's full detail sheet.
 
@@ -164,9 +165,20 @@ Changes are saved through the backend (`GET`/`PUT`/`DELETE /api/config`) to `/da
 
 ## Presence, media, and moments
 
-- **Presence** — `person.*` entities appear as a row of chips on the Home page (home/away, with a relative "since" time).
+- **Presence** — `person.*` entities appear as chips on the Home page's section-heading line (home/away, with a relative "since" time).
 - **Now playing** — a persistent bar appears at the bottom of the screen whenever a `media_player.*` is playing, with artwork, title, and transport controls. Artwork is proxied through `GET /api/entity-picture/{entity_id}` since Home Assistant's `entity_picture` path needs the backend's auth token, which the browser never receives.
 - **Night Mode** and the thermostat quick-access button remain the two one-tap **Moments**.
+
+## World clock
+
+The World section is a touch map, not a static set of clocks. Every point on it is a control:
+
+- **Touch anywhere on the map** to drop a pin. The tapped position converts to latitude/longitude (the basemap is a plain equirectangular projection) and resolves against a bundled table of ~110 cities in `frontend/src/worldCities.ts`, so the reading uses a real IANA zone and gets DST right. The pin joins the clock rail as its own card until you clear it.
+- **Taps more than 1500 km from any city** — mid-ocean, or deep polar — report an estimated zone derived from longitude (`UTC±N`, via `Etc/GMT±N`) and name the nearest city and its distance, rather than pretending to a precision the lookup does not have.
+- **The four preset markers** (home, Frankfurt, Hyderabad, Auckland) and the clock cards select the same reading, so the map, the readout, and the rail always agree.
+- Each reading shows local time, the local date, day/night phase, the zone abbreviation, and how far ahead of or behind home it is.
+
+Marker positions are computed from each location's coordinates rather than hand-placed percentages, so a marker cannot drift from the place it names.
 
 ## Energy usage
 

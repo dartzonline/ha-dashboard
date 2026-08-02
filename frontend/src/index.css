@@ -52,10 +52,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* Touch-first: no double-tap zoom delay on controls, and pressed-state feedback replaces hover. */
 button, [role='button'], select, label { touch-action: manipulation; }
 
-/* Mid-size touch screens such as Fire tablets get larger base text for arm's-length reading. */
-@media (min-width: 700px) and (max-width: 1440px) {
-  :root { font-size: 18px; }
-}
-@media (min-width: 1100px) and (max-width: 1366px) and (orientation: landscape) {
-  :root { font-size: 19px; }
+/* Wall panels get larger base text for arm's-length reading. This is deliberately fluid rather
+   than a set of capped breakpoints: a Fire HD 10 in landscape reports ~1443 CSS px, so every
+   `max-width: 1440px` rule missed it and the panel fell back to phone-sized 16px text. */
+@media (min-width: 700px) {
+  :root { font-size: clamp(17px, .95vw + .75vh, 22px); }
 }
