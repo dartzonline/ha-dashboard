@@ -11,10 +11,58 @@
 .energy-stats .trend-up { color: var(--danger); flex-shrink: 0; }
 .energy-stats .trend-down { color: var(--good); flex-shrink: 0; }
 
-.energy-chart { height: 200px; border-top: 1px solid var(--border); padding-top: 6px; }
+/* Bill estimate leads the page: it is the number people actually came for. */
+.energy-bill {
+  margin-bottom: 10px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--border));
+  border-radius: 9px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--warn-soft) 55%, var(--surface)), var(--surface));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.energy-bill-main { min-width: 0; display: flex; align-items: center; gap: 11px; }
+.energy-bill-icon { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); display: grid; place-items: center; }
+.energy-bill-main > div { min-width: 0; display: grid; }
+.energy-bill-main span { color: var(--muted); font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.energy-bill-main strong { font-size: 1.5rem; font-weight: 750; letter-spacing: -.03em; line-height: 1.15; }
+.energy-bill-main small { color: var(--muted); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; }
+
+.energy-bill-side { display: flex; align-items: center; gap: 8px; }
+.energy-bill-side > div { padding: 7px 11px; border-radius: 8px; background: var(--surface); display: grid; gap: 1px; }
+.energy-bill-side span { color: var(--muted); font-size: .58rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.energy-bill-side strong { font-size: .95rem; white-space: nowrap; }
+
+.energy-rate-value { padding: 0; border: 0; background: none; color: var(--text); display: flex; align-items: baseline; gap: 4px; cursor: pointer; font: inherit; }
+.energy-rate-value small { color: var(--muted); font-size: .62rem; }
+.energy-rate-value svg { align-self: center; color: var(--muted); }
+.energy-rate-value:hover svg { color: var(--accent); }
+.energy-rate-edit { display: flex; align-items: center; gap: 5px; }
+.energy-rate-edit input { width: 72px; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 6px; color: var(--text); background: var(--surface-raised); font-size: .82rem; }
+.energy-rate-edit button { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; color: var(--accent); background: var(--surface-raised); display: grid; place-items: center; cursor: pointer; }
+
+/* Side by side on a wall panel: the per-device split and the daily trend answer different questions
+   and together they fill the width that used to sit empty below the single chart. */
+.energy-chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 1000px) { .energy-chart-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+.energy-chart-title { margin: 0 0 4px; color: var(--accent-strong); display: flex; align-items: center; gap: 6px; font-size: .72rem; }
+.energy-chart { height: 196px; border-top: 1px solid var(--border); padding-top: 6px; }
 .energy-chart-empty { height: 100%; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: .72rem; }
 .energy-chart-empty.loading svg { animation: energy-pulse 1.2s ease-in-out infinite; }
 @keyframes energy-pulse { 50% { opacity: .35; transform: translateY(-2px); } }
+
+/* Fills what used to be dead space below the per-device chart. */
+.energy-daily { border-top: 1px solid var(--border); padding-top: 6px; }
+.energy-daily > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.energy-daily > header > div { display: flex; align-items: center; gap: 6px; color: var(--warn); }
+.energy-daily h4 { margin: 0; color: var(--warn); font-size: .72rem; }
+.energy-daily > header > span { color: var(--muted); font-size: .64rem; }
+.energy-daily-chart { height: 196px; }
 
 .energy-whole-home { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 10px; border-radius: 7px; background: var(--surface); color: var(--muted); font-size: .68rem; }
 .energy-whole-home svg { color: var(--accent-strong); flex-shrink: 0; }

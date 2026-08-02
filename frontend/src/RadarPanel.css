@@ -1,11 +1,15 @@
 .radar-panel {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  /* .weather-panel starts its rows at the top; the map row has to claim the leftover height
+     instead, or the scope collapses to a letterbox strip. */
+  align-content: stretch;
   gap: 8px;
 }
 
 .radar-scope {
   position: relative;
-  min-height: 0;
+  /* The map must not be squeezed to a sliver when the dry-day summary appears below it. */
+  min-height: 150px;
   height: 100%;
   display: grid;
   place-items: center;
@@ -17,56 +21,78 @@
   overflow: hidden;
 }
 
-.radar-tile-grid {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
-  max-height: 100%;
-  aspect-ratio: 1 / 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  margin: auto;
+/* Two absolutely-positioned tile planes filling the scope: the dark basemap, and the radar over it.
+   Tiles are placed by pixel offset (see planTiles) so home stays dead centre at any panel size. */
+.radar-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
 }
 
-.radar-tile {
-  width: 100%;
-  height: 100%;
+.radar-layer img {
+  position: absolute;
+  width: 256px;
+  height: 256px;
   display: block;
-  object-fit: cover;
-  filter: saturate(1.15);
+  max-width: none;
+}
+
+.radar-basemap img {
+  filter: saturate(.85) brightness(1.08);
+}
+
+.radar-precip {
+  /* Screen keeps the map legible under the returns instead of the radar blanking it out. */
+  mix-blend-mode: screen;
+  opacity: .92;
+}
+
+.radar-precip img {
+  filter: saturate(1.2);
+}
+
+.radar-attribution {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 3;
+  color: rgba(214, 230, 240, .62);
+  font-size: .55rem;
+  text-shadow: 0 1px 3px #000;
+  pointer-events: none;
 }
 
 .radar-rings {
   position: absolute;
   inset: 0;
+  z-index: 2;
   display: grid;
   place-items: center;
   pointer-events: none;
 }
 
+/* Range rings must stay circular in a wide panel, so they take their size from the height and let
+   aspect-ratio derive the width — percentages on both axes would draw ellipses. */
 .radar-ring {
   position: absolute;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  width: auto;
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
   border-radius: 50%;
 }
 
 .ring-outer {
-  width: 92%;
-  height: 92%;
+  height: 88%;
 }
 
 .ring-mid {
-  width: 60%;
-  height: 60%;
-  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  height: 58%;
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 .ring-inner {
-  width: 30%;
-  height: 30%;
-  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+  height: 28%;
+  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .radar-home-dot {
@@ -81,6 +107,7 @@
 .radar-loading {
   position: absolute;
   inset: 0;
+  z-index: 3;
   display: grid;
   place-items: center;
   color: var(--muted);
@@ -152,11 +179,45 @@
   letter-spacing: .06em;
 }
 
-@media (max-width: 1040px) {
-  .radar-tile-grid {
-    max-width: min(100%, 60vh);
-  }
+.radar-home-dot { z-index: 1; }
+
+/* Dry-day stand-in: the map stays, but the panel spends its words on what is actually happening. */
+.radar-quiet {
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--good) 26%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--good-soft) 45%, var(--surface));
 }
+
+.radar-quiet-lead {
+  margin: 0 0 5px;
+  color: var(--good);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .74rem;
+  font-weight: 600;
+}
+
+.radar-quiet-lead svg { flex: 0 0 auto; }
+
+.radar-quiet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.radar-quiet-grid > div {
+  min-width: 0;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: rgba(8, 15, 24, .5);
+  display: grid;
+  gap: 1px;
+}
+
+.radar-quiet-grid span { color: var(--muted); font-size: .58rem; text-transform: uppercase; letter-spacing: .07em; }
+.radar-quiet-grid strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
   .radar-frame-dots span {

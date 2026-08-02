@@ -26,6 +26,7 @@ class DashboardSection(BaseModel):
 class DashboardConfigPayload(BaseModel):
     sections: list[DashboardSection] | None = None
     nightModeIndoorLights: list[str] | None = None
+    energyRatePerKwh: float | None = None
 
 
 def _storage_path() -> Path:
@@ -50,7 +51,12 @@ def load_overrides() -> dict[str, Any]:
 
 
 def save_overrides(payload: DashboardConfigPayload) -> dict[str, Any]:
-    data = payload.model_dump(exclude_none=True)
+    """Merges the supplied keys over what is already stored.
+
+    Callers send only the slice they own -- the tile editor sends sections and Night Mode lights,
+    the energy panel sends just its rate -- so a partial save must not wipe the other's settings.
+    """
+    data = {**load_overrides(), **payload.model_dump(exclude_none=True)}
     path = _storage_path()
     path.write_text(json.dumps(data, indent=2))
     return data

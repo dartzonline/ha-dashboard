@@ -1,0 +1,149 @@
+.city-weather-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  padding: 4vh 4vw;
+  background: rgba(3, 8, 16, .72);
+  display: grid;
+  place-items: center;
+  backdrop-filter: blur(4px);
+  animation: city-weather-fade .16s ease-out;
+}
+
+@keyframes city-weather-fade { from { opacity: 0; } }
+
+.city-weather-sheet {
+  --marker-color: var(--accent);
+  width: min(760px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 18px 20px 22px;
+  border: 1px solid color-mix(in srgb, var(--marker-color) 38%, var(--border));
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+}
+
+/* The animated sky sits behind everything; content is lifted out of it. */
+.city-weather-sheet > *:not(.sky-atmosphere) { position: relative; z-index: 1; }
+
+.city-weather-sheet > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.city-weather-sheet > header span {
+  color: var(--marker-color);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.city-weather-sheet > header h2 { margin: 3px 0 2px; font-size: 1.5rem; letter-spacing: -.03em; }
+.city-weather-sheet > header small { color: var(--muted); font-size: .78rem; }
+
+.city-weather-sheet > header button {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface-raised);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.city-weather-sheet > header button:hover { color: var(--text); border-color: var(--marker-color); }
+
+.city-weather-sheet h3 {
+  margin: 18px 0 8px;
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.city-weather-loading, .city-weather-error { margin: 18px 0 0; color: var(--muted); font-size: .82rem; }
+.city-weather-error { color: var(--danger); }
+
+.city-weather-now {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.city-weather-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  color: var(--marker-color);
+  background: color-mix(in srgb, var(--marker-color) 14%, transparent);
+  display: grid;
+  place-items: center;
+}
+
+.city-weather-now > strong { font-size: 2.6rem; font-weight: 750; letter-spacing: -.05em; line-height: 1; }
+.city-weather-now p { margin: 0; font-size: .92rem; font-weight: 600; }
+.city-weather-now small { color: var(--muted); font-size: .76rem; }
+
+.city-weather-stats {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 7px;
+}
+
+.city-weather-stats > div {
+  min-width: 0;
+  padding: 9px 8px;
+  border-radius: 9px;
+  /* Translucent so the themed sky reads through the cards instead of being boxed out. */
+  background: rgba(10, 17, 27, .55);
+  backdrop-filter: blur(3px);
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.city-weather-stats svg { color: var(--marker-color); }
+.city-weather-stats strong { font-size: .88rem; white-space: nowrap; }
+.city-weather-stats span { color: var(--muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .07em; }
+
+.city-weather-hours, .city-weather-days {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.city-weather-hours article, .city-weather-days article {
+  min-width: 0;
+  padding: 10px 6px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(10, 17, 27, .55);
+  backdrop-filter: blur(3px);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.city-weather-hours article svg, .city-weather-days article svg { color: var(--marker-color); }
+.city-weather-hours span, .city-weather-days span { color: var(--muted); font-size: .68rem; font-weight: 700; white-space: nowrap; }
+.city-weather-hours strong, .city-weather-days strong { font-size: .95rem; }
+.city-weather-hours small, .city-weather-days small { color: var(--muted); font-size: .7rem; }
+
+@media (max-width: 700px) {
+  .city-weather-sheet { padding: 14px 13px 18px; }
+  .city-weather-hours, .city-weather-days { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-columns: auto; }
+}

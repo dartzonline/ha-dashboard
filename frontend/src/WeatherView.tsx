@@ -13,7 +13,10 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { apiUrl } from './api'
 import { RadarPanel } from './RadarPanel'
+import type { RadarOutlook } from './RadarPanel'
 import type { HAEntity } from './types'
+import { WeatherAtmosphere } from './WeatherAtmosphere'
+import { skyTheme } from './weatherTheme'
 import './WeatherView.css'
 
 type ForecastEntry = {
@@ -51,6 +54,7 @@ type ExternalDaily = {
 type ExternalWeatherPayload = {
   provider: string
   timezone: string | null
+  precipitationUnit: string
   current: {
     time: string | null
     temperature: number | null
@@ -127,10 +131,15 @@ function formatClock(dateLike: string | null) {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-function dayIso(dateLike: string) {
+/**
+ * Local calendar day for a timestamp. `toISOString()` cannot be used here: open-meteo returns
+ * wall-clock times for the requested location, so converting them to UTC pushed every evening
+ * hour onto tomorrow's date and emptied the hourly panel from late afternoon onward.
+ */
+function localDayIso(dateLike: string) {
   const date = new Date(dateLike)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toISOString().slice(0, 10)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function fromAttributesNumber(entity: HAEntity | undefined, key: string) {
@@ -168,12 +177,15 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
     return candidates.find((value) => value !== null) ?? null
   }, [homeZone, weather])
 
+  // Match whatever Home Assistant reports in, so one screen never shows 27° beside 81 °F.
+  const units = String(outsideTemp?.attributes.unit_of_measurement ?? '').includes('C') ? 'metric' : 'imperial'
+
   useEffect(() => {
     if (latitude === null || longitude === null) return
 
     const abort = new AbortController()
 
-    fetch(apiUrl(`weather/external?latitude=${latitude}&longitude=${longitude}`), { signal: abort.signal })
+    fetch(apiUrl(`weather/external?latitude=${latitude}&longitude=${longitude}&units=${units}`), { signal: abort.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Weather source unavailable (${response.status})`)
         const payload: ExternalWeatherPayload = await response.json()
@@ -186,7 +198,7 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
       })
 
     return () => abort.abort()
-  }, [latitude, longitude])
+  }, [latitude, longitude, units])
 
   const forecastRaw = Array.isArray(weather?.attributes.forecast) ? weather?.attributes.forecast : []
   const forecast: ForecastEntry[] = forecastRaw
@@ -215,9 +227,14 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
   const feelsLike = externalData?.current.apparentTemperature ?? null
   const gusts = externalData?.current.windGusts ?? null
   const precipitationNow = externalData?.current.precipitation ?? null
-  const rainChance = forecast.length
-    ? Math.round(forecast.reduce((sum, day) => sum + (day.precipitation_probability ?? 0), 0) / forecast.length)
-    : null
+  // Today's actual chance from the external source first; the Home Assistant forecast attribute is
+  // often absent, which is what left this reading blank.
+  const externalRainChance = externalData?.daily?.[0]?.rainChance ?? null
+  const rainChance = externalRainChance !== null
+    ? Math.round(externalRainChance)
+    : forecast.length
+      ? Math.round(forecast.reduce((sum, day) => sum + (day.precipitation_probability ?? 0), 0) / forecast.length)
+      : null
 
   const todaysExternal = externalData?.daily?.[0] ?? null
   const effectiveForecast = externalData?.daily?.length
@@ -233,33 +250,63 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
     }))
     : forecast.map((day) => ({ ...day, uv_max: null as number | null }))
 
-  const remainingToday = useMemo(() => {
+  /**
+   * The next 12 hourly slots, rolling past midnight rather than stopping at it. Anchoring to the
+   * top of the current hour keeps the slot already in progress visible instead of skipping it.
+   */
+  const upcomingHours = useMemo(() => {
     if (!externalData?.hourly?.length) return []
-    const now = new Date()
-    const isoToday = todayIsoLocal()
+    const hourStart = new Date()
+    hourStart.setMinutes(0, 0, 0)
     return externalData.hourly
-      .filter((slot) => dayIso(slot.time) === isoToday)
       .filter((slot) => {
         const slotTime = new Date(slot.time)
-        return !Number.isNaN(slotTime.getTime()) && slotTime.getTime() >= now.getTime()
+        return !Number.isNaN(slotTime.getTime()) && slotTime.getTime() >= hourStart.getTime()
       })
-      .slice(0, 7)
+      .slice(0, 12)
   }, [externalData])
 
-  const nextRainSlot = remainingToday.find((slot) => (slot.rainChance ?? 0) >= 35 || (slot.precipitation ?? 0) > 0)
+  const isoToday = todayIsoLocal()
+  const nextRainSlot = upcomingHours.find((slot) => (slot.rainChance ?? 0) >= 35 || (slot.precipitation ?? 0) > 0)
+  // Prefer the external condition (it is what the rest of this panel reports) and fall back to the
+  // Home Assistant weather entity before the fetch lands.
+  const heroTheme = skyTheme(externalData?.current.condition ?? currentCondition, new Date().getHours())
+
+  /**
+   * Everything the radar panel needs to stand in for itself on a dry day. Derived plainly rather
+   * than memoized: it reads the wall clock, so a cached value would be the wrong kind of stable.
+   */
+  const radarOutlook = ((): RadarOutlook | undefined => {
+    if (!externalData) return undefined
+    const now = new Date().getTime()
+    const nextDay = externalData.hourly.filter((slot) => {
+      const at = new Date(slot.time).getTime()
+      return !Number.isNaN(at) && at >= now && at <= now + 24 * 3_600_000
+    })
+    const peak = nextDay.reduce<ExternalHourly | null>(
+      (best, slot) => ((slot.rainChance ?? 0) > (best?.rainChance ?? -1) ? slot : best),
+      null,
+    )
+    const wetDay = externalData.daily.slice(1).find((day) => (day.rainChance ?? 0) >= 30)
+    const aqi = Array.from(entities.values()).find((entity) => entity.attributes.device_class === 'aqi')
+
+    return {
+      peakRainChance: peak?.rainChance ?? null,
+      peakRainHour: peak ? formatHour(peak.time) : null,
+      nextWetDay: wetDay ? `${dayLabel(wetDay.date)} ${Math.round(wetDay.rainChance ?? 0)}%` : null,
+      uvMax: externalData.daily[0]?.uvMax ?? null,
+      windGusts: externalData.current.windGusts,
+      sunrise: formatClock(externalData.daily[0]?.sunrise ?? null),
+      sunset: formatClock(externalData.daily[0]?.sunset ?? null),
+      airQuality: aqi ? `${aqi.state}` : null,
+    }
+  })()
   const sourceUpdatedAt = formatClock(externalData?.current.time ?? null)
 
   return (
     <section className="weather-view" aria-label="Weather forecast">
-      <article className="weather-hero">
-        <div className="weather-hero-atmosphere" aria-hidden="true">
-          <span className="cloud cloud-one" />
-          <span className="cloud cloud-two" />
-          <span className="cloud cloud-three" />
-          <span className="rain-line rain-one" />
-          <span className="rain-line rain-two" />
-          <span className="rain-line rain-three" />
-        </div>
+      <article className={`weather-hero sky-surface ${heroTheme.className}`}>
+        <WeatherAtmosphere theme={heroTheme} />
         <div className="weather-current">
           <p className="weather-eyebrow">Outside now</p>
           <div className="weather-current-main">
@@ -314,7 +361,7 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
               </article>
               <article className="today-metric-card tone-warm">
                 <span>Precip now</span>
-                <strong>{precipitationNow === null ? '--' : `${precipitationNow.toFixed(1)} mm`}</strong>
+                <strong>{precipitationNow === null ? '--' : `${precipitationNow.toFixed(2)} ${externalData?.precipitationUnit ?? 'mm'}`}</strong>
               </article>
               <article className="today-metric-card tone-breeze">
                 <span>Wind gusts</span>
@@ -335,18 +382,19 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
         )}
 
         {slide === 1 && (
-          <section className="weather-panel hourly-strip" aria-label="Remainder of today forecast">
+          <section className="weather-panel hourly-strip" aria-label="Next 12 hours forecast">
             <div className="hourly-strip-title">
-              <strong>Remainder of today</strong>
+              <strong>Next 12 hours</strong>
               <span>{externalData ? `Source: ${externalData.provider}` : externalError ? 'Source unavailable' : 'Loading external source...'}</span>
             </div>
             {externalError && <p className="hourly-error">{externalError}</p>}
             <div className="hourly-grid">
-              {remainingToday.length === 0 && <p className="forecast-empty">Hourly forecast will appear when external data is available.</p>}
-              {remainingToday.map((slot) => {
+              {upcomingHours.length === 0 && <p className="forecast-empty">Hourly forecast will appear when external data is available.</p>}
+              {upcomingHours.map((slot) => {
+                const isTomorrow = localDayIso(slot.time) !== isoToday
                 return (
-                  <article className="hourly-card" key={slot.time}>
-                    <span>{formatHour(slot.time)}</span>
+                  <article className={`hourly-card ${isTomorrow ? 'is-tomorrow' : ''}`} key={slot.time}>
+                    <span>{formatHour(slot.time)}{isTomorrow ? ' +1' : ''}</span>
                     {renderConditionIcon(slot.condition, 18)}
                     <strong>{formatTemperature(slot.temperature)}</strong>
                     <small>UV {slot.uv === null ? '--' : slot.uv.toFixed(1)}</small>
@@ -382,7 +430,7 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
                     </div>
                     <div className="forecast-meta">
                       <span>{rain === null ? '--' : `${Math.round(rain)}%`} rain</span>
-                      <span>{rainAmount === null ? '--' : `${rainAmount.toFixed(1)} mm`}</span>
+                      <span>{rainAmount === null ? '--' : `${rainAmount.toFixed(2)} ${externalData?.precipitationUnit ?? 'mm'}`}</span>
                       <span>{day.uv_max === null ? 'UV --' : `UV ${day.uv_max.toFixed(1)}`}</span>
                     </div>
                   </article>
@@ -392,7 +440,7 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
           </section>
         )}
 
-        {slide === 3 && <RadarPanel latitude={latitude} longitude={longitude} />}
+        {slide === 3 && <RadarPanel latitude={latitude} longitude={longitude} outlook={radarOutlook} />}
       </section>
 
       <div className="weather-pager" role="tablist" aria-label="Weather panels">

@@ -181,10 +181,12 @@
 .track-mode.tone-accent { color: var(--accent-strong); background: var(--accent-soft); }
 .track-mode.tone-muted { color: var(--muted); background: var(--surface-raised); }
 
-.track-route { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; padding: 10px 4px; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); }
-.track-route-end { display: grid; gap: 2px; }
+.track-route { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 4px; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); }
+/* min-width: 0 is what actually lets the ellipsis below engage — without it a grid item refuses to
+   shrink under its content and a long airport city name spills outside the card. */
+.track-route-end { min-width: 0; display: grid; gap: 2px; }
 .track-route-end:last-child { text-align: right; }
-.track-route-end strong { font: 800 1.5rem var(--mono); letter-spacing: -.02em; }
+.track-route-end strong { font: 800 clamp(1.05rem, 3.4vw, 1.5rem) var(--mono); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .track-route-end span { color: var(--muted); font-size: .66rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .track-route-arrow { color: var(--accent); display: grid; place-items: center; }
 

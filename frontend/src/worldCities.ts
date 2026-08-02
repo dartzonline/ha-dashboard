@@ -5,6 +5,34 @@
  */
 export type CityRow = readonly [string, string, string, number, number]
 
+/**
+ * ISO-ish short tags for the countries this table uses, so a clock card can label a place without
+ * spelling out "United Arab Emirates" in a 300px column. Anything missing falls back to the first
+ * three letters, which still reads as a country hint rather than nothing.
+ */
+const COUNTRY_CODES: Record<string, string> = {
+  Algeria: 'DZ', Angola: 'AO', Antarctica: 'AQ', Argentina: 'AR', Australia: 'AU',
+  Bangladesh: 'BD', Bolivia: 'BO', Brazil: 'BR', Canada: 'CA', 'Cape Verde': 'CV',
+  Chile: 'CL', China: 'CN', Colombia: 'CO', Cuba: 'CU', 'DR Congo': 'CD', Egypt: 'EG',
+  Ethiopia: 'ET', Fiji: 'FJ', Finland: 'FI', France: 'FR', 'French Polynesia': 'PF',
+  Germany: 'DE', Ghana: 'GH', Greece: 'GR', Greenland: 'GL', Guatemala: 'GT',
+  'Hong Kong': 'HK', Iceland: 'IS', India: 'IN', Indonesia: 'ID', Iran: 'IR',
+  Ireland: 'IE', Italy: 'IT', Japan: 'JP', Kazakhstan: 'KZ', Kenya: 'KE',
+  Madagascar: 'MG', Malaysia: 'MY', Mexico: 'MX', Mongolia: 'MN', Morocco: 'MA',
+  Myanmar: 'MM', Nepal: 'NP', Netherlands: 'NL', 'New Caledonia': 'NC',
+  'New Zealand': 'NZ', Nigeria: 'NG', Norway: 'NO', Pakistan: 'PK',
+  'Papua New Guinea': 'PG', Peru: 'PE', Philippines: 'PH', Poland: 'PL',
+  Portugal: 'PT', Russia: 'RU', Samoa: 'WS', 'Saudi Arabia': 'SA', Senegal: 'SN',
+  Singapore: 'SG', 'South Africa': 'ZA', 'South Korea': 'KR', Spain: 'ES',
+  'Sri Lanka': 'LK', Sweden: 'SE', Switzerland: 'CH', Taiwan: 'TW', Thailand: 'TH',
+  Turkiye: 'TR', Ukraine: 'UA', 'United Arab Emirates': 'AE', 'United Kingdom': 'GB',
+  'United States': 'US', Uzbekistan: 'UZ', Venezuela: 'VE', Vietnam: 'VN', Zimbabwe: 'ZW',
+}
+
+export function countryCode(country: string): string {
+  return COUNTRY_CODES[country] ?? country.slice(0, 3).toUpperCase()
+}
+
 export const worldCities: CityRow[] = [
   ['Anchorage', 'United States', 'America/Anchorage', 61.22, -149.9],
   ['Honolulu', 'United States', 'Pacific/Honolulu', 21.31, -157.86],
