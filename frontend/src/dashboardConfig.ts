@@ -21,7 +21,7 @@ export const dashboardSections: DashboardSection[] = [
     tiles: [
       { entityId: 'sensor.open_weather_temperature', label: 'Outside', kind: 'sensor', icon: 'cloud-sun' },
       { entityId: 'sensor.main_floor_temperature', label: 'Main floor', kind: 'sensor', icon: 'thermometer' },
-      { entityId: 'sensor.doors_open_count', label: 'Doors open', kind: 'sensor', icon: 'door-open' },
+      { entityId: 'sensor.doors_open_count', label: 'Doors', kind: 'sensor', icon: 'door-open' },
       { entityId: 'binary_sensor.cbr750_gateway_wan_status', label: 'Internet', kind: 'sensor', icon: 'wifi' },
       { entityId: 'sensor.dashboard_battery_level', label: 'Dashboard', kind: 'sensor', icon: 'battery' },
       { entityId: 'sensor.volvo_xc60_battery', label: 'XC60 battery', kind: 'sensor', icon: 'car' },
@@ -29,7 +29,7 @@ export const dashboardSections: DashboardSection[] = [
   },
   {
     id: 'world',
-    label: 'World',
+    label: 'World time',
     tiles: [],
   },
   {

@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
 from urllib.parse import urlencode
@@ -218,28 +220,36 @@ async def health(client: HomeAssistantClient = Depends(get_client)) -> dict[str,
     }
 
 
-@app.get("/api/config")
-async def get_dashboard_config() -> dict[str, Any]:
-    overrides = load_overrides()
+def default_energy_rate() -> float:
+    """Fallback $/kWh when nobody has set one, overridable per install without a rebuild."""
+    try:
+        return float(os.getenv("ENERGY_RATE_PER_KWH", "") or 0.15)
+    except ValueError:
+        return 0.15
+
+
+def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
     return {
         "sections": overrides.get("sections"),
         "nightModeIndoorLights": overrides.get("nightModeIndoorLights") or sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT),
+        "energyRatePerKwh": overrides.get("energyRatePerKwh") or default_energy_rate(),
     }
+
+
+@app.get("/api/config")
+async def get_dashboard_config() -> dict[str, Any]:
+    return config_response(load_overrides())
 
 
 @app.put("/api/config")
 async def put_dashboard_config(payload: DashboardConfigPayload) -> dict[str, Any]:
-    saved = save_overrides(payload)
-    return {
-        "sections": saved.get("sections"),
-        "nightModeIndoorLights": saved.get("nightModeIndoorLights") or sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT),
-    }
+    return config_response(save_overrides(payload))
 
 
 @app.delete("/api/config")
 async def delete_dashboard_config() -> dict[str, Any]:
     clear_overrides()
-    return {"sections": None, "nightModeIndoorLights": sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT)}
+    return config_response({})
 
 
 @app.get("/api/states", dependencies=[Depends(require_configuration)])
@@ -280,10 +290,16 @@ async def entity_picture(entity_id: str, client: HomeAssistantClient = Depends(g
 
 
 @app.get("/api/weather/external")
-async def external_weather(latitude: float, longitude: float) -> dict[str, Any]:
+async def external_weather(latitude: float, longitude: float, units: str = "imperial") -> dict[str, Any]:
+    # open-meteo answers in Celsius/km-h/mm unless told otherwise, which put 27° next to the
+    # dashboard's own 81 °F on the same screen. The caller states which system it renders in.
+    imperial = units.lower() != "metric"
     query = {
         "latitude": latitude,
         "longitude": longitude,
+        "temperature_unit": "fahrenheit" if imperial else "celsius",
+        "wind_speed_unit": "mph" if imperial else "kmh",
+        "precipitation_unit": "inch" if imperial else "mm",
         "current": ",".join(
             [
                 "temperature_2m",
@@ -342,6 +358,10 @@ async def external_weather(latitude: float, longitude: float) -> dict[str, Any]:
 
     return {
         "provider": "open-meteo",
+        "units": "imperial" if imperial else "metric",
+        "temperatureUnit": "°F" if imperial else "°C",
+        "windUnit": "mph" if imperial else "km/h",
+        "precipitationUnit": "in" if imperial else "mm",
         "latitude": payload.get("latitude"),
         "longitude": payload.get("longitude"),
         "timezone": payload.get("timezone"),
@@ -443,6 +463,143 @@ async def night_mode(
         "switchesTurnedOff": switches_off,
         "skippedUnavailableLocks": skipped_locks,
         "failures": failures,
+    }
+
+
+def _parse_history_point(row: dict[str, Any]) -> tuple[float, str] | None:
+    stamp = row.get("last_changed") or row.get("last_updated")
+    if not isinstance(stamp, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment.timestamp(), str(row.get("state", ""))
+
+
+def _hour_bucket(timestamp: float) -> int:
+    return int(timestamp // 3600) * 3600
+
+
+@app.get("/api/insights/network", dependencies=[Depends(require_configuration)])
+async def network_insights(
+    hours: int = 24,
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """Hourly average download/upload speed and connected-device count over the recent window.
+
+    Home Assistant has no "clients online" sensor -- the router publishes one device_tracker per
+    client instead -- so the count is reconstructed by replaying those trackers' state changes and
+    counting how many were `home` during each hour.
+    """
+    window = max(1, min(hours, 168))
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+
+    speed_ids = [
+        entity_id
+        for entity_id in ("sensor.cbr750_gateway_download_speed", "sensor.cbr750_gateway_upload_speed")
+        if any(entity.get("entity_id") == entity_id for entity in all_states)
+    ]
+    tracker_ids = [
+        str(entity["entity_id"])
+        for entity in all_states
+        if str(entity.get("entity_id", "")).startswith("device_tracker.")
+    ]
+
+    requested = speed_ids + tracker_ids
+    series: list[list[dict[str, Any]]] = []
+    if requested:
+        try:
+            series = await client.history_many(requested, window)
+        except httpx.HTTPError as error:
+            raise upstream_error(error) from error
+
+    by_entity: dict[str, list[dict[str, Any]]] = {}
+    for rows in series:
+        if not rows:
+            continue
+        entity_id = str(rows[0].get("entity_id", ""))
+        if entity_id:
+            by_entity[entity_id] = rows
+
+    now = datetime.now(timezone.utc).timestamp()
+    first_bucket = _hour_bucket(now - window * 3600)
+    buckets = [first_bucket + index * 3600 for index in range(window + 1)]
+
+    def speed_averages(entity_id: str) -> dict[int, float]:
+        totals: dict[int, list[float]] = {}
+        for row in by_entity.get(entity_id, []):
+            parsed = _parse_history_point(row)
+            if not parsed:
+                continue
+            moment, raw = parsed
+            try:
+                value = float(raw)
+            except ValueError:
+                continue
+            # The router reports KiB/s; the dashboard speaks Mbps everywhere else.
+            totals.setdefault(_hour_bucket(moment), []).append(value * 8 / 1024)
+        return {bucket: sum(values) / len(values) for bucket, values in totals.items() if values}
+
+    downloads = speed_averages("sensor.cbr750_gateway_download_speed")
+    uploads = speed_averages("sensor.cbr750_gateway_upload_speed")
+
+    # Walk each tracker's timeline once, marking the buckets it spent at home. A tracker that never
+    # changes state inside the window still counts, because its first row carries the state it
+    # already held when the window opened.
+    home_per_bucket: dict[int, int] = {bucket: 0 for bucket in buckets}
+    for entity_id in tracker_ids:
+        points = sorted(
+            (point for point in (_parse_history_point(row) for row in by_entity.get(entity_id, [])) if point),
+            key=lambda item: item[0],
+        )
+        if not points:
+            continue
+        cursor = 0
+        state = points[0][1]
+        for bucket in buckets:
+            while cursor < len(points) and points[cursor][0] <= bucket + 3600:
+                state = points[cursor][1]
+                cursor += 1
+            if state == "home":
+                home_per_bucket[bucket] += 1
+
+    points_out = [
+        {
+            "time": datetime.fromtimestamp(bucket, timezone.utc).isoformat().replace("+00:00", "Z"),
+            "downloadMbps": round(downloads[bucket], 2) if bucket in downloads else None,
+            "uploadMbps": round(uploads[bucket], 2) if bucket in uploads else None,
+            "devices": home_per_bucket.get(bucket, 0),
+        }
+        for bucket in buckets
+    ]
+
+    download_values = [value for value in downloads.values()]
+    upload_values = [value for value in uploads.values()]
+    device_values = [home_per_bucket[bucket] for bucket in buckets]
+
+    def summarize(values: list[float]) -> dict[str, float | None]:
+        if not values:
+            return {"average": None, "min": None, "max": None}
+        return {
+            "average": round(sum(values) / len(values), 2),
+            "min": round(min(values), 2),
+            "max": round(max(values), 2),
+        }
+
+    return {
+        "hours": window,
+        "points": points_out,
+        "download": summarize(download_values),
+        "upload": summarize(upload_values),
+        "devices": {
+            **summarize([float(value) for value in device_values]),
+            "now": sum(1 for entity in all_states if str(entity.get("entity_id", "")).startswith("device_tracker.") and entity.get("state") == "home"),
+            "tracked": len(tracker_ids),
+        },
     }
 
 

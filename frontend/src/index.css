@@ -54,7 +54,14 @@ button, [role='button'], select, label { touch-action: manipulation; }
 
 /* Wall panels get larger base text for arm's-length reading. This is deliberately fluid rather
    than a set of capped breakpoints: a Fire HD 10 in landscape reports ~1443 CSS px, so every
-   `max-width: 1440px` rule missed it and the panel fell back to phone-sized 16px text. */
+   `max-width: 1440px` rule missed it and the panel fell back to phone-sized 16px text.
+   Every panel sizes in rem, so raising this root value scales the whole dashboard together —
+   a Fire HD 10 lands near 24px base, readable from across a room. */
 @media (min-width: 700px) {
-  :root { font-size: clamp(17px, .95vw + .75vh, 22px); }
+  :root { font-size: clamp(19px, 1.15vw + .9vh, 26px); }
+}
+
+/* Handheld width still gets a nudge over the 16px browser default. */
+@media (max-width: 699px) {
+  :root { font-size: 17px; }
 }

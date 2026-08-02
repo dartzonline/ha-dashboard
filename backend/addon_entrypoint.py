@@ -18,6 +18,7 @@ OPTION_ENV_MAP = {
     "opensky_client_id": "OPENSKY_CLIENT_ID",
     "opensky_client_secret": "OPENSKY_CLIENT_SECRET",
     "airlabs_key": "AIRLABS_KEY",
+    "energy_rate_per_kwh": "ENERGY_RATE_PER_KWH",
 }
 
 

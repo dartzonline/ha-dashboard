@@ -102,7 +102,7 @@ Do **not** expose this application's port `8000` directly to the public internet
 ## Wall tablet layout
 
 - The navigation panel is hidden on load. Tap the menu button next to the page title to slide it in; picking a section, tapping the backdrop, or pressing Escape closes it again.
-- Base text scales fluidly with the panel above 700px wide (`clamp(17px, .95vw + .75vh, 22px)`) rather than through capped breakpoints. A Fire HD 10 in landscape reports about 1443 CSS px, which fell outside every `max-width: 1440px` rule and left the panel at phone-sized text; the fluid ramp cannot be missed that way.
+- Base text scales fluidly with the panel above 700px wide (`clamp(19px, 1.15vw + .9vh, 26px)`) rather than through capped breakpoints. A Fire HD 10 in landscape reports about 1443 CSS px, which fell outside every `max-width: 1440px` rule and left the panel at phone-sized text; the fluid ramp cannot be missed that way. That ramp has since been raised: every panel sizes in rem, so a larger root value scales the whole dashboard together, and a Fire HD 10 now lands near a 24px base — legible from across the room rather than only at arm's length.
 - Device pages fill the viewport height: the tile grid stretches its rows into the space that is left instead of ending in a dead band, and each tile leads with its reading in large type with the label above it in small caps. Household presence sits on the section heading line rather than owning a band of its own.
 - The top banner carries six live cells including connected-device counts derived from router `device_tracker` entities. When a device joins within the last 30 minutes, its name appears there and alternates through up to three recent arrivals.
 - Tapping the security cell or the alert strip names the exact open doors, windows, covers, unlocked locks, leaks, and faulting devices, with how long each has been that way. Each row opens that entity's full detail sheet.
@@ -161,6 +161,7 @@ Changes are saved through the backend (`GET`/`PUT`/`DELETE /api/config`) to `/da
 
 - Numeric sensor tiles carry an inline 24-hour sparkline; the doors-open tile instead names which door or window is open (a sparkline of a door count isn't useful).
 - Discrete entities (lights, locks, covers, media players, vacuums, fans, climate) show a 24-hour on/off activity strip in their detail sheet, with per-state totals.
+- The Home page's Internet tile expands into a 24-hour view: average download and upload speed in Mbps by hour, alongside the average number of devices connected. Home Assistant has no clients-online sensor, so `GET /api/insights/network?hours=24` reconstructs that count by replaying every `device_tracker` entity's state history.
 - An activity log (the clock icon next to the time) keeps a running, timestamped history of every state change the dashboard has seen this session.
 
 ## Presence, media, and moments
@@ -169,13 +170,14 @@ Changes are saved through the backend (`GET`/`PUT`/`DELETE /api/config`) to `/da
 - **Now playing** — a persistent bar appears at the bottom of the screen whenever a `media_player.*` is playing, with artwork, title, and transport controls. Artwork is proxied through `GET /api/entity-picture/{entity_id}` since Home Assistant's `entity_picture` path needs the backend's auth token, which the browser never receives.
 - **Night Mode** and the thermostat quick-access button remain the two one-tap **Moments**.
 
-## World clock
+## World time
 
-The World section is a touch map, not a static set of clocks. Every point on it is a control:
+The section (**World time** in the navigation) is a touch map, not a static set of clocks. Every point on it is a control:
 
-- **Touch anywhere on the map** to drop a pin. The tapped position converts to latitude/longitude (the basemap is a plain equirectangular projection) and resolves against a bundled table of ~110 cities in `frontend/src/worldCities.ts`, so the reading uses a real IANA zone and gets DST right. The pin joins the clock rail as its own card until you clear it.
+- **Touch anywhere on the map** to drop a pin. The tapped position converts to latitude/longitude (the basemap is a plain equirectangular projection) and resolves against a bundled table of ~110 cities in `frontend/src/worldCities.ts`, so the reading uses a real IANA zone and gets DST right. The pin joins the clock rail as its own card until you clear it — a **Clear pin** control on the map removes it, and a selection releases back to home on its own after a few seconds so the wall panel never sits on a stale tap.
 - **Taps more than 1500 km from any city** — mid-ocean, or deep polar — report an estimated zone derived from longitude (`UTC±N`, via `Etc/GMT±N`) and name the nearest city and its distance, rather than pretending to a precision the lookup does not have.
-- **The four preset markers** (home, Frankfurt, Hyderabad, Auckland) and the clock cards select the same reading, so the map, the readout, and the rail always agree.
+- **The four preset markers** (home, Frankfurt, Khammam in Telangana, India, and Auckland) and the clock cards select the same reading, so the map, the readout, and the rail always agree.
+- **Tap a clock card** to open that city's weather: current conditions plus a short hourly and daily forecast, so a glance at a time zone also answers what it is like there.
 - Each reading shows local time, the local date, day/night phase, the zone abbreviation, and how far ahead of or behind home it is.
 
 Marker positions are computed from each location's coordinates rather than hand-placed percentages, so a marker cannot drift from the place it names.
@@ -184,9 +186,18 @@ Marker positions are computed from each location's coordinates rather than hand-
 
 The Energy section (sidebar) discovers every `device_class: energy` sensor. Devices that report `_energy_yesterday` / `_energy_this_month` / `_energy_last_month` siblings (common with smart plugs and appliance monitors) render directly as stat cards; a bare cumulative counter falls back to deriving daily usage from 30 days of recorder history. A whole-home utility-meter sensor (matched by name — "smarthub", "utility", "grid", etc.) is broken out separately from per-device totals. Empty gracefully when no energy sensors exist yet.
 
-## Weather radar
+Two panels sit alongside that breakdown:
 
-The Weather section's fourth slide overlays an animated precipitation radar from [RainViewer](https://www.rainviewer.com/) (free, no API key) centered on your home coordinates, cycling through the last several frames with play/pause and an "as of" timestamp.
+- **Estimated bill so far** — this month's usage priced at your rate, with a projected month total.
+- **Daily usage · last 14 days** — a chart of daily totals beside the per-device breakdown.
+
+The price is one number, `energy_rate_per_kwh` (default `0.15`). Set it in the add-on's **Configuration** tab, or as `ENERGY_RATE_PER_KWH` in `backend/.env` for native/Compose runs. You can also edit the $/kWh rate inline on the Energy page itself; that saves through `PUT /api/config` and persists like the rest of the dashboard configuration.
+
+## Weather
+
+The hourly panel shows the next 12 hours from right now, rolling past midnight into tomorrow's forecast. It previously compared a local timestamp against a UTC date, so from late afternoon onward the panel emptied out exactly when the evening forecast mattered most.
+
+The Weather section's fourth slide overlays an animated precipitation radar from [RainViewer](https://www.rainviewer.com/) (free, no API key) centered on your home coordinates, cycling through the last several frames with play/pause and an "as of" timestamp. The panel fills its whole rectangle: a dark [OpenStreetMap](https://www.openstreetmap.org/)/[CARTO](https://carto.com/) basemap sits under the precipitation layer, so the rain is drawn over recognizable geography rather than empty space.
 
 ## Flight tracker
 
@@ -196,6 +207,10 @@ The Flights section is a from-scratch port of [FlyInk-Board](https://github.com/
 - **Track a Flight** — type a flight number (IATA or ICAO) to pin it: a progress bar with live position, scheduled/actual times, a delay badge, and telemetry. The currently tracked flight also appears as a small badge in the header next to the clock.
 
 **Route accuracy.** adsbdb's callsign lookup (`fromCode`/`toCode`) is a generic, undated historical mapping for that flight number — airlines reuse numeric designators across different city pairs on different days, so it's a guess, not a live fact. `backend/app/flights.py` resolves the actual origin/destination by priority: **live climb/descent-based inference** (is this plane actually climbing out of / descending into a known nearby airport right now?) → **real OpenSky flight history** for that aircraft (needs `OPENSKY_CLIENT_ID`/`SECRET` below) → the adsbdb guess, but only if the plane's current position and heading are geometrically plausible for that route at all. If none of that lines up, it shows no route rather than a wrong one. The live-motion airport list (`AIRPORTS` in `flights.py`) is seeded for the Austin/Central Texas region — extend it for your own area.
+
+The flight-history lookup asks OpenSky for a 24-hour window. It used to ask for 36 hours, which OpenSky rejected every single time with `HTTP 400 — "You can only query across 2 partitions (days)"`, so that history tier never actually contributed a route.
+
+**When the board is empty**, `GET /api/flights/status` says whether the sky is quiet or a key is missing: which upstreams are configured, whether the OpenSky token request and states query succeed, and the last error seen per upstream.
 
 No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Three optional credentials improve it further — where you set them depends on how you're running the dashboard:
 
@@ -277,9 +292,11 @@ Edit `frontend/src/dashboardConfig.ts` to reorganize entity tiles. The bridge ex
 - `POST /api/actions/night-mode` with explicit `{"confirm": true}`
 - `GET /api/history/{entity_id}?hours=24`
 - `GET /api/entity-picture/{entity_id}` — proxies a `media_player`'s artwork with the backend's Home Assistant auth attached
-- `GET`/`PUT`/`DELETE /api/config` — the dashboard tile layout and Night Mode light allowlist, editable from the in-app **Configure** panel
+- `GET`/`PUT`/`DELETE /api/config` — the dashboard tile layout, Night Mode light allowlist, and `energy_rate_per_kwh`, editable from the in-app **Configure** panel and the Energy page's inline rate field
+- `GET /api/insights/network?hours=24` — hourly average download/upload speed in Mbps plus a connected-device count reconstructed from `device_tracker` history (see **Every tile tells a story** above)
 - `GET /api/flights/nearby?latitude=&longitude=&limit=` and `GET`/`POST`/`DELETE /api/flights/track` — the flight tracker's data layer (see **Flight tracker** above)
-- `GET /api/weather/external?latitude=&longitude=` — Open-Meteo forecast proxy
+- `GET /api/flights/status` — flight-tracker diagnostics: configured upstreams, OpenSky token/states health, and the last error per upstream
+- `GET /api/weather/external?latitude=&longitude=&units=` — Open-Meteo forecast proxy. `units` is `imperial` (the default) or `metric`, and the response carries `units`, `temperatureUnit`, `windUnit`, and `precipitationUnit` alongside temperatures, wind, and precipitation in that system. It previously always answered in Celsius.
 - `WS /api/ws` for live `state_changed` events
 
 For native/Compose use, set `HA_URL` and `HA_TOKEN`. In the Home Assistant add-on, leave those unset so the automatic `SUPERVISOR_TOKEN` path is used. Keep Home Assistant running as the integration and automation engine; this project replaces its presentation layer, not its protocol adapters, integrations, recorder, or automations.

@@ -1,0 +1,212 @@
+/* Condition-driven sky.
+   A themed container sets --sky-a / --sky-b / --sky-glow from the .sky-* class below and paints its
+   own background from them, so the tint and the animation always agree. */
+
+.sky-sunny  { --sky-a: #2a3550; --sky-b: #16202f; --sky-glow: #f2c66a; --sky-ink: #ffdf9e; }
+.sky-cloudy { --sky-a: #222d3f; --sky-b: #141c28; --sky-glow: #9db4d0; --sky-ink: #cfdcec; }
+.sky-rain   { --sky-a: #1b2739; --sky-b: #101823; --sky-glow: #6ea8e6; --sky-ink: #b8d4f2; }
+.sky-storm  { --sky-a: #1d2133; --sky-b: #0d1019; --sky-glow: #9b8ef0; --sky-ink: #d0c9ff; }
+.sky-snow   { --sky-a: #253044; --sky-b: #151d29; --sky-glow: #cfe4f7; --sky-ink: #e8f3ff; }
+.sky-fog    { --sky-a: #242c37; --sky-b: #161c24; --sky-glow: #a8b4c0; --sky-ink: #d5dde5; }
+.sky-sunny.is-night { --sky-a: #171f38; --sky-b: #0a0f1c; --sky-glow: #8fa8e8; --sky-ink: #cbd9ff; }
+.is-night { --sky-a: #151b28; --sky-b: #0a0e16; }
+
+/* Shared surface treatment, so the weather hero and a city card read as the same object. */
+.sky-surface {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(140deg, var(--sky-a, #1b2433), var(--sky-b, #0f1622) 72%);
+  border-color: color-mix(in srgb, var(--sky-glow, var(--accent)) 26%, var(--border));
+  transition: background .5s ease, border-color .5s ease;
+}
+
+.sky-atmosphere {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* --- sun ------------------------------------------------------------------ */
+
+.sky-sun {
+  position: absolute;
+  top: 12%;
+  right: 7%;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 36%, #ffe7a8, var(--sky-glow) 52%, rgba(242, 198, 106, 0) 72%);
+  box-shadow: 0 0 46px 12px rgba(242, 198, 106, .2);
+  animation: sky-sun-breathe 6s ease-in-out infinite;
+}
+
+.sky-sun i {
+  position: absolute;
+  inset: -34%;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(255, 214, 130, .3) 0 6deg, transparent 6deg 30deg);
+  animation: sky-spin 34s linear infinite;
+}
+
+@keyframes sky-sun-breathe { 50% { transform: scale(1.05); opacity: .92; } }
+@keyframes sky-spin { to { transform: rotate(360deg); } }
+
+/* --- night ---------------------------------------------------------------- */
+
+.sky-moon {
+  position: absolute;
+  top: 13%;
+  right: 8%;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 32%, #f2f6ff, #b9c8e8 62%, #8fa3c8);
+  box-shadow: 0 0 34px 8px rgba(160, 185, 240, .22);
+}
+
+.sky-star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #dce7ff;
+  animation: sky-twinkle 3.4s ease-in-out infinite;
+}
+
+.star-0 { top: 18%; left: 12%; }
+.star-1 { top: 32%; left: 26%; animation-delay: .4s; }
+.star-2 { top: 14%; left: 41%; animation-delay: .9s; }
+.star-3 { top: 46%; left: 18%; animation-delay: 1.3s; }
+.star-4 { top: 24%; left: 58%; animation-delay: .2s; }
+.star-5 { top: 58%; left: 44%; animation-delay: 1.8s; }
+.star-6 { top: 12%; left: 70%; animation-delay: 1.1s; }
+.star-7 { top: 62%; left: 66%; animation-delay: .7s; }
+.star-8 { top: 40%; left: 82%; animation-delay: 2.1s; }
+
+@keyframes sky-twinkle { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* --- clouds --------------------------------------------------------------- */
+
+.sky-cloud {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(224, 233, 250, .1);
+  filter: blur(.3px);
+  animation: sky-drift 26s linear infinite;
+}
+
+.sky-cloud::before,
+.sky-cloud::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: inherit;
+}
+
+.sky-cloud::before { left: 18%; top: -58%; width: 46%; height: 150%; }
+.sky-cloud::after { right: 16%; top: -34%; width: 34%; height: 118%; }
+
+.cloud-one { top: 15%; left: -30%; width: 150px; height: 30px; }
+.cloud-two { top: 38%; left: -42%; width: 200px; height: 38px; animation-duration: 34s; opacity: .72; }
+.cloud-three { top: 62%; left: -26%; width: 128px; height: 26px; animation-duration: 29s; opacity: .55; }
+
+.sky-rain .sky-cloud, .sky-storm .sky-cloud { background: rgba(196, 212, 236, .13); }
+
+@keyframes sky-drift { to { transform: translateX(220%); } }
+
+/* --- rain ----------------------------------------------------------------- */
+
+.sky-rain {
+  position: absolute;
+  top: -14%;
+  width: 2px;
+  height: 20px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(150, 195, 255, .04), rgba(150, 195, 255, .5));
+  animation: sky-fall 1.35s linear infinite;
+}
+
+.drop-0 { left: 8%; animation-delay: .05s; }
+.drop-1 { left: 18%; animation-delay: .5s; }
+.drop-2 { left: 27%; animation-delay: .9s; }
+.drop-3 { left: 36%; animation-delay: .25s; }
+.drop-4 { left: 46%; animation-delay: 1.1s; }
+.drop-5 { left: 56%; animation-delay: .7s; }
+.drop-6 { left: 65%; animation-delay: .35s; }
+.drop-7 { left: 74%; animation-delay: 1.2s; }
+.drop-8 { left: 84%; animation-delay: .15s; }
+.drop-9 { left: 93%; animation-delay: .85s; }
+
+@keyframes sky-fall { to { transform: translateY(560px); } }
+
+/* --- storm ---------------------------------------------------------------- */
+
+.sky-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 62% 22%, rgba(206, 198, 255, .55), transparent 46%);
+  opacity: 0;
+  animation: sky-strike 7s ease-out infinite;
+}
+
+@keyframes sky-strike {
+  0%, 88%, 100% { opacity: 0; }
+  90% { opacity: .85; }
+  92% { opacity: .1; }
+  94% { opacity: .6; }
+}
+
+/* --- snow ----------------------------------------------------------------- */
+
+.sky-flake {
+  position: absolute;
+  top: -8%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(233, 244, 255, .78);
+  animation: sky-flutter 6.5s linear infinite;
+}
+
+.flake-0 { left: 7%; animation-delay: .2s; }
+.flake-1 { left: 17%; animation-delay: 1.6s; }
+.flake-2 { left: 28%; animation-delay: 3.1s; }
+.flake-3 { left: 38%; animation-delay: .8s; }
+.flake-4 { left: 48%; animation-delay: 2.4s; }
+.flake-5 { left: 58%; animation-delay: 4s; }
+.flake-6 { left: 68%; animation-delay: 1.1s; }
+.flake-7 { left: 78%; animation-delay: 3.6s; }
+.flake-8 { left: 87%; animation-delay: .5s; }
+.flake-9 { left: 95%; animation-delay: 2.9s; }
+
+@keyframes sky-flutter {
+  0% { transform: translate(0, 0); opacity: 0; }
+  12% { opacity: .9; }
+  50% { transform: translate(16px, 280px); }
+  100% { transform: translate(-10px, 560px); opacity: 0; }
+}
+
+/* --- fog ------------------------------------------------------------------ */
+
+.sky-fog {
+  position: absolute;
+  left: -40%;
+  width: 180%;
+  height: 26%;
+  background: linear-gradient(90deg, transparent, rgba(206, 216, 228, .14), transparent);
+  filter: blur(6px);
+  animation: sky-roll 22s ease-in-out infinite alternate;
+}
+
+.fog-one { top: 22%; }
+.fog-two { top: 48%; animation-duration: 28s; animation-delay: -6s; opacity: .8; }
+.fog-three { top: 70%; animation-duration: 34s; animation-delay: -12s; opacity: .6; }
+
+@keyframes sky-roll { to { transform: translateX(18%); } }
+
+/* Motion is decoration only, so it all stops when the viewer asks it to. */
+@media (prefers-reduced-motion: reduce) {
+  .sky-atmosphere * { animation: none !important; }
+  .sky-flash { opacity: 0; }
+}

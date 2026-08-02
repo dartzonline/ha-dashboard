@@ -1,5 +1,5 @@
 name: Home Panel
-version: 0.1.6
+version: 0.1.7
 slug: home_command_center
 description: Information-rich Home Assistant dashboard with secure ingress and guarded home controls
 arch:
@@ -24,7 +24,9 @@ options:
   opensky_client_id: ""
   opensky_client_secret: ""
   airlabs_key: ""
+  energy_rate_per_kwh: 0.15
 schema:
   opensky_client_id: str?
   opensky_client_secret: password?
   airlabs_key: password?
+  energy_rate_per_kwh: float?
