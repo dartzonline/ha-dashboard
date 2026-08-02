@@ -1,5 +1,5 @@
 name: Home Panel
-version: 0.1.0
+version: 0.1.1
 slug: home_command_center
 description: Information-rich Home Assistant dashboard with secure ingress and guarded home controls
 arch:
@@ -17,8 +17,8 @@ panel_admin: true
 homeassistant_api: true
 watchdog: http://[HOST]:[PORT:8000]/api/health
 ports:
-  8000/tcp: null
+  8000/tcp: 8000
 ports_description:
-  8000/tcp: Direct web access (disabled by default; use authenticated ingress)
+  8000/tcp: Direct web access on your LAN at http://<home-assistant-ip>:8000 (in addition to authenticated ingress)
 options: {}
 schema: {}
