@@ -264,3 +264,7 @@ Edit `frontend/src/dashboardConfig.ts` to reorganize entity tiles. The bridge ex
 - `WS /api/ws` for live `state_changed` events
 
 For native/Compose use, set `HA_URL` and `HA_TOKEN`. In the Home Assistant add-on, leave those unset so the automatic `SUPERVISOR_TOKEN` path is used. Keep Home Assistant running as the integration and automation engine; this project replaces its presentation layer, not its protocol adapters, integrations, recorder, or automations.
+
+## Planned work
+
+- [`docs/auto-entity-discovery.md`](docs/auto-entity-discovery.md) — design for having new Home Assistant entities automatically show up in the right dashboard section (with a chart, where relevant) instead of requiring a manual `dashboardConfig.ts`/Configure-panel edit. Not started.
