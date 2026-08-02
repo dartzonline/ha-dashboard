@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plane, PlaneTakeoff, Radar as RadarIcon, Search, X } from 'lucide-react'
+import { Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { apiUrl } from './api'
 import type { HAEntity } from './types'
 import './FlightsView.css'
@@ -197,6 +197,8 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
   const [track, setTrack] = useState<TrackResponse | null>(null)
   const [queryInput, setQueryInput] = useState('')
   const [trackBusy, setTrackBusy] = useState(false)
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [quickAddValue, setQuickAddValue] = useState('')
 
   const weather = entities.get('weather.forecast_home') ?? Array.from(entities.values()).find((entity) => entity.entity_id.startsWith('weather.'))
   const homeZone = entities.get('zone.home')
@@ -288,6 +290,14 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     } finally {
       setTrackBusy(false)
     }
+  }
+
+  async function submitQuickAdd() {
+    if (!quickAddValue.trim()) return
+    await trackFlight(quickAddValue)
+    setQuickAddValue('')
+    setQuickAddOpen(false)
+    onSelectSlide(1)
   }
 
   async function stopTracking() {
@@ -532,6 +542,39 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
           </section>
         )}
       </div>
+
+      {slide === 0 && (
+        <div className="flights-quick-add">
+          {quickAddOpen ? (
+            <form
+              className="quick-add-form"
+              onSubmit={(event) => { event.preventDefault(); void submitQuickAdd() }}
+            >
+              <Search size={14} aria-hidden="true" />
+              <input
+                autoFocus
+                type="text"
+                value={quickAddValue}
+                onChange={(event) => setQuickAddValue(event.target.value.toUpperCase())}
+                onKeyDown={(event) => { if (event.key === 'Escape') { setQuickAddOpen(false); setQuickAddValue('') } }}
+                placeholder="Flight number"
+                style={{ textTransform: 'uppercase' }}
+                aria-label="Flight number to track"
+              />
+              <button type="submit" className="quick-add-confirm" disabled={!quickAddValue.trim() || trackBusy} aria-label="Track this flight">
+                <Plus size={16} />
+              </button>
+              <button type="button" className="quick-add-close" onClick={() => { setQuickAddOpen(false); setQuickAddValue('') }} aria-label="Cancel">
+                <X size={16} />
+              </button>
+            </form>
+          ) : (
+            <button type="button" className="quick-add-fab" onClick={() => setQuickAddOpen(true)} title="Track a flight by number" aria-label="Track a flight by number">
+              <Plus size={20} />
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flights-pager" role="tablist" aria-label="Flights panels">
         {['Radar', 'Track'].map((label, index) => (
