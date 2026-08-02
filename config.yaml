@@ -1,5 +1,5 @@
 name: Home Panel
-version: 1.0.0
+version: 1.0.1
 slug: home_command_center
 description: Information-rich Home Assistant dashboard with secure ingress and guarded home controls
 arch:
