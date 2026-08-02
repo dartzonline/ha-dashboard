@@ -1,6 +1,10 @@
 # Plan: automatic entity discovery
 
-**Status:** not started — planning only.
+**Status:** Phase 0 (registry plumbing) done — `EventBridge.send_command`, `entity_registry.py`,
+and `GET /api/registry` exist and return joined entity/device/area metadata. Not yet validated
+against a real multi-hundred-entity household (do that before trusting the disabled/hidden/
+category filtering downstream), and phases 1-5 (dry-run classifier report, Configure panel tray,
+auto-accept, area-mapping) are still planning only.
 **Goal:** when a new entity shows up in Home Assistant, it should appear on the dashboard in a sensible section, with the right tile kind and (where useful) a chart, without anyone hand-editing `dashboardConfig.ts` or the Configure panel.
 
 This document is the design for that. It's written to be picked up cold in a future session.
@@ -29,10 +33,10 @@ This matters because without `entity_category`, naive discovery will surface dia
 
 The good news: `backend/app/event_bridge.py` already maintains a persistent authenticated WebSocket connection to Home Assistant, with a request/response pattern (`call_service` already does exactly this: send `{id, type, ...}`, await the matching `result` message via `self._pending`). Fetching the registries is the same mechanism, not a new one.
 
-**Phase 0 (foundational, no user-visible change):**
-- Add `EventBridge.send_command(command_type: str, **kwargs) -> Any`, generalizing the existing `call_service` request/response plumbing.
-- Add `backend/app/entity_registry.py`: fetches `config/entity_registry/list`, `config/device_registry/list`, `config/area_registry/list` on demand, joins them (entity → device → area), caches in memory (~5 min TTL, same style as `flights.py`'s caches).
-- Expose `GET /api/registry` returning the joined, minimal shape the frontend needs:
+**Phase 0 (foundational, no user-visible change) — done:**
+- Added `EventBridge.send_command(command_type: str, **kwargs) -> Any`, generalizing the existing `call_service` request/response plumbing. `call_service` itself is now a thin wrapper over it.
+- Added `backend/app/entity_registry.py`: fetches `config/entity_registry/list`, `config/device_registry/list`, `config/area_registry/list` on demand, joins them (entity → device → area), caches in memory (5 min TTL, same style as `flights.py`'s caches).
+- Exposed `GET /api/registry` returning the joined, minimal shape the frontend needs:
   ```json
   {
     "entities": {
