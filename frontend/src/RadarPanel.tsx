@@ -256,10 +256,8 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
             ))}
           </div>
         )}
+        {/* Circular range rings read wrong on a rectangular map crop; a plain home marker is enough. */}
         <div className="radar-rings" aria-hidden="true">
-          <span className="radar-ring ring-outer" />
-          <span className="radar-ring ring-mid" />
-          <span className="radar-ring ring-inner" />
           <span className="radar-home-dot" />
         </div>
         {(!currentFrame || !hasLocation) && (
