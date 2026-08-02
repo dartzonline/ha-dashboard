@@ -253,6 +253,8 @@ function EntityTile({ config, entity, onService, onExpand, subtitle, noSparkline
   const domain = config.entityId.split('.')[0]
   const lightOn = domain === 'light' && entity?.state === 'on'
   const hazard = isHazard(entity)
+  // An entity that reports `unavailable` reads the same as a missing one, so it gets the same dimmed treatment.
+  const offline = !entity || ['unavailable', 'unknown'].includes(entity.state)
   const showSparkline = !noSparkline && config.kind === 'sensor' && Boolean(entity) && Number.isFinite(Number(entity?.state))
   const sparkPoints = useSparkline(config.entityId, showSparkline)
   const longPressTimer = useRef<number | undefined>(undefined)
@@ -294,7 +296,7 @@ function EntityTile({ config, entity, onService, onExpand, subtitle, noSparkline
 
   return (
     <article
-      className={`entity-tile ${active ? 'is-active' : ''} ${lightOn ? 'is-light-on' : ''} ${hazard ? 'is-hazard' : ''} ${config.kind === 'thermostat' ? 'is-thermostat' : ''} ${entity ? '' : 'is-unavailable'}`}
+      className={`entity-tile ${active ? 'is-active' : ''} ${lightOn ? 'is-light-on' : ''} ${hazard ? 'is-hazard' : ''} ${config.kind === 'thermostat' ? 'is-thermostat' : ''} ${subtitle ? 'has-summary' : ''} ${offline ? 'is-unavailable' : ''}`}
       role="button"
       tabIndex={0}
       aria-label={`Open ${config.label} details`}
@@ -760,9 +762,9 @@ function App() {
                 <ThermostatKnob entity={entities.get('climate.mainfoor_thermostat')} pending={false} size="large" onSet={(value) => void callService('climate', 'set_temperature', { entity_id: 'climate.mainfoor_thermostat', temperature: value })} />
               </div>
             )}
-            {activeSection === 'home' && <PresenceRow entities={entities} />}
             <div className="section-heading">
               <div><span>My home</span><h2>{section.label} devices</h2></div>
+              {activeSection === 'home' && <PresenceRow entities={entities} />}
               <p>{loading ? 'Loading entities...' : `${section.tiles.filter((tile) => entities.has(tile.entityId)).length} available`}</p>
             </div>
             <div className="entity-grid">
