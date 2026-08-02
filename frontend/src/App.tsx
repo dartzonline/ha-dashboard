@@ -35,6 +35,13 @@ const InsightsView = lazy(() => import('./InsightsView').then((module) => ({ def
 const EntityHistory = lazy(() => import('./EntityHistory').then((module) => ({ default: module.EntityHistory })))
 const EnergyView = lazy(() => import('./EnergyView').then((module) => ({ default: module.EnergyView })))
 const FlightsView = lazy(() => import('./FlightsView').then((module) => ({ default: module.FlightsView })))
+const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+
+/** The WAN sensor is a plain on/off, so its detail sheet gets the router's throughput story instead. */
+function isNetworkEntity(entityId: string, entity: HAEntity | undefined) {
+  return entityId === 'binary_sensor.cbr750_gateway_wan_status'
+    || (String(entity?.attributes.device_class ?? '') === 'connectivity' && /wan|internet|gateway/i.test(entityId))
+}
 
 function formatEntityState(entity: HAEntity, state: string) {
   const domain = entity.entity_id.split('.')[0]
@@ -78,16 +85,29 @@ function isHazard(entity: HAEntity | undefined) {
 
 const doorOpeningClasses = ['door', 'garage_door', 'window', 'opening']
 
-/** A count sensor has nothing worth charting — name the open doors/windows instead. */
+/**
+ * A count sensor has nothing worth charting, so the Doors tile leads with the plain-language
+ * verdict ("Open"/"Closed") and the count, then names which doors are open.
+ */
 function openDoorSummary(entities: Map<string, HAEntity>): string {
-  const open = Array.from(entities.values()).filter((entity) => {
+  const doorSensors = Array.from(entities.values()).filter((entity) => {
     const deviceClass = String(entity.attributes.device_class ?? '')
-    return entity.entity_id.startsWith('binary_sensor.') && doorOpeningClasses.includes(deviceClass) && entity.state === 'on'
+    return entity.entity_id.startsWith('binary_sensor.') && doorOpeningClasses.includes(deviceClass)
   })
-  if (!open.length) return 'All closed'
+  const open = doorSensors.filter((entity) => entity.state === 'on')
+  // The helper sensor can know about doors this dashboard has no binary_sensor for, so trust
+  // whichever source reports more open.
+  const reported = Number(entities.get('sensor.doors_open_count')?.state)
+  const openCount = Math.max(Number.isFinite(reported) ? reported : 0, open.length)
+
+  if (openCount === 0) {
+    return doorSensors.length ? `Closed · all ${doorSensors.length} secure` : 'Closed · 0 open'
+  }
+
+  const label = `Open · ${openCount} door${openCount === 1 ? '' : 's'}`
+  if (!open.length) return label
   const names = open.map((entity) => String(entity.attributes.friendly_name ?? entity.entity_id.split('.')[1].replaceAll('_', ' ')))
   const shown = names.slice(0, 2).join(', ')
-  const label = `${open.length} open`
   return names.length > 2 ? `${label}: ${shown} +${names.length - 2} more` : `${label}: ${shown}`
 }
 
@@ -172,14 +192,16 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
   const networkOnline = networkEntity?.state === 'on'
   const weatherState = String(weather?.state ?? '').replaceAll('_', ' ').replace('partlycloudy', 'partly cloudy')
   const condition = weatherState ? weatherState.replace(/^./, (letter) => letter.toUpperCase()) : 'Weather'
+  // Rail copy stays terse on purpose: six cells share one row at wall-panel type sizes, so a longer
+  // phrase would just be truncated to an ellipsis and read as nothing at all.
   const securityDetail = unsafeLocks.length
-    ? unsafeLocks.map(friendlyName).slice(0, 2).join(' · ')
+    ? unsafeLocks.map(friendlyName).slice(0, 1).join(' · ')
     : openDoors > 0
       ? `${openDoors} door${openDoors === 1 ? '' : 's'} open`
       : leaks.length > 0
         ? `${leaks.length} leak${leaks.length === 1 ? '' : 's'} detected`
-        : securityKnown ? 'Doors locked · no leaks' : 'Checking sensors'
-  const weatherDetail = [humidity ? `${displayState(humidity)} humidity` : '', wind ? `${displayState(wind)} wind` : ''].filter(Boolean).join(' · ')
+        : securityKnown ? 'Locked · dry' : 'Checking sensors'
+  const weatherDetail = [humidity ? displayState(humidity) : '', wind ? displayState(wind) : ''].filter(Boolean).join(' · ')
   const issueParts = [
     unsafeLocks.length ? `${unsafeLocks.length} unlocked lock${unsafeLocks.length === 1 ? '' : 's'}` : '',
     openDoors ? `${openDoors} open door${openDoors === 1 ? '' : 's'}` : '',
@@ -191,7 +213,7 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
   const issueCount = securityIssues + activeProblems.length + lowBatteries.length + dryPlants.length
   const attentionTarget = securityIssues > 0 ? 'security' : activeProblems.length ? 'roborock' : 'insights'
   const finalUtilityTitle = batteryEntity ? `Tablet ${displayState(batteryEntity)}` : vacuum ? `Vacuum ${displayState(vacuum)}` : 'Home systems'
-  const finalUtilityDetail = batteryEntity && vacuum ? `${displayState(vacuum)} · ${autoRotate ? 'rotate on' : 'rotate paused'}` : autoRotate ? 'Auto rotate on' : 'Auto rotate paused'
+  const finalUtilityDetail = autoRotate ? 'Rotating' : 'Rotate paused'
 
   useEffect(() => {
     if (recentlyConnected.length < 2) return
@@ -205,7 +227,7 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
       id: 'devices',
       target: 'insights',
       icon: MonitorSmartphone,
-      title: trackers.length ? `${onlineDevices.length} devices online` : 'Devices',
+      title: trackers.length ? `${onlineDevices.length} online` : 'Devices',
       detail: newDevice
         ? `New: ${friendlyName(newDevice)}`
         : trackers.length ? `${awayDevices.length} away · ${trackers.length} tracked` : 'No device trackers',
@@ -213,7 +235,7 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
     },
     { id: 'security', target: 'security', icon: Shield, title: securityIssues > 0 ? `${securityIssues} security alert${securityIssues === 1 ? '' : 's'}` : securityKnown ? 'Secure' : 'Security', detail: securityDetail, tone: securityIssues > 0 ? 'danger' : securityKnown ? 'good' : 'muted', inspect: true },
     { id: 'weather', target: 'weather', icon: CloudSun, title: outside ? `${displayState(outside)} · ${condition}` : condition, detail: weatherDetail || 'Waiting for weather', tone: 'weather' },
-    { id: 'network', target: 'insights', icon: Wifi, title: networkOnline ? 'Network online' : networkEntity ? 'Network offline' : 'Network', detail: downloadEntity ? `${displayState(downloadEntity)} down` : 'Checking connection', tone: networkOnline ? 'good' : networkEntity ? 'danger' : 'muted' },
+    { id: 'network', target: 'insights', icon: Wifi, title: networkOnline ? 'WAN online' : networkEntity ? 'WAN offline' : 'Network', detail: downloadEntity ? `${displayState(downloadEntity)} down` : 'Checking connection', tone: networkOnline ? 'good' : networkEntity ? 'danger' : 'muted' },
     { id: 'tablet', target: batteryEntity ? 'home' : 'roborock', icon: batteryEntity ? Battery : Bot, title: finalUtilityTitle, detail: finalUtilityDetail, tone: 'accent' },
   ]
 
@@ -346,6 +368,7 @@ function EntityDetails({ config, entity, onService, onClose }: { config: TileCon
   const attributes = entity ? Object.entries(entity.attributes).filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value)).slice(0, 8) : []
   const unit = typeof entity?.attributes.unit_of_measurement === 'string' ? entity.attributes.unit_of_measurement : ''
   const hasNumericHistory = Boolean(entity && Number.isFinite(Number(entity.state)))
+  const showsNetworkHistory = isNetworkEntity(config.entityId, entity)
   const supportedColorModes = entity?.attributes.supported_color_modes
   const supportsBrightness = domain === 'light' && (
     typeof entity?.attributes.brightness === 'number'
@@ -475,12 +498,17 @@ function EntityDetails({ config, entity, onService, onClose }: { config: TileCon
         )}
         {message && <p className="detail-error" role="alert">{message}</p>}
         {pending && <div className="detail-progress" role="status">Sending command</div>}
+        {showsNetworkHistory && (
+          <Suspense fallback={<div className="history-loading"><Activity size={18} /><span>Preparing network history</span></div>}>
+            <NetworkDetail />
+          </Suspense>
+        )}
         {hasNumericHistory && entity && (
           <Suspense fallback={<div className="history-loading"><Activity size={18} /><span>Preparing history</span></div>}>
             <EntityHistory entityId={entity.entity_id} unit={unit} currentState={entity.state} />
           </Suspense>
         )}
-        {!hasNumericHistory && entity && ['light', 'switch', 'lock', 'cover', 'binary_sensor', 'media_player', 'vacuum', 'fan', 'climate'].includes(domain) && (
+        {!showsNetworkHistory && !hasNumericHistory && entity && ['light', 'switch', 'lock', 'cover', 'binary_sensor', 'media_player', 'vacuum', 'fan', 'climate'].includes(domain) && (
           <StateTimeline entityId={entity.entity_id} currentState={entity.state} formatState={(state) => formatEntityState(entity, state)} />
         )}
         <h3 className="detail-subheading">Details</h3>
@@ -502,6 +530,7 @@ function App() {
   const [insightsSlide, setInsightsSlide] = useState(0)
   const [weatherSlide, setWeatherSlide] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarTouchedAt, setSidebarTouchedAt] = useState(0)
   const [securityOpen, setSecurityOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [eventLogOpen, setEventLogOpen] = useState(false)
@@ -529,8 +558,10 @@ function App() {
   const {
     sections: dashboardSections,
     nightModeIndoorLights,
+    energyRatePerKwh,
     customized: configCustomized,
     save: saveDashboardConfig,
+    saveEnergyRate,
     reset: resetDashboardConfig,
   } = useDashboardConfig()
   const section = dashboardSections.find((item) => item.id === activeSection) ?? dashboardSections[0]
@@ -582,16 +613,23 @@ function App() {
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
+  // The sidebar hides itself so the wall panel stays clean, but only while it is being ignored:
+  // every touch inside it bumps `sidebarTouchedAt`, which restarts the countdown.
   useEffect(() => {
     if (!sidebarOpen) return
-    const timer = window.setTimeout(() => setSidebarOpen(false), 3_000)
+    const timer = window.setTimeout(() => setSidebarOpen(false), 6_000)
     return () => window.clearTimeout(timer)
-  }, [sidebarOpen])
+  }, [sidebarOpen, sidebarTouchedAt])
 
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
 
   function stopRotation() {
     setAutoRotate(false)
+  }
+
+  /** Restarts the sidebar's hide countdown, rate-limited so pointer-move does not churn state. */
+  function keepSidebarOpen() {
+    setSidebarTouchedAt((current) => (Date.now() - current > 800 ? Date.now() : current))
   }
 
   // Touch-first navigation: horizontal swipes on the page move between sections.
@@ -673,7 +711,13 @@ function App() {
         ))}
       </div>
       {sidebarOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`sidebar ${sidebarOpen ? 'is-open' : ''}`} aria-hidden={sidebarOpen ? undefined : true}>
+      <aside
+        className={`sidebar ${sidebarOpen ? 'is-open' : ''}`}
+        aria-hidden={sidebarOpen ? undefined : true}
+        onPointerDown={keepSidebarOpen}
+        onPointerMove={keepSidebarOpen}
+        onFocusCapture={keepSidebarOpen}
+      >
         <div className="brand" title="Home Panel"><span className="brand-mark"><Wind size={22} aria-hidden="true" /></span><span>Home Panel</span></div>
         <nav aria-label="Dashboard sections">
           {dashboardSections.map((item) => {
@@ -753,7 +797,7 @@ function App() {
           </Suspense>
         ) : activeSection === 'energy' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing energy usage</span></div>}>
-            <EnergyView entities={entities} />
+            <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveEnergyRate} />
           </Suspense>
         ) : (
           <section className="overview" aria-label={`${section.label} entities`}>

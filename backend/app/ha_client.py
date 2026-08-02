@@ -51,11 +51,20 @@ class HomeAssistantClient:
         return await self.client.get(path)
 
     async def history(self, entity_id: str, hours: int = 24) -> list[list[dict[str, Any]]]:
+        return await self.history_many([entity_id], hours)
+
+    async def history_many(self, entity_ids: list[str], hours: int = 24) -> list[list[dict[str, Any]]]:
+        """History for several entities in one round trip.
+
+        Home Assistant's history endpoint accepts a comma-separated `filter_entity_id` and returns
+        one series per entity, which is the difference between one request and ninety-eight when
+        summarising every device_tracker on the network.
+        """
         start = datetime.now(timezone.utc) - timedelta(hours=hours)
         response = await self.client.get(
             f"/api/history/period/{start.isoformat()}",
             params={
-                "filter_entity_id": entity_id,
+                "filter_entity_id": ",".join(entity_ids),
                 "minimal_response": "true",
                 "no_attributes": "false",
             },

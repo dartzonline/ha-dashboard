@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import { apiUrl } from './api'
 import type { HAEntity } from './types'
 
+export interface DailyUsage {
+  /** Local calendar day, `YYYY-MM-DD`. */
+  day: string
+  kWh: number
+}
+
 /** A single appliance/device, or a bare cumulative counter, normalized to kWh. */
 export interface EnergyDevice {
   id: string
@@ -12,17 +18,23 @@ export interface EnergyDevice {
   /** Best comparison figure for the current period: this-month for grouped devices, last-30-days sum for bare counters. */
   currentPeriodKWh: number
   isBareCounter: boolean
+  /** Per-day usage, only derivable for bare counters (grouped devices publish totals, not history). */
+  daily: DailyUsage[]
 }
 
 export interface UseEnergyResult {
   devices: EnergyDevice[]
   wholeHome: EnergyDevice | null
+  /** Per-day totals across every tracked source, most recent last. */
+  daily: DailyUsage[]
   loading: boolean
   isEmpty: boolean
 }
 
 /** Matches e.g. `washer_energy_yesterday` -> prefix `washer`, period `yesterday`. */
 const GROUP_SUFFIX = /^(.+)_energy_(yesterday|this_month|last_month)$/
+/** Daily-resetting "energy today" sensors: their peak each day *is* that day's usage. */
+const TODAY_SENSOR = /_energy_today$/
 const FRIENDLY_SUFFIX = /\s+Energy\s+(Yesterday|This\s+Month|Last\s+Month)$/i
 const WHOLE_HOME_HINTS = ['smarthub', 'utility', 'grid', 'whole_home', 'wholehome', 'main_meter']
 
@@ -74,6 +86,30 @@ function dayKey(timestamp: number) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * Fetches 30 days of history for a sensor that resets at midnight. Unlike a lifetime counter there
+ * is nothing to difference: the highest value seen on a day is what that day used.
+ */
+async function loadDailyResetCounter(entity: HAEntity): Promise<DailyUsage[]> {
+  const unit = entity.attributes.unit_of_measurement as string | undefined
+  try {
+    const response = await fetch(apiUrl(`history/${entity.entity_id}?hours=720`))
+    if (!response.ok) return []
+    const maxByDay = new Map<string, number>()
+    for (const point of parseHistoryPoints(await response.json())) {
+      const key = dayKey(point.time)
+      const kWh = toKWh(point.value, unit)
+      const current = maxByDay.get(key)
+      if (current === undefined || kWh > current) maxByDay.set(key, kWh)
+    }
+    return [...maxByDay.entries()]
+      .sort(([left], [right]) => (left < right ? -1 : 1))
+      .map(([day, kWh]) => ({ day, kWh }))
+  } catch {
+    return []
+  }
+}
+
 /** Fetches 30 days of history for a lifetime-increasing counter and derives per-day usage from day-over-day maxima. */
 async function loadBareCounter(entity: HAEntity): Promise<EnergyDevice> {
   const unit = entity.attributes.unit_of_measurement as string | undefined
@@ -86,6 +122,7 @@ async function loadBareCounter(entity: HAEntity): Promise<EnergyDevice> {
     lastMonthKWh: null,
     currentPeriodKWh: 0,
     isBareCounter: true,
+    daily: [],
   }
 
   try {
@@ -133,6 +170,7 @@ async function loadBareCounter(entity: HAEntity): Promise<EnergyDevice> {
       thisMonthKWh: thisMonthDiffs.length ? thisMonthDiffs.reduce((sum, d) => sum + d.usage, 0) : null,
       lastMonthKWh: lastMonthUsage,
       currentPeriodKWh,
+      daily: diffs.map((entry) => ({ day: entry.day, kWh: entry.usage })),
     }
   } catch {
     return base
@@ -150,8 +188,14 @@ export function useEnergy(entities: Map<string, HAEntity>): UseEnergyResult {
 
   const groups = new Map<string, GroupAccumulator>()
   const bareEntities: HAEntity[] = []
+  const todayEntities: HAEntity[] = []
 
   for (const entity of energyEntities) {
+    const localId = entity.entity_id.split('.')[1] ?? ''
+    if (TODAY_SENSOR.test(localId)) {
+      todayEntities.push(entity)
+      continue
+    }
     const match = entity.entity_id.match(GROUP_SUFFIX)
     if (!match) {
       bareEntities.push(entity)
@@ -182,14 +226,35 @@ export function useEnergy(entities: Map<string, HAEntity>): UseEnergyResult {
     lastMonthKWh: group.lastMonth,
     currentPeriodKWh: group.thisMonth ?? group.yesterday ?? 0,
     isBareCounter: false,
+    daily: [],
   }))
 
   const bareEntityIds = bareEntities.map((entity) => entity.entity_id).sort().join(',')
+  const todayEntityIds = todayEntities.map((entity) => entity.entity_id).sort().join(',')
 
   // Fetched results are cached by entity id and never cleared; the ids actually requested
   // (bareEntityIds) determine what's shown, so a shrinking bare-entity set still renders correctly.
   const [bareResults, setBareResults] = useState<Map<string, EnergyDevice>>(new Map())
+  const [todayResults, setTodayResults] = useState<Map<string, DailyUsage[]>>(new Map())
   const [loading, setLoading] = useState(bareEntityIds.length > 0)
+
+  useEffect(() => {
+    if (!todayEntityIds) return
+    let stopped = false
+    const targets = todayEntityIds.split(',').flatMap((id) => {
+      const entity = entities.get(id)
+      return entity ? [entity] : []
+    })
+    Promise.all(targets.map(async (entity) => [entity.entity_id, await loadDailyResetCounter(entity)] as const))
+      .then((results) => {
+        if (stopped) return
+        setTodayResults(new Map(results))
+      })
+      .catch(() => undefined)
+    return () => { stopped = true }
+    // Same reasoning as the bare-counter effect: refetch on set changes, not on every state tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayEntityIds])
 
   useEffect(() => {
     if (!bareEntityIds) return
@@ -233,10 +298,24 @@ export function useEnergy(entities: Map<string, HAEntity>): UseEnergyResult {
   const wholeHome = wholeHomeIndex >= 0 ? allDevices[wholeHomeIndex] : null
   const devices = wholeHomeIndex >= 0 ? allDevices.filter((_, index) => index !== wholeHomeIndex) : allDevices
 
+  // The whole-home meter already covers everything downstream of it, so mixing it with per-appliance
+  // series would double-count. Prefer it alone, then any other lifetime counter, and fall back to
+  // the daily-reset "energy today" sensors when neither has usable history.
+  const counterSeries = (wholeHome ? [wholeHome] : allDevices).flatMap((device) => device.daily)
+  const dailySources = counterSeries.length > 1 ? counterSeries : [...todayResults.values()].flat()
+  const dailyTotals = new Map<string, number>()
+  for (const entry of dailySources) {
+    dailyTotals.set(entry.day, (dailyTotals.get(entry.day) ?? 0) + entry.kWh)
+  }
+  const daily = [...dailyTotals.entries()]
+    .sort(([left], [right]) => (left < right ? -1 : 1))
+    .map(([day, kWh]) => ({ day, kWh }))
+
   return {
     devices,
     wholeHome,
-    loading: bareEntityIds ? loading : false,
+    daily,
+    loading: bareEntityIds ? loading : Boolean(todayEntityIds) && todayResults.size === 0,
     isEmpty: energyEntities.length === 0,
   }
 }

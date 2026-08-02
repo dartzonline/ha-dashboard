@@ -29,6 +29,7 @@ export interface HealthResponse {
 export interface DashboardConfigResponse {
   sections: DashboardSection[] | null
   nightModeIndoorLights: string[]
+  energyRatePerKwh: number
 }
 
 export interface NightModeResponse {

@@ -49,6 +49,12 @@ ROUTE_SLACK = 1.5       # corridor width multiplier
 ROUTE_PAD_KM = 120      # flat additional corridor padding
 MAX_HEADING_MISMATCH_DEG = 100.0  # beyond this, the plane isn't heading toward *either* endpoint
 FLIGHT_HISTORY_CACHE_TTL = 1800.0
+FLIGHT_HISTORY_ERROR_TTL = 300.0  # retry sooner after a throttled/failed lookup than after a real answer
+
+# OpenSky stores /flights/aircraft by UTC day and rejects any range that touches a third day
+# ("You can only query across 2 partitions (days)", HTTP 400). A 24h window touches at most two,
+# so it is the longest lookback that is always accepted.
+FLIGHT_HISTORY_WINDOW_S = 86_400
 
 # Expanding bbox search radii (km): starts tight so the radar/map stay at a legible
 # local scale, and only widens if nothing is found nearby.
@@ -167,6 +173,14 @@ COMPASS_POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 _opensky_token: dict[str, Any] = {"value": None, "expires_at": 0.0}
 _opensky_token_lock = asyncio.Lock()
+
+# Last failure seen per upstream, so /api/flights/status can explain an empty board instead of
+# leaving the silent degrade-to-None paths below looking like "no aircraft nearby".
+_last_upstream_error: dict[str, dict[str, Any]] = {}
+
+
+def _note_upstream(source: str, detail: str) -> None:
+    _last_upstream_error[source] = {"detail": detail, "at": time.time()}
 
 # key: (round(lat, 2), round(lon, 2), radius_km) -> (fetched_at, states)
 _states_cache: dict[tuple[float, float, float], tuple[float, list[Any]]] = {}
@@ -415,7 +429,8 @@ async def get_opensky_token(client: httpx.AsyncClient) -> str | None:
             )
             response.raise_for_status()
             payload = response.json()
-        except (httpx.HTTPError, ValueError):
+        except (httpx.HTTPError, ValueError) as error:
+            _note_upstream("opensky_token", str(error))
             return None
 
         token = payload.get("access_token")
@@ -455,7 +470,8 @@ async def fetch_states_in_radius(
         response.raise_for_status()
         payload = response.json()
         states = payload.get("states") or []
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, ValueError) as error:
+        _note_upstream("opensky_states", str(error))
         states = []
 
     _states_cache[key] = (now, states)
@@ -522,10 +538,13 @@ async def flight_history(client: httpx.AsyncClient, icao24: str | None, callsign
         return result
 
     now = int(time.time())
+    # A throttled or errored lookup is not an answer, so it gets the short TTL below rather than
+    # pinning this aircraft to "no route known" for the full half-hour.
+    failed = False
     try:
         response = await client.get(
             OPENSKY_FLIGHTS_URL,
-            params={"icao24": icao24.lower(), "begin": now - 129_600, "end": now},
+            params={"icao24": icao24.lower(), "begin": now - FLIGHT_HISTORY_WINDOW_S, "end": now},
             headers=headers,
             timeout=15,
         )
@@ -539,10 +558,15 @@ async def flight_history(client: httpx.AsyncClient, icao24: str | None, callsign
                 top_callsign = (top.get("callsign") or "").strip().upper()
                 target = (callsign or "").strip().upper()
                 result = (dep, arr) if top_callsign == target else (arr or dep, None)
-    except (httpx.HTTPError, ValueError):
-        pass
+        else:
+            failed = True
+            _note_upstream("opensky_history", f"HTTP {response.status_code}: {response.text[:120]}")
+    except (httpx.HTTPError, ValueError) as error:
+        failed = True
+        _note_upstream("opensky_history", str(error))
 
-    _flight_history_cache[icao24] = (time.time(), result)
+    expires_at = now - FLIGHT_HISTORY_CACHE_TTL + FLIGHT_HISTORY_ERROR_TTL if failed else now
+    _flight_history_cache[icao24] = (expires_at, result)
     return result
 
 
@@ -666,7 +690,12 @@ async def airlabs_schedule(client: httpx.AsyncClient, iata_number: str | None) -
         )
         response.raise_for_status()
         payload = response.json()
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, ValueError) as error:
+        _note_upstream("airlabs", str(error))
+        return {}
+
+    if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+        _note_upstream("airlabs", str(payload["error"].get("message") or payload["error"]))
         return {}
 
     data = payload.get("response")
@@ -974,3 +1003,54 @@ async def unpin_track() -> dict[str, Any]:
 @router.get("/track")
 async def get_track() -> dict[str, Any]:
     return await _build_track_context()
+
+
+# ---------------------------------------------------------------------------
+# /api/flights/status  (diagnostics)
+# ---------------------------------------------------------------------------
+
+@router.get("/status")
+async def flights_status() -> dict[str, Any]:
+    """Which upstreams are configured and reachable right now.
+
+    Every fetch above degrades to empty on failure, so a blank flight board looks identical
+    whether the sky is quiet, a key is missing, or OpenSky is rate-limiting. This endpoint is
+    the one place that says which it is.
+    """
+    has_opensky = bool(os.getenv("OPENSKY_CLIENT_ID") and os.getenv("OPENSKY_CLIENT_SECRET"))
+    has_airlabs = bool(os.getenv("AIRLABS_KEY"))
+
+    token_ok = False
+    states_ok = False
+    if has_opensky:
+        async with httpx.AsyncClient(timeout=15) as client:
+            token_ok = bool(await get_opensky_token(client))
+            if token_ok:
+                headers = await _opensky_headers(client)
+                try:
+                    probe = await client.get(
+                        OPENSKY_STATES_URL,
+                        params={"lamin": 30.0, "lomin": -98.0, "lamax": 31.0, "lomax": -97.0},
+                        headers=headers,
+                        timeout=15,
+                    )
+                    states_ok = probe.status_code == 200
+                    if not states_ok:
+                        _note_upstream("opensky_states", f"HTTP {probe.status_code}")
+                except httpx.HTTPError as error:
+                    _note_upstream("opensky_states", str(error))
+
+    return {
+        "opensky": {
+            "configured": has_opensky,
+            "tokenOk": token_ok,
+            "statesOk": states_ok,
+            # Route history needs the credentialed endpoint; anonymous access cannot reach it.
+            "historyAvailable": has_opensky,
+        },
+        "airlabs": {"configured": has_airlabs},
+        "lastErrors": {
+            source: {"detail": entry["detail"], "ageSeconds": round(time.time() - entry["at"])}
+            for source, entry in _last_upstream_error.items()
+        },
+    }

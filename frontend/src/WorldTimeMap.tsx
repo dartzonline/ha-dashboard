@@ -1,7 +1,8 @@
 import { Clock3, Globe2, MapPin, MoonStar, Navigation, SunMedium, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { CityWeatherPanel } from './CityWeatherPanel'
 import './WorldTimeMap.css'
-import { worldCities } from './worldCities'
+import { countryCode, worldCities } from './worldCities'
 
 interface WorldTimeMapProps {
   now: Date
@@ -11,6 +12,8 @@ interface Location {
   id: string
   city: string
   country: string
+  /** Short country tag shown on the clock card, e.g. DE. */
+  code: string
   timeZone: string
   lat: number
   lon: number
@@ -24,9 +27,13 @@ interface Reading {
   city: string
   country: string
   timeZone: string
+  code: string
   accent: string
   x: number
   y: number
+  /** Real-world coordinates, so a reading can also be looked up for weather. */
+  lat: number
+  lon: number
   /** Set when the tap landed far from any known city and the zone is a longitude estimate. */
   approximate?: boolean
   distanceKm?: number
@@ -40,10 +47,10 @@ const pinAccent = '#7fd4ff'
 // already used for the Night Mode moment) rather than arbitrary neon hex, so the map reads
 // as part of the same system instead of a generic map-pin widget.
 const locations: Location[] = [
-  { id: 'home', city: 'Home', country: 'Local time', timeZone: browserTimeZone, lat: 30.64, lon: -97.68, accent: 'var(--warn)', isHome: true },
-  { id: 'frankfurt', city: 'Frankfurt', country: 'Germany', timeZone: 'Europe/Berlin', lat: 50.11, lon: 8.68, accent: 'var(--accent)' },
-  { id: 'hyderabad', city: 'Hyderabad', country: 'India', timeZone: 'Asia/Kolkata', lat: 17.39, lon: 78.49, accent: 'var(--good)' },
-  { id: 'auckland', city: 'Auckland', country: 'New Zealand', timeZone: 'Pacific/Auckland', lat: -36.85, lon: 174.76, accent: '#a99eff' },
+  { id: 'home', city: 'Home', country: 'Texas, United States', code: 'US', timeZone: browserTimeZone, lat: 30.64, lon: -97.68, accent: 'var(--warn)', isHome: true },
+  { id: 'frankfurt', city: 'Frankfurt', country: 'Hesse, Germany', code: 'DE', timeZone: 'Europe/Berlin', lat: 50.11, lon: 8.68, accent: 'var(--accent)' },
+  { id: 'khammam', city: 'Khammam', country: 'Telangana, India', code: 'IN', timeZone: 'Asia/Kolkata', lat: 17.25, lon: 80.15, accent: 'var(--good)' },
+  { id: 'auckland', city: 'Auckland', country: 'New Zealand', code: 'NZ', timeZone: 'Pacific/Auckland', lat: -36.85, lon: 174.76, accent: '#a99eff' },
 ]
 
 /** The map is a plain equirectangular projection, so screen position and coordinates convert directly. */
@@ -101,10 +108,14 @@ function resolvePoint(x: number, y: number): Reading {
       id: 'pin',
       city: zone.label,
       country: `Near ${nearest[0]} · ${Math.round(nearestDistance).toLocaleString()} km`,
+      code: countryCode(nearest[1]),
       timeZone: zone.timeZone,
       accent: pinAccent,
       x,
       y,
+      // The tapped point itself, not the distant nearest city: weather there is what was asked for.
+      lat,
+      lon,
       approximate: true,
       distanceKm: nearestDistance,
     }
@@ -114,10 +125,13 @@ function resolvePoint(x: number, y: number): Reading {
     id: 'pin',
     city: nearest[0],
     country: nearest[1],
+    code: countryCode(nearest[1]),
     timeZone: nearest[2],
     accent: pinAccent,
     x,
     y,
+    lat: nearest[3],
+    lon: nearest[4],
     distanceKm: nearestDistance,
   }
 }
@@ -168,9 +182,13 @@ function daylightLabel(hour: number) {
   return 'Evening'
 }
 
+/** How long a tapped city or map point stays highlighted before the panel returns to home. */
+const SELECTION_HOLD_MS = 8_000
+
 export function WorldTimeMap({ now }: WorldTimeMapProps) {
   const [selectedId, setSelectedId] = useState('home')
   const [pin, setPin] = useState<Reading | null>(null)
+  const [weatherFor, setWeatherFor] = useState<Reading | null>(null)
   const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60
   const daylightCenter = ((24 - utcHour) / 24) * 100
   const zoneHours = useMemo(() => Array.from({ length: 24 }, (_, index) => (now.getUTCHours() - 12 + index + 24) % 24), [now])
@@ -179,10 +197,13 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
     id: location.id,
     city: location.city,
     country: location.country,
+    code: location.code,
     timeZone: location.timeZone,
     accent: location.accent,
     x: lonToX(location.lon),
     y: latToY(location.lat),
+    lat: location.lat,
+    lon: location.lon,
   }))
   const readings = pin ? [...presetReadings, pin] : presetReadings
   const selected = readings.find((reading) => reading.id === selectedId) ?? readings[0]
@@ -203,13 +224,24 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
     setSelectedId('home')
   }
 
+  // A wall panel should not sit on someone's stale tap: the highlight releases back to home on its
+  // own. Held open while the city weather sheet is up, since that reading is still being read.
+  useEffect(() => {
+    if (selectedId === 'home' || weatherFor) return
+    const timer = window.setTimeout(() => {
+      setSelectedId('home')
+      setPin(null)
+    }, SELECTION_HOLD_MS)
+    return () => window.clearTimeout(timer)
+  }, [selectedId, pin, weatherFor])
+
   return (
     <section className="world-view" aria-labelledby="world-heading">
       <header className="world-heading">
         <div>
           <span className="eyebrow"><Navigation size={13} /> Global overview</span>
           <h2 id="world-heading">World time</h2>
-          <p>Touch anywhere on the map — or a city marker — to read the time in that zone.</p>
+          <p>Touch anywhere on the map to read the time in that zone, or a clock below for its weather.</p>
         </div>
         <div className="world-selection" aria-live="polite">
           <span className="selection-icon" style={{ '--marker-color': selected.accent } as React.CSSProperties}>
@@ -299,6 +331,12 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
             </div>
           )}
 
+          {pin && (
+            <button className="map-clear-pin" onPointerUp={(event) => { event.stopPropagation(); clearPin() }} title="Remove the dropped pin">
+              <X size={14} aria-hidden="true" /> Clear pin
+            </button>
+          )}
+
           <a className="map-credit" href="https://visibleearth.nasa.gov/images/74218/december-blue-marble-next-generation" target="_blank" rel="noreferrer">NASA Blue Marble</a>
           <div className="map-legend" aria-hidden="true"><span><SunMedium size={14} /> Day</span><span><MoonStar size={14} /> Night</span></div>
         </div>
@@ -314,12 +352,16 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
               key={reading.id}
               className={`world-clock-card ${active ? 'is-selected' : ''} ${isPin ? 'is-pinned' : ''}`}
               style={{ '--marker-color': reading.accent } as React.CSSProperties}
-              onClick={() => setSelectedId(reading.id)}
+              onClick={() => { setSelectedId(reading.id); setWeatherFor(reading) }}
               role="listitem"
               aria-pressed={active}
+              title={`Show current weather in ${reading.city}`}
             >
               <span className="clock-card-icon">{isPin ? <Globe2 size={20} /> : hour >= 7 && hour < 19 ? <SunMedium size={20} /> : <MoonStar size={20} />}</span>
-              <span className="clock-card-place"><strong>{reading.city}</strong><small>{reading.country}</small></span>
+              <span className="clock-card-place">
+                <strong>{reading.city}<em className="clock-card-code">{reading.code}</em></strong>
+                <small>{reading.country}</small>
+              </span>
               <span className="clock-card-time"><strong>{formatTime(now, reading.timeZone)}</strong><small>{formatDay(now, reading.timeZone)}</small></span>
               <span className="clock-card-meta"><Clock3 size={13} /> {daylightLabel(hour)} · {getOffset(now, reading.timeZone)}</span>
               {isPin && <span className="clock-card-clear" role="button" tabIndex={0} aria-label="Clear the pinned point" onClick={(event) => { event.stopPropagation(); clearPin() }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.stopPropagation(); clearPin() } }}><X size={14} /></span>}
@@ -328,6 +370,19 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
         })}
       </div>
       </div>
+
+      {weatherFor && (
+        <CityWeatherPanel
+          key={`${weatherFor.lat},${weatherFor.lon}`}
+          city={weatherFor.city}
+          country={weatherFor.country}
+          timeZone={weatherFor.timeZone}
+          latitude={weatherFor.lat}
+          longitude={weatherFor.lon}
+          accent={weatherFor.accent}
+          onClose={() => setWeatherFor(null)}
+        />
+      )}
     </section>
   )
 }

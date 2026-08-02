@@ -320,7 +320,9 @@ main.is-fixed-view { overflow: hidden; }
 .sidebar .brand, .sidebar nav button, .sidebar .settings-button { justify-content: flex-start; }
 
 /* Six live cells now share the banner, including connected-device counts. */
-.utility-rail { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* Six equal columns cannot hold these labels at wall-panel type sizes, so the rail wraps to as many
+   rows as it needs and each cell keeps a width its title actually fits in. */
+.utility-rail { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .utility-copy small { animation: utility-swap .32s ease-out; }
 @keyframes utility-swap { from { opacity: 0; transform: translateY(-4px); } }
 
