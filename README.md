@@ -183,10 +183,14 @@ The Flights section is a from-scratch port of [FlyInk-Board](https://github.com/
 - **Radar & Nearby** — a custom SVG radar scope over real dark map tiles ([CARTO](https://carto.com/) dark, free/keyless), plotting nearby aircraft by bearing and distance, colour-coded by climb/cruise/descend/ground. A live list below shows callsign, airline (with logo, sourced from [Jxck-S/airline-logos](https://github.com/Jxck-S/airline-logos)), aircraft type, route, altitude, speed, and distance. **Tap any aircraft to track it.**
 - **Track a Flight** — type a flight number (IATA or ICAO) to pin it: a progress bar with live position, scheduled/actual times, a delay badge, and telemetry. The currently tracked flight also appears as a small badge in the header next to the clock.
 
+**Route accuracy.** adsbdb's callsign lookup (`fromCode`/`toCode`) is a generic, undated historical mapping for that flight number — airlines reuse numeric designators across different city pairs on different days, so it's a guess, not a live fact. `backend/app/flights.py` resolves the actual origin/destination by priority: **live climb/descent-based inference** (is this plane actually climbing out of / descending into a known nearby airport right now?) → **real OpenSky flight history** for that aircraft (needs `OPENSKY_CLIENT_ID`/`SECRET` below) → the adsbdb guess, but only if the plane's current position and heading are geometrically plausible for that route at all. If none of that lines up, it shows no route rather than a wrong one. The live-motion airport list (`AIRPORTS` in `flights.py`) is seeded for the Austin/Central Texas region — extend it for your own area.
+
 No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Two optional env vars in `backend/.env` improve it further:
 
 ```bash
 OPENSKY_CLIENT_ID=...      # free OpenSky account -> API client credentials; raises the anonymous rate limit
+                           # AND unlocks that aircraft's real flight history, the most reliable
+                           # route source available here (see "Route accuracy" below)
 OPENSKY_CLIENT_SECRET=...
 AIRLABS_KEY=...            # free tier from airlabs.co; adds scheduled times and delay status to tracked flights only
 ```

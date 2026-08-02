@@ -30,11 +30,25 @@ router = APIRouter(prefix="/api/flights")
 # ---------------------------------------------------------------------------
 
 OPENSKY_STATES_URL = "https://opensky-network.org/api/states/all"
+OPENSKY_FLIGHTS_URL = "https://opensky-network.org/api/flights/aircraft"
 OPENSKY_TOKEN_URL = (
     "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 )
 ADSBDB_BASE_URL = "https://api.adsbdb.com/v0"
 AIRLABS_FLIGHT_URL = "https://airlabs.co/api/v9/flight"
+
+# Route-corridor sanity check + live climb/descent-based airport inference, mirroring the
+# source project's thresholds exactly (see module docstring). These are what stop a stale or
+# wrong *scheduled* callsign route (candidate below) from being shown as fact.
+DEP_ALT_M = 7600        # climbing ceiling for departure detection (~25,000 ft)
+DEP_RADIUS_KM = 90
+ARR_ALT_M = 4500        # descending ceiling for arrival detection (~15,000 ft)
+ARR_RADIUS_KM = 70
+NEAR_ENDPOINT_KM = 60   # within this of an endpoint counts as "on corridor"
+ROUTE_SLACK = 1.5       # corridor width multiplier
+ROUTE_PAD_KM = 120      # flat additional corridor padding
+MAX_HEADING_MISMATCH_DEG = 100.0  # beyond this, the plane isn't heading toward *either* endpoint
+FLIGHT_HISTORY_CACHE_TTL = 1800.0
 
 # Expanding bbox search radii (km): starts tight so the radar/map stay at a legible
 # local scale, and only widens if nothing is found nearby.
@@ -80,6 +94,45 @@ IATA_TO_ICAO: dict[str, str] = {
 }
 ICAO_TO_IATA: dict[str, str] = {icao: iata for iata, icao in IATA_TO_ICAO.items()}
 KNOWN_ICAO_PREFIXES = set(IATA_TO_ICAO.values())
+
+# Nearby airports for live climb/descent-based departure/arrival inference: ICAO -> (IATA,
+# display name, lat, lon). Region-specific by design (same approach the source project uses) --
+# extend this for your own location; entries far from `home_lat`/`home_lon` just never match.
+AIRPORTS: dict[str, tuple[str, str, float, float]] = {
+    "KAUS": ("AUS", "Austin-Bergstrom Intl", 30.1945, -97.6699),
+    "KGTU": ("GTU", "Georgetown Municipal", 30.6786, -97.6794),
+    "KEDC": ("EDC", "Austin Executive", 30.3917, -97.5664),
+    "KGRK": ("GRK", "Killeen Regional", 31.0672, -97.8289),
+    "KSAT": ("SAT", "San Antonio Intl", 29.5337, -98.4698),
+    "KSSF": ("SSF", "Stinson Municipal", 29.3370, -98.4710),
+    "KACT": ("ACT", "Waco Regional", 31.6113, -97.2305),
+    "KCLL": ("CLL", "College Station", 30.5886, -96.3638),
+    "KTPL": ("TPL", "Temple", 31.1525, -97.4078),
+    "KBAZ": ("BAZ", "New Braunfels", 29.7045, -98.0421),
+    "KDFW": ("DFW", "Dallas-Fort Worth Intl", 32.8968, -97.0380),
+    "KDAL": ("DAL", "Dallas Love Field", 32.8471, -96.8518),
+    "KAFW": ("AFW", "Fort Worth Alliance", 32.9876, -97.3188),
+    "KHOU": ("HOU", "Houston Hobby", 29.6454, -95.2789),
+    "KIAH": ("IAH", "Houston Bush Intl", 29.9902, -95.3368),
+    "KBNA": ("BNA", "Nashville Intl", 36.1245, -86.6782),
+    "KATL": ("ATL", "Atlanta Intl", 33.6407, -84.4277),
+    "KORD": ("ORD", "Chicago O'Hare", 41.9742, -87.9073),
+    "KMDW": ("MDW", "Chicago Midway", 41.7868, -87.7522),
+    "KDEN": ("DEN", "Denver Intl", 39.8561, -104.6737),
+    "KLAX": ("LAX", "Los Angeles Intl", 33.9416, -118.4085),
+    "KPHX": ("PHX", "Phoenix Sky Harbor", 33.4342, -112.0116),
+    "KLAS": ("LAS", "Las Vegas Reid", 36.0840, -115.1537),
+    "KMCO": ("MCO", "Orlando Intl", 28.4312, -81.3081),
+    "KMIA": ("MIA", "Miami Intl", 25.7959, -80.2870),
+    "KJFK": ("JFK", "New York JFK", 40.6413, -73.7781),
+    "KEWR": ("EWR", "Newark Liberty", 40.6895, -74.1745),
+    "KSEA": ("SEA", "Seattle-Tacoma", 47.4502, -122.3088),
+    "KSFO": ("SFO", "San Francisco Intl", 37.6213, -122.3790),
+    "KMSP": ("MSP", "Minneapolis-St Paul", 44.8848, -93.2223),
+}
+
+# Small/GA fields, de-prioritised in live-motion matching once a commercial callsign is known.
+SMALL_FIELDS: set[str] = {"GTU", "EDC", "GRK", "SSF", "ACT", "CLL", "TPL", "BAZ", "AFW"}
 
 # Aircraft classifier: string-contains on `type`, case-insensitive, first group wins.
 CLASSIFIER_GROUPS: list[tuple[str, list[str]]] = [
@@ -162,6 +215,102 @@ def compass_label(bearing_deg: float) -> str:
     """8-point compass label (N/NE/E/SE/S/SW/W/NW) for a bearing in degrees."""
     idx = round(bearing_deg / 45.0) % 8
     return COMPASS_POINTS[idx]
+
+
+def angle_off(track_deg: float, bearing_deg: float) -> float:
+    """Smallest angle (0-180) between a heading and a bearing."""
+    return abs(((bearing_deg - track_deg + 180) % 360) - 180)
+
+
+def _to_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _airport_obj(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Normalizes an adsbdb origin/destination dict into {code, city, country, lat, lon}."""
+    if not raw:
+        return None
+    return {
+        "code": raw.get("iata_code") or raw.get("icao_code"),
+        "city": raw.get("municipality") or raw.get("name"),
+        "country": raw.get("country_name") or raw.get("country_iso_name"),
+        "lat": _to_float(raw.get("latitude")),
+        "lon": _to_float(raw.get("longitude")),
+    }
+
+
+def resolve_airport(icao: str | None) -> dict[str, Any] | None:
+    """ICAO code -> {code, city, lat, lon}, using the local AIRPORTS table when known."""
+    if not icao:
+        return None
+    icao = icao.upper()
+    if icao in AIRPORTS:
+        iata, name, lat, lon = AIRPORTS[icao]
+        return {"code": iata, "city": name, "lat": lat, "lon": lon}
+    code = icao[1:] if (len(icao) == 4 and icao[0] == "K") else icao
+    return {"code": code, "city": None, "lat": None, "lon": None}
+
+
+def on_corridor(plat: float | None, plon: float | None, origin: dict[str, Any] | None, dest: dict[str, Any] | None) -> bool:
+    """True if the aircraft's current position is plausibly on the route between origin and dest.
+
+    This is the sanity check a scheduled callsign route needs: airlines reuse flight numbers
+    across different city pairs on different days, so adsbdb's schedule lookup for a callsign
+    is a *guess*, not necessarily today's actual routing. Reject it outright if the plane isn't
+    anywhere near that corridor.
+    """
+    if not (origin and dest and origin.get("lat") is not None and dest.get("lat") is not None):
+        return True
+    if plat is None or plon is None:
+        return True
+    d_od = haversine(origin["lat"], origin["lon"], dest["lat"], dest["lon"])
+    d_o = haversine(plat, plon, origin["lat"], origin["lon"])
+    d_d = haversine(plat, plon, dest["lat"], dest["lon"])
+    if min(d_o, d_d) <= NEAR_ENDPOINT_KM:
+        return True
+    corridor_limit = d_od * (ROUTE_SLACK * 1.35) + (ROUTE_PAD_KM * 1.5)
+    return (d_o + d_d) <= corridor_limit
+
+
+def _field_match(
+    plat: float, plon: float, track: float | None, want_toward: bool, max_km: float, has_airline: bool
+) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    best_score: float | None = None
+    for iata, name, alat, alon in AIRPORTS.values():
+        dd = haversine(plat, plon, alat, alon)
+        if dd > max_km:
+            continue
+        if track is not None:
+            brg = bearing(plat, plon, alat, alon) if want_toward else bearing(alat, alon, plat, plon)
+            if angle_off(track, brg) > 75:
+                continue
+        score = dd + (120 if (has_airline and iata in SMALL_FIELDS) else 0)
+        if best_score is None or score < best_score:
+            best = {"code": iata, "city": name, "lat": alat, "lon": alon}
+            best_score = score
+    return best
+
+
+def departure_airport(
+    plat: float | None, plon: float | None, track: float | None, vrate: float | None, alt_m: float | None, has_airline: bool
+) -> dict[str, Any] | None:
+    """Live climb-based inference: is this aircraft plausibly climbing out of a nearby airport right now?"""
+    if plat is None or plon is None or vrate is None or vrate < 1.0 or alt_m is None or alt_m > DEP_ALT_M:
+        return None
+    return _field_match(plat, plon, track, False, DEP_RADIUS_KM, has_airline)
+
+
+def arrival_airport(
+    plat: float | None, plon: float | None, track: float | None, vrate: float | None, alt_m: float | None, has_airline: bool
+) -> dict[str, Any] | None:
+    """Live descent-based inference: is this aircraft plausibly descending into a nearby airport right now?"""
+    if plat is None or plon is None or vrate is None or vrate > -1.0 or alt_m is None or alt_m > ARR_ALT_M:
+        return None
+    return _field_match(plat, plon, track, True, ARR_RADIUS_KM, has_airline)
 
 
 def bbox_for(lat: float, lon: float, radius_km: float) -> tuple[float, float, float, float]:
@@ -350,6 +499,53 @@ async def resolve_icao24_by_callsign(client: httpx.AsyncClient, callsign: str | 
     return None
 
 
+_flight_history_cache: dict[str, tuple[float, tuple[str | None, str | None]]] = {}
+
+
+async def flight_history(client: httpx.AsyncClient, icao24: str | None, callsign: str | None) -> tuple[str | None, str | None]:
+    """Real (origin_icao, dest_icao) from this aircraft's actual recent OpenSky track history.
+
+    Requires OPENSKY_CLIENT_ID/SECRET (anonymous access can't reach this endpoint usefully) --
+    returns (None, None) when unavailable rather than erroring, same as every other optional
+    upstream here.
+    """
+    if not icao24:
+        return None, None
+    hit = _flight_history_cache.get(icao24)
+    if hit and time.time() - hit[0] < FLIGHT_HISTORY_CACHE_TTL:
+        return hit[1]
+
+    result: tuple[str | None, str | None] = (None, None)
+    headers = await _opensky_headers(client)
+    if not headers:
+        _flight_history_cache[icao24] = (time.time(), result)
+        return result
+
+    now = int(time.time())
+    try:
+        response = await client.get(
+            OPENSKY_FLIGHTS_URL,
+            params={"icao24": icao24.lower(), "begin": now - 129_600, "end": now},
+            headers=headers,
+            timeout=15,
+        )
+        if response.status_code == 200:
+            flights = response.json()
+            if isinstance(flights, list) and flights:
+                flights.sort(key=lambda f: f.get("lastSeen", 0), reverse=True)
+                top = flights[0]
+                dep = top.get("estDepartureAirport")
+                arr = top.get("estArrivalAirport")
+                top_callsign = (top.get("callsign") or "").strip().upper()
+                target = (callsign or "").strip().upper()
+                result = (dep, arr) if top_callsign == target else (arr or dep, None)
+    except (httpx.HTTPError, ValueError):
+        pass
+
+    _flight_history_cache[icao24] = (time.time(), result)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # adsbdb
 # ---------------------------------------------------------------------------
@@ -392,6 +588,64 @@ async def adsbdb_aircraft_lookup(client: httpx.AsyncClient, icao24: str) -> dict
 
     _aircraft_cache[key] = (now, result)
     return result
+
+
+async def resolve_route(
+    client: httpx.AsyncClient,
+    route: dict[str, Any] | None,
+    callsign: str | None,
+    icao24: str | None,
+    lat: float | None,
+    lon: float | None,
+    track: float | None,
+    vertical_rate: float | None,
+    altitude_m: float | None,
+    has_airline: bool,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Resolve (origin, dest) using the same priority the source project uses:
+    live motion inference > real OpenSky flight history > corridor-checked adsbdb schedule.
+
+    `route` is the already-fetched adsbdb callsign lookup (or None) -- callers already fetch it
+    for airline name/code, so it's passed in rather than re-fetched here.
+    """
+    db_origin = db_dest = None
+    if route:
+        origin_raw = _airport_obj(route.get("origin"))
+        dest_raw = _airport_obj(route.get("destination"))
+        if origin_raw and dest_raw and on_corridor(lat, lon, origin_raw, dest_raw):
+            if track is not None and lat is not None and lon is not None and origin_raw.get("lat") is not None and dest_raw.get("lat") is not None:
+                # Orient by heading: destination is whichever endpoint we're actually flying toward.
+                angle_to_origin = angle_off(track, bearing(lat, lon, origin_raw["lat"], origin_raw["lon"]))
+                angle_to_dest = angle_off(track, bearing(lat, lon, dest_raw["lat"], dest_raw["lon"]))
+                # adsbdb's callsign lookup has no date/freshness field -- it's a generic historical
+                # mapping for that flight number, which airlines reuse across different city pairs.
+                # A loose distance-based corridor check alone lets a wrong-but-nearby-hub route
+                # through (e.g. a flight that just left a hub reads as "near" it regardless of
+                # which of that hub's dozens of destinations is correct today). If the plane isn't
+                # actually heading toward *either* claimed endpoint, distrust the pairing entirely
+                # rather than force a best-guess label on it.
+                if min(angle_to_origin, angle_to_dest) > MAX_HEADING_MISMATCH_DEG:
+                    db_origin = db_dest = None
+                else:
+                    db_origin, db_dest = (dest_raw, origin_raw) if angle_to_origin < angle_to_dest else (origin_raw, dest_raw)
+            else:
+                db_origin, db_dest = origin_raw, dest_raw
+
+    live_dep = departure_airport(lat, lon, track, vertical_rate, altitude_m, has_airline)
+    live_arr = arrival_airport(lat, lon, track, vertical_rate, altitude_m, has_airline)
+
+    hist_dep_icao, hist_arr_icao = await flight_history(client, icao24, callsign)
+    hist_origin = resolve_airport(hist_dep_icao)
+    hist_dest = resolve_airport(hist_arr_icao)
+
+    origin = live_dep or hist_origin or db_origin
+    dest = live_arr or hist_dest or db_dest
+
+    # Never show the same airport as both ends.
+    if origin and dest and origin.get("code") == dest.get("code"):
+        dest = db_dest if (db_dest and db_dest.get("code") != origin.get("code")) else None
+
+    return origin, dest
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +714,7 @@ async def build_aircraft_entry(
 
     airline_code = derive_airline_code(callsign)
     airline_name = AIRLINES.get(airline_code) if airline_code else None
+    has_airline = bool(airline_code)  # basic guess, computed before the route lookup may refine it
 
     from_code = from_city = from_country = None
     to_code = to_city = to_country = None
@@ -471,14 +726,15 @@ async def build_aircraft_entry(
             airline_name = route_airline.get("name")
         if route_airline.get("icao"):
             airline_code = route_airline.get("icao")
-        origin = route.get("origin") or {}
-        dest = route.get("destination") or {}
-        from_code = origin.get("iata_code")
-        from_city = origin.get("municipality")
-        from_country = origin.get("country_name")
-        to_code = dest.get("iata_code")
-        to_city = dest.get("municipality")
-        to_country = dest.get("country_name")
+
+    alt_for_motion = geo_alt if geo_alt is not None else baro_alt
+    origin, dest = await resolve_route(
+        client, route, callsign, icao24, lat, lon, true_track, vertical_rate, alt_for_motion, has_airline,
+    )
+    if origin:
+        from_code, from_city, from_country = origin.get("code"), origin.get("city"), origin.get("country")
+    if dest:
+        to_code, to_city, to_country = dest.get("code"), dest.get("city"), dest.get("country")
 
     aircraft_type: str | None = None
     reg: str | None = None
@@ -624,7 +880,18 @@ async def _build_track_context() -> dict[str, Any]:
 
         flight = await build_aircraft_entry(client, state_row) if state_row else None
 
+        p_lat = state_row[6] if state_row else None
+        p_lon = state_row[5] if state_row else None
+        p_track = state_row[10] if state_row else None
+        p_vrate = state_row[11] if state_row else None
+        p_alt = (state_row[13] if state_row[13] is not None else state_row[7]) if state_row else None
+        has_airline = bool(derive_airline_code(icao_callsign))
+
         route = await adsbdb_route_lookup(client, icao_callsign) if icao_callsign else None
+        origin, dest = await resolve_route(
+            client, route, icao_callsign, icao24, p_lat, p_lon, p_track, p_vrate, p_alt, has_airline,
+        )
+
         route_out: dict[str, Any] | None = None
         progress = 0.0
         eta_line: str | None = None
@@ -636,35 +903,31 @@ async def _build_track_context() -> dict[str, Any]:
         if schedule.get("status") in ("landed", "arrived"):
             mode = "landed"
 
-        if route:
-            origin = route.get("origin") or {}
-            dest = route.get("destination") or {}
+        if origin and dest:
             route_out = {
-                "fromCode": origin.get("iata_code"),
-                "fromCity": origin.get("municipality"),
-                "toCode": dest.get("iata_code"),
-                "toCity": dest.get("municipality"),
+                "fromCode": origin.get("code"),
+                "fromCity": origin.get("city"),
+                "toCode": dest.get("code"),
+                "toCity": dest.get("city"),
             }
 
-            o_lat, o_lon = origin.get("latitude"), origin.get("longitude")
-            d_lat, d_lon = dest.get("latitude"), dest.get("longitude")
-            if state_row and None not in (o_lat, o_lon, d_lat, d_lon):
-                p_lat, p_lon = state_row[6], state_row[5]
-                if p_lat is not None and p_lon is not None:
-                    route_km = haversine(o_lat, o_lon, d_lat, d_lon)
-                    d_from = haversine(o_lat, o_lon, p_lat, p_lon)
-                    d_to = haversine(p_lat, p_lon, d_lat, d_lon)
-                    stale = (d_from + d_to) > route_km * 1.6 + 60
-                    if not stale and (d_from + d_to) > 0:
-                        frac = d_from / (d_from + d_to)
-                        progress = max(0.0, min(1.0, frac))
+            o_lat, o_lon = origin.get("lat"), origin.get("lon")
+            d_lat, d_lon = dest.get("lat"), dest.get("lon")
+            if None not in (o_lat, o_lon, d_lat, d_lon) and p_lat is not None and p_lon is not None:
+                route_km = haversine(o_lat, o_lon, d_lat, d_lon)
+                d_from = haversine(o_lat, o_lon, p_lat, p_lon)
+                d_to = haversine(p_lat, p_lon, d_lat, d_lon)
+                stale = (d_from + d_to) > route_km * 1.6 + 60
+                if not stale and (d_from + d_to) > 0:
+                    frac = d_from / (d_from + d_to)
+                    progress = max(0.0, min(1.0, frac))
 
-                        velocity = state_row[9]
-                        speed_kt = _meters_per_sec_to_knots(velocity)
-                        if mode == "track" and speed_kt is not None and speed_kt > 30:
-                            speed_kmh = velocity * 3.6
-                            if speed_kmh > 0:
-                                eta_line = _format_eta(d_to / speed_kmh)
+                    velocity = state_row[9]
+                    speed_kt = _meters_per_sec_to_knots(velocity)
+                    if mode == "track" and speed_kt is not None and speed_kt > 30:
+                        speed_kmh = velocity * 3.6
+                        if speed_kmh > 0:
+                            eta_line = _format_eta(d_to / speed_kmh)
 
         if mode == "landed":
             if landed_at is None:
