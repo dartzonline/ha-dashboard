@@ -30,27 +30,31 @@ class EventBridge:
         await self._connected.wait()
 
     async def call_service(self, domain: str, service: str, data: dict[str, Any]) -> Any:
+        response = await self.send_command(
+            "call_service", domain=domain, service=service, service_data=data,
+        )
+        return response if isinstance(response, list) else []
+
+    async def send_command(self, command_type: str, **kwargs: Any) -> Any:
+        """Generic request/response over the same persistent WebSocket `call_service` already
+        uses: send `{id, type, **kwargs}`, await the matching `result` message. Anything Home
+        Assistant's WebSocket API supports (registry listings, template renders, etc.) goes
+        through this one path rather than each caller reimplementing the id/future bookkeeping.
+        """
         await asyncio.wait_for(self._connected.wait(), timeout=5)
         async with self._send_lock:
             message_id = self._next_id
             self._next_id += 1
             future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
             self._pending[message_id] = future
-            await self._socket.send(json.dumps({
-                "id": message_id,
-                "type": "call_service",
-                "domain": domain,
-                "service": service,
-                "service_data": data,
-            }))
+            await self._socket.send(json.dumps({"id": message_id, "type": command_type, **kwargs}))
         try:
             result = await asyncio.wait_for(future, timeout=15)
         finally:
             self._pending.pop(message_id, None)
         if not result.get("success"):
-            raise RuntimeError(result.get("error", {}).get("message", "Home Assistant service call failed"))
-        response = result.get("result")
-        return response if isinstance(response, list) else []
+            raise RuntimeError(result.get("error", {}).get("message", f"Home Assistant command '{command_type}' failed"))
+        return result.get("result")
 
     def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=100)
