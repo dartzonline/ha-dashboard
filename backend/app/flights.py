@@ -903,14 +903,17 @@ async def _build_track_context() -> dict[str, Any]:
         if schedule.get("status") in ("landed", "arrived"):
             mode = "landed"
 
-        if origin and dest:
+        if origin or dest:
+            # Show whatever side is known -- e.g. destination alone from live descent inference,
+            # with the origin still unresolved -- rather than nothing until both sides agree.
             route_out = {
-                "fromCode": origin.get("code"),
-                "fromCity": origin.get("city"),
-                "toCode": dest.get("code"),
-                "toCity": dest.get("city"),
+                "fromCode": origin.get("code") if origin else None,
+                "fromCity": origin.get("city") if origin else None,
+                "toCode": dest.get("code") if dest else None,
+                "toCity": dest.get("city") if dest else None,
             }
 
+        if origin and dest:
             o_lat, o_lon = origin.get("lat"), origin.get("lon")
             d_lat, d_lon = dest.get("lat"), dest.get("lon")
             if None not in (o_lat, o_lon, d_lat, d_lon) and p_lat is not None and p_lon is not None:
