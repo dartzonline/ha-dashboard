@@ -71,30 +71,6 @@
   pointer-events: none;
 }
 
-/* Range rings must stay circular in a wide panel, so they take their size from the height and let
-   aspect-ratio derive the width — percentages on both axes would draw ellipses. */
-.radar-ring {
-  position: absolute;
-  width: auto;
-  aspect-ratio: 1;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
-  border-radius: 50%;
-}
-
-.ring-outer {
-  height: 88%;
-}
-
-.ring-mid {
-  height: 58%;
-  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
-}
-
-.ring-inner {
-  height: 28%;
-  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
 .radar-home-dot {
   position: absolute;
   width: 8px;
