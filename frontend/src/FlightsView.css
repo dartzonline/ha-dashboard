@@ -1,5 +1,33 @@
 /* Flights fills the available viewport height and never scrolls: radar + list, or the tracker card. */
-.flights-view { height: 100%; min-height: 0; padding-top: 8px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; overflow: hidden; }
+.flights-view { position: relative; height: 100%; min-height: 0; padding-top: 8px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; overflow: hidden; }
+
+/* Floating quick-add: a FAB on the Radar page that expands in place into a flight-number field,
+   so tracking a flight doesn't require switching to the Track page first. */
+.flights-quick-add { position: absolute; right: 14px; bottom: 46px; z-index: 5; }
+.quick-add-fab {
+  width: 46px; height: 46px; padding: 0; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
+  border-radius: 50%; color: var(--accent-ink); background: var(--accent);
+  display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .4), 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.quick-add-fab:hover, .quick-add-fab:active { transform: scale(1.06); }
+.quick-add-form {
+  display: flex; align-items: center; gap: 6px; height: 46px; width: min(78vw, 300px);
+  padding: 0 8px 0 14px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 26px;
+  color: var(--muted); background: color-mix(in srgb, var(--surface) 92%, var(--canvas));
+  backdrop-filter: blur(10px); box-shadow: 0 10px 26px rgba(0, 0, 0, .42);
+  animation: quick-add-expand .18s ease-out;
+}
+.quick-add-form input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--text); font: 750 .82rem var(--mono); letter-spacing: .03em; }
+.quick-add-form input::placeholder { color: var(--muted); font-weight: 500; }
+.quick-add-form input:focus { outline: none; }
+.quick-add-confirm, .quick-add-close { flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+.quick-add-confirm { color: var(--accent-ink); background: var(--accent); }
+.quick-add-confirm:disabled { opacity: .4; cursor: default; }
+.quick-add-close { color: var(--muted); background: var(--surface-raised); }
+@keyframes quick-add-expand { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+@media (max-width: 1040px) { .flights-quick-add { right: 10px; bottom: 44px; } }
 
 .flights-panel-shell {
   min-height: 0;
