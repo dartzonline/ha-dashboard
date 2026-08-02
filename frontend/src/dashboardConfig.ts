@@ -43,6 +43,11 @@ export const dashboardSections: DashboardSection[] = [
     tiles: [],
   },
   {
+    id: 'volvo',
+    label: 'Volvo',
+    tiles: [],
+  },
+  {
     id: 'weather',
     label: 'Weather',
     tiles: [
@@ -98,14 +103,14 @@ export const dashboardSections: DashboardSection[] = [
     label: 'Appliances',
     tiles: [
       { entityId: 'sensor.washer_current_status', label: 'Washer', kind: 'sensor', icon: 'washing-machine' },
-      { entityId: 'sensor.dryer_current_status', label: 'Dryer', kind: 'sensor', icon: 'circle-dot' },
+      { entityId: 'sensor.dryer_current_status', label: 'Dryer', kind: 'sensor', icon: 'rotate-cw' },
       { entityId: 'binary_sensor.refrigerator_door', label: 'Refrigerator', kind: 'sensor', icon: 'refrigerator' },
       { entityId: 'media_player.lg_webos_tv_oled65c3pua_2', label: 'Living room TV', kind: 'toggle', icon: 'tv' },
       { entityId: 'media_player.media_projector', label: 'Projector', kind: 'toggle', icon: 'projector' },
       { entityId: 'switch.my_rest_toddler_lock', label: 'Toddler lock', kind: 'toggle', icon: 'shield' },
       { entityId: 'fan.dyson_3wf_us_ugf5956a', label: 'Dyson fan', kind: 'toggle', icon: 'wind' },
       { entityId: 'switch.washer_power', label: 'Washer power', kind: 'toggle', icon: 'washing-machine' },
-      { entityId: 'switch.dryer_power', label: 'Dryer power', kind: 'toggle', icon: 'circle-dot' },
+      { entityId: 'switch.dryer_power', label: 'Dryer power', kind: 'toggle', icon: 'rotate-cw' },
     ],
   },
   {

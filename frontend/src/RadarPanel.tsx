@@ -23,8 +23,15 @@ const LAST_FRAME_HOLD_MS = 1_400
 const TILE_SIZE = 256
 // z9 puts roughly a 120 km box around the house on a wall panel — close enough to recognise your own
 // side of town, wide enough to see a storm arriving. z7 showed three states and read as a map of
-// somewhere else.
-const ZOOM = 9
+// somewhere else. This is the basemap's zoom; the precipitation layer below has its own, lower zoom.
+const BASEMAP_ZOOM = 9
+// RainViewer's radar tile server only actually rasterizes zoom levels up to 7 — anything past that
+// (we were requesting z9, matching the basemap) 200s with a real PNG, but the PNG is a placeholder
+// that reads "Zoom Level Not Supported", so the radar layer silently never showed precipitation.
+// Fetched at its own zoom and scaled up in CSS to line up with the basemap's finer grid below.
+const PRECIP_ZOOM = 7
+const PRECIP_SOURCE_SIZE = 512
+const PRECIP_SCALE = 2 ** (BASEMAP_ZOOM - PRECIP_ZOOM)
 const BASEMAP_URL = 'https://basemaps.cartocdn.com/dark_all'
 /** Below this chance across the next day, "radar" has nothing to say and the panel pivots. */
 const QUIET_RAIN_CHANCE = 20
@@ -67,18 +74,18 @@ function fetchRadarFrames(): Promise<RadarPayload | null> {
 }
 
 /**
- * Web Mercator world-pixel coordinates at ZOOM. Working in pixels rather than whole tiles is what
- * lets the home location sit exactly at the centre of the panel: the tile grid is then offset by
- * the sub-tile remainder instead of snapping to a tile boundary.
+ * Web Mercator world-pixel coordinates at a given zoom. Working in pixels rather than whole tiles
+ * is what lets the home location sit exactly at the centre of the panel: the tile grid is then
+ * offset by the sub-tile remainder instead of snapping to a tile boundary.
  */
-function lonToWorldX(lon: number) {
-  return ((lon + 180) / 360) * TILE_SIZE * 2 ** ZOOM
+function lonToWorldX(lon: number, zoom: number) {
+  return ((lon + 180) / 360) * TILE_SIZE * 2 ** zoom
 }
 
-function latToWorldY(lat: number) {
+function latToWorldY(lat: number, zoom: number) {
   const clamped = Math.max(-85.05, Math.min(85.05, lat))
   const latRad = (clamped * Math.PI) / 180
-  return ((1 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2) * TILE_SIZE * 2 ** ZOOM
+  return ((1 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2) * TILE_SIZE * 2 ** zoom
 }
 
 function formatFrameClock(unixSeconds: number) {
@@ -114,18 +121,24 @@ interface TilePlacement {
   top: number
 }
 
-/** Every tile needed to cover a width x height viewport centred on the home coordinate. */
-function planTiles(width: number, height: number, latitude: number, longitude: number): TilePlacement[] {
-  const worldTiles = 2 ** ZOOM
-  const centerX = lonToWorldX(longitude)
-  const centerY = latToWorldY(latitude)
+/**
+ * Every tile needed to cover a width x height viewport centred on the home coordinate, at the
+ * given zoom. `scale` blows each tile up to line up with a different, finer-zoomed layer sharing
+ * the same viewport — a precip tile fetched at `BASEMAP_ZOOM - PRECIP_ZOOM` fewer zoom levels
+ * covers `scale`x the area of one basemap tile, so it is placed and sized `scale`x larger.
+ */
+function planTiles(width: number, height: number, latitude: number, longitude: number, zoom: number, scale = 1): TilePlacement[] {
+  const worldTiles = 2 ** zoom
+  const cssTile = TILE_SIZE * scale
+  const centerX = lonToWorldX(longitude, zoom) * scale
+  const centerY = latToWorldY(latitude, zoom) * scale
   const originX = centerX - width / 2
   const originY = centerY - height / 2
 
-  const firstCol = Math.floor(originX / TILE_SIZE)
-  const lastCol = Math.floor((originX + width) / TILE_SIZE)
-  const firstRow = Math.floor(originY / TILE_SIZE)
-  const lastRow = Math.floor((originY + height) / TILE_SIZE)
+  const firstCol = Math.floor(originX / cssTile)
+  const lastCol = Math.floor((originX + width) / cssTile)
+  const firstRow = Math.floor(originY / cssTile)
+  const lastRow = Math.floor((originY + height) / cssTile)
 
   const placements: TilePlacement[] = []
   for (let row = firstRow; row <= lastRow; row++) {
@@ -138,8 +151,8 @@ function planTiles(width: number, height: number, latitude: number, longitude: n
         key: `${row}-${col}`,
         x: wrappedCol,
         y: row,
-        left: col * TILE_SIZE - originX,
-        top: row * TILE_SIZE - originY,
+        left: col * cssTile - originX,
+        top: row * cssTile - originY,
       })
     }
   }
@@ -197,8 +210,12 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
 
   const currentFrame = frames[displayIndex] ?? null
   const hasLocation = latitude !== null && longitude !== null
-  const tiles = hasLocation && size.width > 0 && size.height > 0
-    ? planTiles(size.width, size.height, latitude, longitude)
+  const hasViewport = hasLocation && size.width > 0 && size.height > 0
+  const tiles = hasViewport
+    ? planTiles(size.width, size.height, latitude, longitude, BASEMAP_ZOOM)
+    : []
+  const precipTiles = hasViewport
+    ? planTiles(size.width, size.height, latitude, longitude, PRECIP_ZOOM, PRECIP_SCALE)
     : []
 
   const statusLabel = !hasLocation
@@ -235,7 +252,9 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
             {tiles.map((tile) => (
               <img
                 key={`base-${tile.key}`}
-                src={`${BASEMAP_URL}/${ZOOM}/${tile.x}/${tile.y}.png`}
+                // @2x pulls a 512px source into a 256 CSS-px tile, so city-name labels render at
+                // retina sharpness instead of the visible upscaling blur a 1x tile shows at this size.
+                src={`${BASEMAP_URL}/${BASEMAP_ZOOM}/${tile.x}/${tile.y}@2x.png`}
                 alt=""
                 style={{ left: tile.left, top: tile.top }}
                 loading="eager"
@@ -243,14 +262,14 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
             ))}
           </div>
         )}
-        {tiles.length > 0 && currentFrame && payload && (
+        {precipTiles.length > 0 && currentFrame && payload && (
           <div className="radar-layer radar-precip" aria-hidden="true">
-            {tiles.map((tile) => (
+            {precipTiles.map((tile) => (
               <img
                 key={`radar-${tile.key}-${currentFrame.time}`}
-                src={`${payload.host}${currentFrame.path}/${TILE_SIZE}/${ZOOM}/${tile.x}/${tile.y}/4/1_1.png`}
+                src={`${payload.host}${currentFrame.path}/${PRECIP_SOURCE_SIZE}/${PRECIP_ZOOM}/${tile.x}/${tile.y}/4/1_1.png`}
                 alt=""
-                style={{ left: tile.left, top: tile.top }}
+                style={{ left: tile.left, top: tile.top, width: TILE_SIZE * PRECIP_SCALE, height: TILE_SIZE * PRECIP_SCALE }}
                 loading="eager"
               />
             ))}

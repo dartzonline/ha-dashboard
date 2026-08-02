@@ -2,6 +2,8 @@
 
 A React and FastAPI dashboard for Home Assistant. Home Assistant remains the device, automation, and recorder engine; this project provides a fast, information-rich wall-dashboard interface with live controls, alerts, world clocks, visual analytics, a confirmed Night Mode routine, a nearby/on-demand flight tracker, energy usage, and sundown auto-dim for kiosk use. The interface is tuned for wall tablets such as Amazon Fire tablets: navigation stays hidden until you need it, text scales up for arm's-length reading, and every control is touch-first (swipe between sections, no hover-only affordances).
 
+See [`CHANGELOG.md`](CHANGELOG.md) for release notes — Home Assistant's Supervisor also surfaces it as the add-on's "What's new" text on every version bump.
+
 ## Quick run modes
 
 ### Run on Home Assistant OS (local add-on)

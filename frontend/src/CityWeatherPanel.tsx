@@ -103,8 +103,12 @@ export function CityWeatherPanel({ city, country, timeZone, latitude, longitude,
   }, [latitude, longitude])
 
   // The upstream forecast starts at local midnight, so the slot matching this city's current hour
-  // is where "next few hours" begins.
-  const localHour = Number(new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
+  // is where "next few hours" begins. Some engines (notably older WebViews on Fire tablets) format
+  // hourCycle 'h23' midnight as "24" instead of "0", which pushed the slice past the first day's
+  // rows for zones like Asia/Kolkata that hit midnight while other cities are mid-afternoon — the
+  // panel then rendered no hourly cards at all. Clamping to 0-23 keeps the index valid everywhere.
+  const rawHour = Number(new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', hourCycle: 'h23' }).format(new Date()))
+  const localHour = Number.isFinite(rawHour) ? ((rawHour % 24) + 24) % 24 : 0
   const hours = (data?.hourly ?? []).slice(localHour, localHour + 6)
   const days = (data?.daily ?? []).slice(0, 4)
   const today = data?.daily?.[0] ?? null

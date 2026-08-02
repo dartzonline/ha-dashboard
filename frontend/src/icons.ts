@@ -21,6 +21,7 @@ export const sectionIcons: Record<string, LucideIcon> = {
   world: Globe2,
   flights: Plane,
   energy: Zap,
+  volvo: Car,
   weather: CloudSun,
   climate: Thermometer,
   security: Shield,
