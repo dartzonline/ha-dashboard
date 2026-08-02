@@ -3,6 +3,16 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.0.1 - 2026-08-02
+
+Diagnostic-only release for the Flights section reporting `opensky.configured: false` even with
+`opensky_client_id`/`opensky_client_secret` visibly filled in on the Configuration tab and saved.
+`backend/addon_entrypoint.py` now prints, on every startup (visible in the add-on's **Log** tab):
+which keys `/data/options.json` actually contains, which env vars it derived and applied, and
+which configured options came through empty/falsy despite being present. This doesn't fix
+anything by itself — it's what's needed to see *why* the values aren't reaching the container
+before changing the option-loading logic further.
+
 ## 1.0.0 - 2026-08-02
 
 First tracked release notes; the add-on has shipped for a while but this is the first version to
