@@ -60,5 +60,8 @@
 .presence-chip.is-home .presence-copy small { color: var(--good); }
 
 @media (min-width: 700px) {
-  .presence-chip { min-height: 66px; }
+  .presence-chip { min-height: 52px; padding: 6px 14px 6px 8px; }
+  .presence-avatar { flex-basis: 34px; width: 34px; height: 34px; font-size: .7rem; }
+  .presence-copy strong { font-size: .8rem; }
+  .presence-copy small { font-size: .72rem; }
 }
