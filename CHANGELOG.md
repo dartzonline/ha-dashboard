@@ -3,6 +3,28 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.0.2 - 2026-08-02
+
+**The actual Flights fix.** The 1.0.1 diagnostic logging paid off immediately:
+
+```
+[addon_entrypoint] failed to read/parse /data/options.json: [Errno 13] Permission denied
+```
+
+The container has run as a non-root user (`USER 10001:10001` in the Dockerfile) since the
+OpenSky/AirLabs Configuration-tab fields were added. Supervisor writes `/data/options.json`
+world-unreadable (root-only) because it can hold secrets — this add-on's own client secret and
+API key among them — so that non-root user could never read it. `addon_entrypoint.py` failed
+silently (by design, for native/Compose runs where the file legitimately doesn't exist) and the
+add-on has been running with those options unset since they were introduced, regardless of what
+was ever filled in and saved on the Configuration tab. It only presented as "Flights broke" now
+because OpenSky's free anonymous tier — which is what every request was actually landing on —
+finally hit its rate limit.
+
+Removed the non-root `USER` from the Dockerfile; Home Assistant add-ons default to running as
+root precisely because Supervisor's mounts assume it. Update to this version, restart, and
+`opensky.configured` should read `true`.
+
 ## 1.0.1 - 2026-08-02
 
 Diagnostic-only release for the Flights section reporting `opensky.configured: false` even with
