@@ -113,9 +113,9 @@ span.flight-logo {
   justify-items: end;
 }
 
-.flight-eta strong { font-size: .9rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.flight-eta strong { font-size: .78rem; font-weight: 750; font-variant-numeric: tabular-nums; }
 
-.flight-delay { padding: 1px 7px; border-radius: 999px; font-size: .6rem; font-weight: 700; }
+.flight-delay { padding: 1px 7px; border-radius: 999px; font-size: .62rem; font-weight: 700; white-space: nowrap; }
 .flight-delay.tone-good { color: var(--good); background: var(--good-soft); }
 .flight-delay.tone-warn { color: var(--warn); background: var(--warn-soft); }
 .flight-delay.tone-danger { color: var(--danger); background: var(--danger-soft); }
