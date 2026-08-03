@@ -3,6 +3,11 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.2.3 - 2026-08-03
+
+Top-bar flight banner: aircraft silhouette is now larger and brighter (dominant), and the aircraft
+type string is no longer shown — the silhouette itself communicates the type visually.
+
 ## 1.2.2 - 2026-08-03
 
 Layout cleanup across the wall display and a new Track page. The stray border around the screen is
