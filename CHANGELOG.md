@@ -3,6 +3,19 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.2.0 - 2026-08-02
+
+Header rebuilt around the flight. The banner is now the centrepiece: a large horizontal aircraft
+silhouette, airline logo, callsign, type and distance, with origin/destination kept small. Captions
+were replaced by symbols — a locate mark for whatever is overhead, a crosshair for a pinned flight —
+so the words go to the flight rather than to labelling the mode. A pinned flight also shows how far
+along the route it is, its ETA, and a delay chip that reads green on time, amber for a slip, red for
+a real delay (an unknown delay stays neutral rather than claiming good news).
+
+To free that space, the activity log and rotation timer moved to the far left beside the page title
+and shrank, and the connection indicator is now a single icon with a corner count instead of a
+word.
+
 ## 1.1.1 - 2026-08-02
 
 Fixes the header aircraft badge never appearing. The shared home-coordinates helper picked the

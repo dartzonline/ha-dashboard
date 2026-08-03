@@ -60,7 +60,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await close_http_client()
 
 
-app = FastAPI(title="Home Panel", version="1.1.1", lifespan=lifespan)
+app = FastAPI(title="Home Panel", version="1.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
