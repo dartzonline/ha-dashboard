@@ -24,12 +24,26 @@ export function worstState(services: ServiceStatus[]): ServiceState {
   )
 }
 
-/** Home lat/lon as Home Assistant publishes it, shared with the header aircraft badge. */
+/**
+ * Home lat/lon as Home Assistant publishes it, shared with the header aircraft badge.
+ *
+ * Each candidate is tested for usable coordinates rather than picking the first entity that
+ * merely exists: `weather.forecast_home` is present on this install but publishes no latitude,
+ * so choosing it and stopping there yielded "no home location" even though `zone.home` had them
+ * all along -- which silently hid the aircraft badge entirely.
+ */
 export function homeCoordinates(entities: Map<string, HAEntity>) {
-  const source = entities.get('weather.forecast_home') ?? entities.get('zone.home')
-  const latitude = Number(source?.attributes.latitude)
-  const longitude = Number(source?.attributes.longitude)
-  return Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null
+  const candidates = [
+    entities.get('weather.forecast_home'),
+    entities.get('zone.home'),
+    ...Array.from(entities.values()).filter((entity) => entity.entity_id.startsWith('zone.') || entity.entity_id.startsWith('weather.')),
+  ]
+  for (const candidate of candidates) {
+    const latitude = Number(candidate?.attributes.latitude)
+    const longitude = Number(candidate?.attributes.longitude)
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) return { latitude, longitude }
+  }
+  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

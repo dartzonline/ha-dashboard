@@ -3,6 +3,16 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.1.1 - 2026-08-02
+
+Fixes the header aircraft badge never appearing. The shared home-coordinates helper picked the
+first *entity that existed* rather than the first one with usable coordinates — and on this install
+`weather.forecast_home` is present but publishes no latitude, so the lookup stopped there and
+returned "no home location" even though `zone.home` had them. With no coordinates the badge never
+queried for nearby aircraft and rendered nothing at all. It now tests each candidate for real
+coordinates and falls through, so the badge shows on every page. The same helper backs the service
+panel's weather check, which had been reporting Weather as unconfigured for the same reason.
+
 ## 1.1.0 - 2026-08-02
 
 **Service status panel.** The connection indicator in the header is now a button. Tap it and it
