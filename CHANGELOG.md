@@ -3,6 +3,13 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.2.1 - 2026-08-03
+
+World time map enhanced for wall-mounted viewing. Removed the instructional text overlay to reclaim
+vertical space; the map now fills most of the viewport for easier exploration. Satellite imagery
+contrast and saturation were increased to improve legibility from across the room. The day/night
+gradient remains prominent to quickly identify active hours at a glance.
+
 ## 1.2.0 - 2026-08-02
 
 Header rebuilt around the flight. The banner is now the centrepiece: a large horizontal aircraft
