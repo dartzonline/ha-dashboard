@@ -156,3 +156,12 @@ export function AircraftSilhouette({
     </svg>
   )
 }
+
+export type ShowcaseAircraftType = 'b747' | 'b777' | 'b787' | 'b767' | 'a330' | 'a340' | 'md11' | 'a380'
+
+/** Masked in CSS rather than inlined so the plan-view artwork picks up the dashboard text colour. */
+export function ShowcaseAircraft({ type, className }: { type: ShowcaseAircraftType; className?: string }) {
+  return <span className={className} data-jet={type} aria-hidden="true" />
+}
+
+

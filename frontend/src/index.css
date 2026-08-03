@@ -54,6 +54,9 @@ body {
     var(--canvas);
 }
 button, input { font: inherit; }
+/* A wall panel has no pointer, so a scrollbar track only reads as a stray edge on the screen. */
+html { scrollbar-width: none; }
+::-webkit-scrollbar { width: 0; height: 0; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* Touch-first: no double-tap zoom delay on controls, and pressed-state feedback replaces hover. */
 button, [role='button'], select, label { touch-action: manipulation; }

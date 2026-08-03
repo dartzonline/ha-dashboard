@@ -1,12 +1,24 @@
-import { Crosshair, Locate, PlaneTakeoff } from 'lucide-react'
+import { Crosshair, Locate } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { AirlineLogo } from './AirlineLogo'
-import { AircraftSilhouette, aircraftFamily } from './aircraftSilhouettes'
+import { aircraftFamily } from './aircraftSilhouettes'
 import type { AircraftFamily } from './aircraftSilhouettes'
 import { apiUrl } from './api'
 import type { HAEntity } from './types'
 import { homeCoordinates } from './useServiceStatus'
 import './TrackedAircraftBadge.css'
+import a320Icon from './assets/aircraft/a320.svg'
+import a330Icon from './assets/aircraft/a330.svg'
+import a340Icon from './assets/aircraft/a340.svg'
+import a350Icon from './assets/aircraft/a350.svg'
+import a380Icon from './assets/aircraft/a380.svg'
+import b737Icon from './assets/aircraft/b737.svg'
+import b747Icon from './assets/aircraft/b747.svg'
+import b767Icon from './assets/aircraft/b767.svg'
+import b777Icon from './assets/aircraft/b777.svg'
+import b787Icon from './assets/aircraft/b787.svg'
+import crjxIcon from './assets/aircraft/crjx.svg'
+import md11Icon from './assets/aircraft/md11.svg'
 
 interface TrackRoute {
   fromCode: string | null
@@ -44,6 +56,46 @@ interface TrackResponse {
   schedule?: TrackSchedule
   /** 0..1 along the great-circle route, from the backend's own progress maths. */
   progress?: number
+}
+
+function iconForAircraft(type: string | null | undefined) {
+  const token = (type ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (/A38[0-9X]/.test(token)) return a380Icon
+  if (/A35[0-9KX]/.test(token)) return a350Icon
+  if (/A34[0-9X]/.test(token)) return a340Icon
+  if (/A33[0-9X]/.test(token)) return a330Icon
+  if (/B74[0-9SRFM]/.test(token) || /747/.test(token)) return b747Icon
+  if (/B77[0-9WL]/.test(token) || /777/.test(token)) return b777Icon
+  if (/B78[0-9X]/.test(token) || /787/.test(token)) return b787Icon
+  if (/B76[0-9]/.test(token) || /767/.test(token)) return b767Icon
+  if (/MD11|L101/.test(token)) return md11Icon
+  if (/CRJ|ERJ|E1(3[05]|4[05]|70|75|90|95)|E75[LS]/.test(token)) return crjxIcon
+  if (/B73[0-9HMS]|A32[01]|A31[89]|737|320/.test(token)) return b737Icon
+  return a320Icon
+}
+
+function PackAircraftIcon({ type, size, className }: { type: string | null | undefined; size: number; className?: string }) {
+  const icon = iconForAircraft(type)
+  return (
+    <span
+      className={className}
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        display: 'inline-block',
+        backgroundColor: 'currentColor',
+        maskImage: `url(${icon})`,
+        WebkitMaskImage: `url(${icon})`,
+        maskRepeat: 'no-repeat',
+        WebkitMaskRepeat: 'no-repeat',
+        maskPosition: 'center',
+        WebkitMaskPosition: 'center',
+        maskSize: 'contain',
+        WebkitMaskSize: 'contain',
+      }}
+    />
+  )
 }
 
 /**
@@ -170,7 +222,7 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
   if (!callsign) {
     return (
       <div className="flight-banner is-idle" title="No tracked flight and no passenger jet overhead">
-        <span className="flight-mode" aria-hidden="true"><PlaneTakeoff size={15} /></span>
+        <span className="flight-mode" aria-hidden="true"><PackAircraftIcon type={null} size={15} /></span>
         <div className="flight-body">
           <div className="flight-identity"><strong>Sky clear</strong><em>No jets overhead</em></div>
         </div>
@@ -197,7 +249,7 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
         {isTracked ? <Crosshair size={15} aria-hidden="true" /> : <Locate size={15} aria-hidden="true" />}
       </span>
 
-      <AircraftSilhouette family={aircraftFamily(type)} size={52} className="flight-silhouette" />
+      <PackAircraftIcon type={type} size={52} className="flight-silhouette" />
 
       <div className="flight-body">
         <div className="flight-identity">

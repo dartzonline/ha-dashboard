@@ -1,10 +1,10 @@
-/* Flights fills the available viewport height and never scrolls: radar + list, or the tracker card. */
-.flights-view { position: relative; height: 100svh; width: 100svw; min-height: 0; padding: 0; margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 0; overflow: hidden; }
+/* Flights fills the available viewport height and never scrolls: radar + list, or the tracker card.
+   The topbar floats over this view, so the panel starts below it rather than under it. */
+.flights-view { position: relative; height: 100svh; width: 100%; min-height: 0; padding: 66px clamp(12px, 2vw, 24px) 10px; margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; overflow: hidden; }
 
 main.is-fixed-view .flights-view {
   height: 100svh;
-  width: 100svw;
-  padding: 0;
+  width: 100%;
   margin: 0;
 }
 
@@ -48,9 +48,13 @@ main.is-fixed-view .flights-view {
 .flights-panel { height: 100%; min-height: 0; padding: 10px; }
 
 /* ---------- Radar slide ---------- */
-.radar-panel { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(0, 1.18fr); gap: 12px; }
+/* One explicit full-height row: without it the columns sized to their content and the scope's
+   height: 100% had nothing to resolve against, which shrank the radar to a coin. */
+.radar-panel { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(0, 1.18fr); grid-template-rows: minmax(0, 1fr); gap: 12px; }
 
-.radar-column { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; align-content: center; justify-items: center; gap: 8px; }
+/* No align-content here: centring collapsed the 1fr row to content height, which left the
+   scope's height: 100% resolving against nothing and shrank the radar to a coin. */
+.radar-column { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; gap: 8px; }
 
 .radar-scope { position: relative; height: 100%; max-height: 460px; width: auto; max-width: 100%; aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 50%; overflow: hidden; }
 
@@ -159,7 +163,89 @@ main.is-fixed-view .flights-view {
 .phase-chip.tone-ground i { background: var(--muted); }
 
 /* ---------- Track a Flight slide ---------- */
-.track-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+/* Two equal halves: an airframe display on top, the tracker console below, so an untracked
+   page still fills the wall panel instead of stacking a lone form against the top edge. */
+.track-panel { display: grid; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.track-console { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 10px; }
+
+.track-showcase {
+  position: relative;
+  min-height: 0;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 140% at 22% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%),
+    var(--surface-raised);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.showcase-stage { position: relative; height: 100%; min-height: 0; display: grid; place-items: center; }
+
+.showcase-ring { position: absolute; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); aspect-ratio: 1 / 1; animation: showcase-breathe 7s ease-in-out infinite; }
+.showcase-ring-a { height: 96%; }
+.showcase-ring-b { height: 70%; border-style: dashed; animation-delay: -2.3s; }
+.showcase-ring-c { height: 44%; border-color: color-mix(in srgb, var(--accent) 40%, transparent); animation-delay: -4.6s; }
+
+.showcase-sweep { position: absolute; height: 96%; aspect-ratio: 1 / 1; border-radius: 50%; background: conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 26%, transparent), transparent 32%); mask: radial-gradient(circle, transparent 26%, #000 27%); animation: showcase-spin 9s linear infinite; }
+
+.showcase-orbit { position: absolute; height: 96%; aspect-ratio: 1 / 1; animation: showcase-spin 14s linear infinite; }
+.showcase-orbit i { position: absolute; top: -3px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+.showcase-contrail { position: absolute; height: 1px; width: 62%; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 45%, transparent), transparent); }
+.showcase-contrail-a { top: 26%; animation: showcase-drift 6s linear infinite; }
+.showcase-contrail-b { bottom: 24%; animation: showcase-drift 8s linear infinite reverse; }
+
+/* Aircraft icons by ADS-B Radar for macOS - https://adsb-radar.com (free with attribution). */
+.showcase-plane {
+  position: relative;
+  z-index: 2;
+  height: min(80%, 300px);
+  aspect-ratio: 1 / 1;
+  background: var(--text);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, .55));
+  animation: showcase-enter .7s ease-out both;
+}
+
+.showcase-plane[data-jet="b747"] { mask-image: url('./assets/aircraft/b747.svg'); -webkit-mask-image: url('./assets/aircraft/b747.svg'); }
+.showcase-plane[data-jet="b777"] { mask-image: url('./assets/aircraft/b777.svg'); -webkit-mask-image: url('./assets/aircraft/b777.svg'); }
+.showcase-plane[data-jet="b787"] { mask-image: url('./assets/aircraft/b787.svg'); -webkit-mask-image: url('./assets/aircraft/b787.svg'); }
+.showcase-plane[data-jet="b767"] { mask-image: url('./assets/aircraft/b767.svg'); -webkit-mask-image: url('./assets/aircraft/b767.svg'); }
+.showcase-plane[data-jet="a330"] { mask-image: url('./assets/aircraft/a330.svg'); -webkit-mask-image: url('./assets/aircraft/a330.svg'); }
+.showcase-plane[data-jet="a340"] { mask-image: url('./assets/aircraft/a340.svg'); -webkit-mask-image: url('./assets/aircraft/a340.svg'); }
+.showcase-plane[data-jet="a380"] { mask-image: url('./assets/aircraft/a380.svg'); -webkit-mask-image: url('./assets/aircraft/a380.svg'); }
+.showcase-plane[data-jet="md11"] { mask-image: url('./assets/aircraft/md11.svg'); -webkit-mask-image: url('./assets/aircraft/md11.svg'); }
+/* Windows and the cockpit are cut out in the panel colour, so they read on a solid body. */
+.showcase-caption { min-width: 0; display: grid; align-content: center; gap: 4px; }
+.showcase-code { justify-self: start; padding: 2px 9px; border-radius: 7px; color: var(--accent-ink); background: var(--accent); font: 800 .68rem var(--mono); letter-spacing: .08em; }
+.showcase-caption strong { font-size: .92rem; line-height: 1.25; }
+.showcase-caption em { color: var(--muted); font-size: .68rem; font-style: normal; }
+
+.showcase-specs { margin: 6px 0 0; display: grid; gap: 4px; }
+.showcase-specs div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border); padding-bottom: 3px; }
+.showcase-specs dt { color: var(--muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .08em; }
+.showcase-specs dd { margin: 0; font: 750 .72rem var(--mono); }
+
+.showcase-dots { margin-top: 8px; display: flex; gap: 5px; }
+.showcase-dots span { width: 16px; height: 3px; border-radius: 2px; background: var(--border); transition: background .3s ease; }
+.showcase-dots span.is-active { background: var(--accent); }
+
+@keyframes showcase-spin { to { transform: rotate(360deg); } }
+@keyframes showcase-breathe { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
+@keyframes showcase-drift { from { transform: translateX(-30%); opacity: 0; } 50% { opacity: 1; } to { transform: translateX(30%); opacity: 0; } }
+@keyframes showcase-enter { from { opacity: 0; transform: translateY(14px) scale(.9); } to { opacity: 1; transform: none; } }
 
 .track-form { display: flex; align-items: center; gap: 8px; }
 
@@ -241,4 +327,5 @@ main.is-fixed-view .flights-view {
 
 @media (prefers-reduced-motion: reduce) {
   .radar-sweep { animation: none; }
+  .showcase-sweep, .showcase-orbit, .showcase-ring, .showcase-contrail, .showcase-plane { animation: none; }
 }

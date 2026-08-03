@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { BatteryCharging, Car, Gauge, Lock, LockOpen, MapPinned, ShieldCheck } from 'lucide-react'
+import { BatteryCharging, Car, Gauge, Lock, LockOpen, MapPinned, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { apiUrl } from './api'
 import type { HAEntity } from './types'
 import { useVolvo } from './useVolvo'
@@ -105,6 +105,10 @@ export function VolvoView({ entities }: VolvoViewProps) {
 
   const otherMetrics = car.metrics.filter((metric) => ![car.batteryMetric, car.rangeMetric, car.odometerMetric].some((hero) => hero?.entityId === metric.entityId))
   const lastUpdated = car.updatedAt ? new Date(car.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--'
+  // Forty chips all reading "Off" is noise, not status. Only the exceptions earn a chip; the rest
+  // collapse into one count, so a glance answers "is anything open?" instead of demanding a scan.
+  const attention = car.binaries.filter((item) => (item.domain === 'lock' ? !item.on : item.on))
+  const settled = car.binaries.length - attention.length
 
   return (
     <section className="volvo-view" aria-label="Volvo">
@@ -145,10 +149,15 @@ export function VolvoView({ entities }: VolvoViewProps) {
 
       {car.binaries.length > 0 && (
         <div className="volvo-status-row" aria-label="Doors, windows, and other status sensors">
-          {car.binaries.map((item) => (
-            <span key={item.entityId} className={`volvo-status-chip ${item.on ? 'is-on' : ''}`}>
-              <ShieldCheck size={13} />{item.label}
-              <em>{item.domain === 'lock' ? (item.on ? 'Locked' : 'Unlocked') : (item.on ? 'On' : 'Off')}</em>
+          {settled > 0 && (
+            <span className="volvo-status-chip is-settled">
+              <ShieldCheck size={13} />{settled} closed and secure
+            </span>
+          )}
+          {attention.map((item) => (
+            <span key={item.entityId} className="volvo-status-chip is-attention">
+              <ShieldAlert size={13} />{item.label}
+              <em>{item.domain === 'lock' ? 'Unlocked' : 'Open'}</em>
             </span>
           ))}
         </div>

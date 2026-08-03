@@ -218,8 +218,8 @@ _states_cache: dict[tuple[float, float, float], tuple[float, list[Any]]] = {}
 # key: callsign (upper) -> (fetched_at, adsbdb flightroute dict | None)
 _route_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 
-# key: icao24 (lower) -> (fetched_at, adsbdb aircraft dict | None)
-_aircraft_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+# key: (icao24 lower, callsign upper | None) -> (fetched_at, adsbdb aircraft dict | None, adsbdb flightroute dict | None)
+_aircraft_cache: dict[tuple[str, str | None], tuple[float, dict[str, Any] | None, dict[str, Any] | None]] = {}
 
 # Pinned-flight tracking state, guarded by asyncio.Lock (single async process).
 _track: dict[str, Any] = {
@@ -629,24 +629,34 @@ async def adsbdb_route_lookup(client: httpx.AsyncClient, callsign: str) -> dict[
     return result
 
 
-async def adsbdb_aircraft_lookup(client: httpx.AsyncClient, icao24: str) -> dict[str, Any] | None:
+async def adsbdb_aircraft_lookup(
+    client: httpx.AsyncClient,
+    icao24: str,
+    callsign: str | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     key = icao24.strip().lower()
+    callsign_key = callsign.strip().upper() if isinstance(callsign, str) and callsign.strip() else None
     now = time.time()
-    cached = _aircraft_cache.get(key)
+    cache_key = (key, callsign_key)
+    cached = _aircraft_cache.get(cache_key)
     if cached and now - cached[0] < AIRCRAFT_CACHE_TTL:
-        return cached[1]
+        return cached[1], cached[2]
 
-    result: dict[str, Any] | None = None
+    aircraft_result: dict[str, Any] | None = None
+    route_result: dict[str, Any] | None = None
     try:
-        response = await client.get(f"{ADSBDB_BASE_URL}/aircraft/{key}", timeout=10)
+        params = {"callsign": callsign_key} if callsign_key else None
+        response = await client.get(f"{ADSBDB_BASE_URL}/aircraft/{key}", params=params, timeout=10)
         if response.status_code == 200:
             payload = response.json()
-            result = (payload.get("response") or {}).get("aircraft")
+            data = payload.get("response") or {}
+            aircraft_result = data.get("aircraft")
+            route_result = data.get("flightroute")
     except (httpx.HTTPError, ValueError):
-        result = None
+        aircraft_result = route_result = None
 
-    _aircraft_cache[key] = (now, result)
-    return result
+    _aircraft_cache[cache_key] = (now, aircraft_result, route_result)
+    return aircraft_result, route_result
 
 
 async def resolve_route(
@@ -783,7 +793,13 @@ async def build_aircraft_entry(
     from_code = from_city = from_country = None
     to_code = to_city = to_country = None
 
-    route = await adsbdb_route_lookup(client, callsign) if callsign else None
+    route = None
+    aircraft_info = None
+    if icao24:
+        aircraft_info, route = await adsbdb_aircraft_lookup(client, icao24, callsign)
+    if not route and callsign:
+        route = await adsbdb_route_lookup(client, callsign)
+
     if route:
         route_airline = route.get("airline") or {}
         if route_airline.get("name"):
@@ -800,11 +816,11 @@ async def build_aircraft_entry(
     if dest:
         to_code, to_city, to_country = dest.get("code"), dest.get("city"), dest.get("country")
 
-    aircraft_type: str | None = None
     reg: str | None = None
-    aircraft_info = await adsbdb_aircraft_lookup(client, icao24) if icao24 else None
     if aircraft_info:
         reg = aircraft_info.get("registration")
+    aircraft_type: str | None = None
+    if aircraft_info:
         aircraft_type = aircraft_info.get("type") or aircraft_info.get("icao_type")
 
     kind = classify_aircraft(aircraft_type, bool(airline_name or airline_code))
