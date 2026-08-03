@@ -19,7 +19,6 @@ import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
-import { MediaBar } from './MediaBar'
 import { PresenceRow } from './PresenceRow'
 import { SecurityPanel } from './SecurityPanel'
 import { Sparkline } from './Sparkline'
@@ -562,9 +561,7 @@ function App() {
   }, [addEvent])
   const { entities, health, loading, error, callService, runNightMode } = useHomeAssistant(handleStateChange)
   const autoDimClass = useAutoDim(entities)
-  // MediaBar fixes itself to the bottom of the viewport; reserve space so it never covers bottom-anchored
-  // controls like the Insights/Weather/Flights slide pagers.
-  const hasActiveMedia = Array.from(entities.values()).some((entity) => entity.entity_id.startsWith('media_player.') && entity.state === 'playing')
+
   const {
     sections: dashboardSections,
     nightModeIndoorLights,
@@ -756,7 +753,7 @@ function App() {
         <button className="settings-button" onClick={() => { stopRotation(); setSidebarOpen(false); setConfigOpen(true) }} title="Customize dashboard tiles and Night Mode lights"><Wrench size={20} /><span>Configure{configCustomized ? '' : ' (default)'}</span></button>
       </aside>
 
-      <main className={`${activeSection === 'insights' || activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''} ${hasActiveMedia ? 'has-media-bar' : ''}`.trim()} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onPointerDownCapture={(event) => {
+      <main className={`${activeSection === 'insights' || activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''}`.trim()} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onPointerDownCapture={(event) => {
         if (!(event.target as Element).closest('.rotation-status')) stopRotation()
       }}>
         <header className="topbar">
@@ -784,30 +781,33 @@ function App() {
           </div>
         </header>
 
-        <section className="moments-strip" aria-label="Home moments">
-          <button
-            className={`night-mode-moment is-${nightModeStatus}`}
-            onClick={() => void activateNightMode()}
-            disabled={nightModeStatus === 'pending' || !health?.home_assistant.connected}
-          >
-            <span className="moment-icon"><Moon size={21} aria-hidden="true" /></span>
-            <span className="moment-copy"><strong>Night Mode</strong><small>{nightModeMessage}</small></span>
-            <Lock size={17} aria-hidden="true" />
-          </button>
-          <button
-            className="thermostat-quick"
-            onClick={() => selectSection('climate')}
-            aria-label="Open thermostat"
-          >
-            <span className="moment-icon thermo-accent"><Thermometer size={20} aria-hidden="true" /></span>
-            <span className="moment-copy">
-              <strong>{entities.get('climate.mainfoor_thermostat') ? `${Math.round(Number(entities.get('climate.mainfoor_thermostat')?.attributes.temperature ?? 70))}°` : '--°'}</strong>
-              <small>{entities.get('climate.mainfoor_thermostat') ? `Now ${Math.round(Number(entities.get('climate.mainfoor_thermostat')?.attributes.current_temperature ?? 0))}° · ${String(entities.get('climate.mainfoor_thermostat')?.attributes.hvac_action ?? entities.get('climate.mainfoor_thermostat')?.state ?? 'idle')}` : 'Thermostat'}</small>
-            </span>
-          </button>
-        </section>
-
-        <UtilityRail entities={entities} activeSection={activeSection} autoRotate={autoRotate} onSelect={selectSection} onInspectSecurity={() => { stopRotation(); setSecurityOpen(true) }} now={now} />
+        {activeSection === 'home' && (
+          <>
+            <section className="moments-strip" aria-label="Home moments">
+              <button
+                className={`night-mode-moment is-${nightModeStatus}`}
+                onClick={() => void activateNightMode()}
+                disabled={nightModeStatus === 'pending' || !health?.home_assistant.connected}
+              >
+                <span className="moment-icon"><Moon size={21} aria-hidden="true" /></span>
+                <span className="moment-copy"><strong>Night Mode</strong><small>{nightModeMessage}</small></span>
+                <Lock size={17} aria-hidden="true" />
+              </button>
+              <button
+                className="thermostat-quick"
+                onClick={() => selectSection('climate')}
+                aria-label="Open thermostat"
+              >
+                <span className="moment-icon thermo-accent"><Thermometer size={20} aria-hidden="true" /></span>
+                <span className="moment-copy">
+                  <strong>{entities.get('climate.mainfoor_thermostat') ? `${Math.round(Number(entities.get('climate.mainfoor_thermostat')?.attributes.temperature ?? 70))}°` : '--°'}</strong>
+                  <small>{entities.get('climate.mainfoor_thermostat') ? `Now ${Math.round(Number(entities.get('climate.mainfoor_thermostat')?.attributes.current_temperature ?? 0))}° · ${String(entities.get('climate.mainfoor_thermostat')?.attributes.hvac_action ?? entities.get('climate.mainfoor_thermostat')?.state ?? 'idle')}` : 'Thermostat'}</small>
+                </span>
+              </button>
+            </section>
+            <UtilityRail entities={entities} activeSection={activeSection} autoRotate={autoRotate} onSelect={selectSection} onInspectSecurity={() => { stopRotation(); setSecurityOpen(true) }} now={now} />
+          </>
+        )}
 
         {(error || !health?.home_assistant.configured) && !loading && (
           <div className="status-banner" role="status"><Shield size={20} /><span>{error ?? 'Add HA_URL and HA_TOKEN to the Python backend to load live devices.'}</span></div>
@@ -887,7 +887,6 @@ function App() {
         />
       )}
       {eventLogOpen && <EventLog events={events} onClose={() => setEventLogOpen(false)} />}
-      <MediaBar entities={entities} onService={callService} />
     </div>
   )
 }
