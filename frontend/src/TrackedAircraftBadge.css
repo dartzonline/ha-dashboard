@@ -14,6 +14,10 @@
   white-space: nowrap;
 }
 
+/* A quiet holding state so the header's centre does not collapse when the sky is empty. */
+.flight-banner.is-idle { min-height: 46px; padding: 6px 16px; border-style: dashed; background: var(--surface); opacity: .55; }
+.flight-banner.is-idle .flight-identity strong { font-size: .82rem; }
+
 /* A symbol, not a caption: crosshair = pinned flight, locate = whatever is overhead right now. */
 .flight-mode {
   flex: 0 0 auto;

@@ -44,9 +44,10 @@ main.is-fixed-view .moments-strip { display: none; }
 main.is-fixed-view .utility-stack { display: none; }
 .topbar { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .page-title { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; }
-/* Activity log and the rotation timer sit with the title, freeing the centre for the flight. */
-.topbar-utilities { display: flex; align-items: center; gap: 6px; }
-.topbar-utilities .nav-toggle { width: 30px; height: 30px; }
+/* Activity log and the rotation timer are corner furniture, not headline items. */
+.topbar-utilities { display: flex; align-items: center; gap: 5px; margin-left: 4px; opacity: .62; transition: opacity .2s ease; }
+.topbar-utilities:hover, .topbar-utilities:focus-within { opacity: 1; }
+.topbar-utilities .nav-toggle { width: 28px; height: 28px; }
 .date, .section-heading span { margin: 0; color: var(--muted); font-size: .74rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 h1 { margin: 4px 0 0; font-size: 1.75rem; line-height: 1.1; font-weight: 700; }
 .clock-block { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
