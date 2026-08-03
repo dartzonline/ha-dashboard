@@ -305,4 +305,4 @@ For native/Compose use, set `HA_URL` and `HA_TOKEN`. In the Home Assistant add-o
 
 ## Planned work
 
-- [`docs/auto-entity-discovery.md`](docs/auto-entity-discovery.md) — design for having new Home Assistant entities automatically show up in the right dashboard section (with a chart, where relevant) instead of requiring a manual `dashboardConfig.ts`/Configure-panel edit. Not started.
+- [`docs/auto-entity-discovery.md`](docs/auto-entity-discovery.md) — design for having new Home Assistant entities automatically show up in the right dashboard section (with a chart, where relevant) instead of requiring a manual `dashboardConfig.ts`/Configure-panel edit. Phase 0 (the `GET /api/registry` plumbing) is done; classification and the Configure panel tray are still planning only.
