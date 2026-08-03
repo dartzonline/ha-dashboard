@@ -249,13 +249,12 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
         {isTracked ? <Crosshair size={15} aria-hidden="true" /> : <Locate size={15} aria-hidden="true" />}
       </span>
 
-      <PackAircraftIcon type={type} size={52} className="flight-silhouette" />
+      <PackAircraftIcon type={type} size={68} className="flight-silhouette" />
 
       <div className="flight-body">
         <div className="flight-identity">
           <AirlineLogo code={aircraft?.airlineCode ?? null} className="flight-logo" />
           <strong>{callsign}</strong>
-          {type && <em>{type}</em>}
           {distance && <span className="flight-distance">{distance}</span>}
         </div>
 
