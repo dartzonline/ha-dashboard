@@ -1,19 +1,18 @@
 .weather-view {
   margin-top: 0;
   height: 100svh;
-  width: 100svw;
+  width: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 0 minmax(0, 1fr) auto;
-  gap: 0;
-  padding: 0;
-  overflow: auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  /* The header floats over this view, so the hero starts below it rather than under it. */
+  padding: 74px clamp(16px, 3vw, 32px) 14px;
+  overflow: hidden;
 }
 
 main.is-fixed-view .weather-view {
   height: 100svh;
-  width: 100svw;
-  padding: 0;
   margin: 0;
 }
 

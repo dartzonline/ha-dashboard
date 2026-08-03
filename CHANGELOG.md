@@ -3,6 +3,21 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.2.2 - 2026-08-03
+
+Layout cleanup across the wall display and a new Track page. The stray border around the screen is
+gone, scrollbars are hidden, and the Insights, Weather, Energy and Flights views no longer overlap
+their header or overflow the viewport. Volvo was rebuilt around exception-only status chips with
+full-height charts. World time gives the clock column enough room that city names stop truncating,
+and the night shading is deeper. The Flights radar scope fills its panel again, and the Track page
+now splits in half: a rotating widebody showcase (747, A380, 777, 787, A330, A340, 767, MD-11) over
+a radar-style stage above the flight-number form. Aircraft artwork uses the free SVG icon set from
+ADS-B Radar for macOS (https://adsb-radar.com).
+and the top-bar flight badge now uses the same ADS-B Radar icon pack as the Track showcase, and the
+route/type data can fall back to ADS-B DB's combined aircraft endpoint for better accuracy. The Track
+page now splits in half: a rotating widebody showcase (747, A380, 777, 787, A330, A340, 767, MD-11)
+over a radar-style stage above the flight-number form, and the showcase can be swiped manually.
+
 ## 1.2.1 - 2026-08-03
 
 World time map enhanced for wall-mounted viewing. Removed the instructional text overlay to reclaim

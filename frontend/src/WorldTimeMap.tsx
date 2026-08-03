@@ -237,11 +237,10 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
   }, [selectedId, pin, weatherFor])
 
   return (
-    <section className="world-view" aria-labelledby="world-heading">
+    <section className="world-view" aria-label="World time">
       <header className="world-heading">
         <div>
           <span className="eyebrow"><Navigation size={13} /> Global overview</span>
-          <h2 id="world-heading">World time</h2>
         </div>
         {selectedId !== 'home' && (
           <div className="world-selection" aria-live="polite">
@@ -274,9 +273,10 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
             <defs>
               <radialGradient id="nightShade" cx={`${daylightCenter}%`} cy="42%" r="56%">
                 <stop offset="0" stopColor="#020611" stopOpacity="0" />
-                <stop offset=".48" stopColor="#020611" stopOpacity=".12" />
-                <stop offset=".78" stopColor="#01040d" stopOpacity=".72" />
-                <stop offset="1" stopColor="#01030a" stopOpacity=".92" />
+                <stop offset=".38" stopColor="#020611" stopOpacity=".06" />
+                <stop offset=".58" stopColor="#01040d" stopOpacity=".56" />
+                <stop offset=".76" stopColor="#01030a" stopOpacity=".86" />
+                <stop offset="1" stopColor="#000208" stopOpacity=".95" />
               </radialGradient>
               <linearGradient id="mapTint" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stopColor="#06152b" stopOpacity=".08" />

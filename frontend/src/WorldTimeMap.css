@@ -20,7 +20,7 @@
 .selection-meta { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .72rem; }
 
 /* Map and clocks share the row so neither letterboxes the panel. */
-.world-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px); gap: 10px; }
+.world-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(232px, 268px); gap: 10px; }
 .world-map-shell { min-height: 0; border: 1px solid var(--border); border-radius: 12px; background: #0a0b0f; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow); }
 .timezone-ruler { flex: 0 0 auto; height: 32px; padding: 0 1px; border-bottom: 1px solid var(--border); color: var(--muted); background: var(--canvas); display: grid; grid-template-columns: repeat(24, 1fr); align-items: center; font: 650 .68rem var(--mono); }
 .timezone-ruler span { text-align: center; }
@@ -33,7 +33,7 @@
 /* Direct child only: this is the basemap layer, not the pin/legend glyphs nested inside it. */
 .world-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .map-ocean { fill: #0a0b0f; }
-.satellite-layer { filter: saturate(1.1) contrast(1.15) brightness(.92) hue-rotate(2deg); }
+.satellite-layer { filter: saturate(1.15) contrast(1.12) brightness(1.02); }
 .map-grid line { stroke: rgba(210, 208, 202, .11); stroke-width: .8; vector-effect: non-scaling-stroke; }
 .route-line { fill: none; stroke: color-mix(in srgb, var(--accent) 42%, transparent); stroke-width: 1.3; stroke-dasharray: 5 7; vector-effect: non-scaling-stroke; }
 /* Refined jewel-tone dots instead of thick-bordered map pins: a small glass-highlight
@@ -70,16 +70,20 @@
 .world-clock-card:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
 .world-clock-card.is-selected { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--surface) 76%, var(--accent-soft)); box-shadow: var(--shadow); }
 .clock-card-icon { width: 32px; height: 32px; border-radius: 50%; color: var(--marker-color); background: color-mix(in srgb, var(--marker-color) 16%, transparent); display: grid; place-items: center; }
-.clock-card-place, .clock-card-time { min-width: 0; display: grid; }\n.clock-card-time { text-align: right; }\n.clock-card-time strong { font: 700 .68rem var(--mono); letter-spacing: -.02em; white-space: nowrap; }\n.clock-card-meta { grid-column: 1 / -1; margin: 0; padding-top: 3px; color: var(--muted); display: flex; align-items: center; gap: 4px; font-size: .6rem; }
+.clock-card-place, .clock-card-time { min-width: 0; display: grid; }
+.clock-card-time { text-align: right; }
+.clock-card-time strong { font: 700 .68rem var(--mono); letter-spacing: -.02em; white-space: nowrap; }
+.clock-card-meta { grid-column: 1 / -1; margin: 0; padding-top: 3px; color: var(--muted); display: flex; align-items: center; gap: 4px; font-size: .6rem; }
 .clock-card-place strong { overflow: hidden; display: flex; align-items: baseline; gap: 4px; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
-.clock-card-code { flex: 0 0 auto; padding: 1px 5px; border-radius: 4px; color: var(--marker-color); background: color-mix(in srgb, var(--marker-color) 15%, transparent); font: 700 .6rem var(--mono); font-style: normal; letter-spacing: .06em; }
+/* The country already reads on the line below, so the code chip only crowded the city name out. */
+.clock-card-code { display: none; }
 
 /* A dropped pin needs an obvious way out that is not hidden inside the clock list. */
 .map-clear-pin { position: absolute; left: 10px; top: 10px; z-index: 3; min-height: 30px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); background: color-mix(in srgb, var(--canvas) 85%, transparent); display: flex; align-items: center; gap: 6px; font-size: .68rem; cursor: pointer; backdrop-filter: blur(8px); }
 .map-clear-pin:hover { color: var(--danger); border-color: var(--danger); }
 .clock-card-place small, .clock-card-time small { margin-top: 1px; color: var(--muted); font-size: .62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clock-card-time { text-align: right; }
-.clock-card-time strong { font: 750 1rem var(--mono); white-space: nowrap; }
+.clock-card-time strong { font: 750 .92rem var(--mono); white-space: nowrap; }
 .clock-card-meta { grid-column: 1 / -1; padding-top: 5px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .7rem; overflow: hidden; white-space: nowrap; }
 
 /* Dropped pin: the point the panel was actually touched, with the time it keeps. */

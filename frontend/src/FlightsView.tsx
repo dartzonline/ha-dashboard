@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { AirlineLogo } from './AirlineLogo'
+import { ShowcaseAircraft, type ShowcaseAircraftType } from './aircraftSilhouettes'
 import { apiUrl } from './api'
 import type { HAEntity } from './types'
 import './FlightsView.css'
@@ -156,6 +157,87 @@ function DelayBadge({ delayMin }: { delayMin: number | undefined }) {
   if (delayMin >= 5) return <span className="delay-badge tone-danger">{`+${formatNumber(delayMin)} MIN`}</span>
   if (delayMin <= -2) return <span className="delay-badge tone-good">{`${formatNumber(Math.abs(delayMin))} MIN EARLY`}</span>
   return <span className="delay-badge tone-neutral">On time</span>
+}
+
+const SHOWCASE: {
+  code: string
+  name: string
+  tag: string
+  type: ShowcaseAircraftType
+  span: string
+  cruise: string
+  range: string
+}[] = [
+  { code: '747', name: 'Boeing 747-8', tag: 'Queen of the skies', type: 'b747', span: '68.4 m', cruise: 'Mach 0.855', range: '14 320 km' },
+  { code: 'A380', name: 'Airbus A380-800', tag: 'Superjumbo', type: 'a380', span: '79.8 m', cruise: 'Mach 0.85', range: '14 800 km' },
+  { code: '777', name: 'Boeing 777-300ER', tag: 'Triple seven', type: 'b777', span: '64.8 m', cruise: 'Mach 0.84', range: '13 650 km' },
+  { code: '787', name: 'Boeing 787-9', tag: 'Dreamliner', type: 'b787', span: '60.1 m', cruise: 'Mach 0.85', range: '14 140 km' },
+  { code: 'MD11', name: 'McDonnell Douglas MD-11', tag: 'Last of the trijets', type: 'md11', span: '51.7 m', cruise: 'Mach 0.82', range: '12 670 km' },
+  { code: 'A330', name: 'Airbus A330-900neo', tag: 'Long-haul workhorse', type: 'a330', span: '64.0 m', cruise: 'Mach 0.82', range: '13 330 km' },
+  { code: '767', name: 'Boeing 767-300ER', tag: 'Transatlantic original', type: 'b767', span: '47.6 m', cruise: 'Mach 0.80', range: '11 070 km' },
+  { code: 'A340', name: 'Airbus A340-600', tag: 'Longest Airbus', type: 'a340', span: '63.4 m', cruise: 'Mach 0.83', range: '14 450 km' },
+]
+
+/** Fills the idle top half of the Track page so it reads as a display, not an empty form. */
+function TrackShowcase() {
+  const [index, setIndex] = useState(0)
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+
+  function move(delta: number) {
+    setIndex((value) => (value + delta + SHOWCASE.length) % SHOWCASE.length)
+  }
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setIndex((value) => (value + 1) % SHOWCASE.length), 6000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const jet = SHOWCASE[index]
+
+  function handleTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+    event.stopPropagation()
+    swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }
+  }
+
+  function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+    event.stopPropagation()
+    if (!swipeStart.current) return
+    const deltaX = event.changedTouches[0].clientX - swipeStart.current.x
+    const deltaY = event.changedTouches[0].clientY - swipeStart.current.y
+    swipeStart.current = null
+    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return
+    move(deltaX < 0 ? 1 : -1)
+  }
+
+  return (
+    <div className="track-showcase" aria-hidden="true" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { swipeStart.current = null }}>
+      <div className="showcase-stage">
+        <span className="showcase-ring showcase-ring-a" />
+        <span className="showcase-ring showcase-ring-b" />
+        <span className="showcase-ring showcase-ring-c" />
+        <span className="showcase-sweep" />
+        <span className="showcase-orbit"><i /></span>
+        <span className="showcase-contrail showcase-contrail-a" />
+        <span className="showcase-contrail showcase-contrail-b" />
+        <ShowcaseAircraft key={jet.code} type={jet.type} className="showcase-plane" />
+      </div>
+      <div className="showcase-caption">
+        <span className="showcase-code">{jet.code}</span>
+        <strong>{jet.name}</strong>
+        <em>{jet.tag}</em>
+        <dl className="showcase-specs">
+          <div><dt>Span</dt><dd>{jet.span}</dd></div>
+          <div><dt>Cruise</dt><dd>{jet.cruise}</dd></div>
+          <div><dt>Range</dt><dd>{jet.range}</dd></div>
+        </dl>
+        <div className="showcase-dots">
+          {SHOWCASE.map((item, itemIndex) => (
+            <span key={item.code} className={itemIndex === index ? 'is-active' : undefined} />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps) {
@@ -426,6 +508,8 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
 
         {slide === 1 && (
           <section className="flights-panel track-panel" aria-label="Track a flight">
+            <TrackShowcase />
+            <div className="track-console">
             <form
               className="track-form"
               onSubmit={(event) => {
@@ -509,6 +593,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                 )}
               </div>
             )}
+            </div>
           </section>
         )}
       </div>

@@ -753,7 +753,7 @@ function App() {
         <button className="settings-button" onClick={() => { stopRotation(); setSidebarOpen(false); setConfigOpen(true) }} title="Customize dashboard tiles and Night Mode lights"><Wrench size={20} /><span>Configure{configCustomized ? '' : ' (default)'}</span></button>
       </aside>
 
-      <main className={`${activeSection === 'insights' || activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''}`.trim()} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onPointerDownCapture={(event) => {
+      <main className={`${activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''}${activeSection === 'insights' ? 'is-tall-view' : ''}`.trim()} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onPointerDownCapture={(event) => {
         if (!(event.target as Element).closest('.rotation-status')) stopRotation()
       }}>
         <header className="topbar">
