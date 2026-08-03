@@ -3,11 +3,12 @@
 .connection-wrap { position: relative; flex: 0 0 auto; }
 
 .connection-chip {
-  display: flex;
-  align-items: center;
-  gap: 7px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
   height: 34px;
-  padding: 0 11px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
@@ -20,20 +21,16 @@
   transition: border-color .16s ease, color .16s ease, background .16s ease;
 }
 
-.connection-chip i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  flex: 0 0 auto;
-}
-
 /* The count of things not currently healthy, so the collapsed chip still carries the headline. */
+/* Issue count rides the corner, since the chip no longer has room for a caption. */
 .connection-chip em {
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 9px;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
   color: var(--canvas);
   background: currentColor;
   display: grid;
@@ -134,8 +131,7 @@
 }
 
 @media (max-width: 680px) {
-  .connection-chip { height: 28px; padding: 0 8px; font-size: .66rem; }
-  .connection-chip span { display: none; }
+  .connection-chip { width: 30px; height: 30px; }
   .connection-panel { width: min(290px, calc(100vw - 20px)); }
 }
 

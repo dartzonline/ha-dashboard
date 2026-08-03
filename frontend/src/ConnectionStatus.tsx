@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, CircleSlash, Minus, RefreshCw, X } from 'lucide-react'
+import { Activity, AlertTriangle, Check, CircleSlash, Minus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { HAEntity, HealthResponse } from './types'
 import { useServiceStatus } from './useServiceStatus'
@@ -65,10 +65,9 @@ export function ConnectionStatus({ health, entities, onOpen }: ConnectionStatusP
         }}
         aria-expanded={open}
         aria-label={`Connection status: ${STATE_LABEL[overall]}. Show service details`}
-        title="Show the status of every connected service"
+        title={`${STATE_LABEL[overall]} — show the status of every connected service`}
       >
-        <i aria-hidden="true" />
-        <span>{STATE_LABEL[overall]}</span>
+        <Activity size={15} aria-hidden="true" />
         {problems > 0 && <em>{problems}</em>}
       </button>
 
