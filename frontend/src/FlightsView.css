@@ -1,5 +1,12 @@
 /* Flights fills the available viewport height and never scrolls: radar + list, or the tracker card. */
-.flights-view { position: relative; height: 100%; min-height: 0; padding-top: 8px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; overflow: hidden; }
+.flights-view { position: relative; height: 100svh; width: 100svw; min-height: 0; padding: 0; margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 0; overflow: hidden; }
+
+main.is-fixed-view .flights-view {
+  height: 100svh;
+  width: 100svw;
+  padding: 0;
+  margin: 0;
+}
 
 /* Floating quick-add: a FAB on the Radar page that expands in place into a flight-number field,
    so tracking a flight doesn't require switching to the Track page first. */

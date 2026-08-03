@@ -242,25 +242,26 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
         <div>
           <span className="eyebrow"><Navigation size={13} /> Global overview</span>
           <h2 id="world-heading">World time</h2>
-          <p>Touch anywhere on the map to read the time in that zone, or a clock below for its weather.</p>
         </div>
-        <div className="world-selection" aria-live="polite">
-          <span className="selection-icon" style={{ '--marker-color': selected.accent } as React.CSSProperties}>
-            {selectedHour >= 7 && selectedHour < 19 ? <SunMedium size={20} /> : <MoonStar size={20} />}
-          </span>
-          <div className="selection-place">
-            <span>{selected.approximate ? 'Estimated zone' : 'Selected location'}</span>
-            <strong>{selected.city}</strong>
-            <small>{selected.country}</small>
+        {selectedId !== 'home' && (
+          <div className="world-selection" aria-live="polite">
+            <span className="selection-icon" style={{ '--marker-color': selected.accent } as React.CSSProperties}>
+              {selectedHour >= 7 && selectedHour < 19 ? <SunMedium size={20} /> : <MoonStar size={20} />}
+            </span>
+            <div className="selection-place">
+              <span>{selected.approximate ? 'Estimated zone' : 'Selected location'}</span>
+              <strong>{selected.city}</strong>
+              <small>{selected.country}</small>
+            </div>
+            <div className="selection-time">
+              <strong>{formatTime(now, selected.timeZone)}</strong>
+              <small>{formatDay(now, selected.timeZone)}</small>
+            </div>
+            <p className="selection-meta">
+              <Clock3 size={13} /> {daylightLabel(selectedHour)} · {getOffset(now, selected.timeZone)} · {formatDifference(now, selected.timeZone)}
+            </p>
           </div>
-          <div className="selection-time">
-            <strong>{formatTime(now, selected.timeZone)}</strong>
-            <small>{formatDay(now, selected.timeZone)}</small>
-          </div>
-          <p className="selection-meta">
-            <Clock3 size={13} /> {daylightLabel(selectedHour)} · {getOffset(now, selected.timeZone)} · {formatDifference(now, selected.timeZone)}
-          </p>
-        </div>
+        )}
       </header>
 
       <div className="world-body">
@@ -273,9 +274,9 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
             <defs>
               <radialGradient id="nightShade" cx={`${daylightCenter}%`} cy="42%" r="56%">
                 <stop offset="0" stopColor="#020611" stopOpacity="0" />
-                <stop offset=".48" stopColor="#020611" stopOpacity=".04" />
-                <stop offset=".78" stopColor="#01040d" stopOpacity=".58" />
-                <stop offset="1" stopColor="#01030a" stopOpacity=".86" />
+                <stop offset=".48" stopColor="#020611" stopOpacity=".12" />
+                <stop offset=".78" stopColor="#01040d" stopOpacity=".72" />
+                <stop offset="1" stopColor="#01030a" stopOpacity=".92" />
               </radialGradient>
               <linearGradient id="mapTint" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stopColor="#06152b" stopOpacity=".08" />
