@@ -3,6 +3,23 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.2.4 - 2026-08-03
+
+The top-bar aircraft silhouette renders again. It was drawn with a CSS mask, and a mask that cannot
+load its image degrades silently to a solid coloured block — which is what the header had been
+showing. The artwork is now inlined as real SVG, so there is no asset URL left to fail behind Home
+Assistant's ingress path. `a350.svg` shipped as a saved 404 page rather than a drawing and has been
+dropped; A350s now use the A330 twin-widebody profile. A pinned flight and an overhead one share the
+same silhouette lookup, so both draw the aircraft that is actually flying.
+
+A tracked flight now states whether it will land when it said it would: "Arrives 18:40" with "On
+time" in green, a small slip in amber, and a real delay in red as "45 min late". With no schedule to
+go on it falls back to the live time-to-run from ground speed.
+
+The frontend has a test suite now (`npm test`, Vitest + Testing Library). It covers the type-to-
+silhouette mapping, the arrival verdict thresholds, and — so this class of bug cannot return — a
+check that every bundled aircraft asset is real drawable geometry rather than an error page.
+
 ## 1.2.3 - 2026-08-03
 
 Top-bar flight banner: aircraft silhouette is now larger and brighter (dominant), and the aircraft
