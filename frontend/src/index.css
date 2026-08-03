@@ -1,29 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
+/* Palette: warm-neutral dark shell, one confident accent.
+   The greys carry a slight warm cast so the panel reads like paper-in-a-dim-room rather than a
+   blue-black HUD; the single accent is a muted periwinkle used only for genuine emphasis
+   (selection, the current view, a primary action). Status hues stay green/amber/red so the accent
+   never has to double as "good" or "warning". */
 :root {
-  --canvas: #070c13;
-  --surface: #0f1722;
-  --surface-raised: #17232f;
-  --border: #263849;
-  --text: #e7edf5;
-  --muted: #93a6ba;
-  --accent: #2bd0da;
-  --accent-strong: #a8eef4;
-  --accent-soft: #0c2b34;
-  --accent-ink: #04262c;
-  --chart-line: #0fa3b1;
-  --chart-grid: rgba(125, 155, 180, .14);
-  --rail: #0a101a;
-  --rail-text: #9aa7b8;
-  --rail-active: #d9ecf2;
-  --good: #6dc59b;
-  --good-soft: #17372d;
-  --danger: #ef7c86;
-  --danger-ink: #40151b;
-  --danger-soft: #3f2028;
-  --warn: #dcb677;
-  --warn-soft: #3f3320;
-  --shadow: 0 10px 30px rgba(0, 0, 0, .28), inset 0 1px rgba(255, 255, 255, .02);
+  --canvas: #101114;
+  --surface: #191a1f;
+  --surface-raised: #222429;
+  --border: #2c2e35;
+  --text: #eceae7;
+  --muted: #a8a59f;
+  --accent: #7f9ee0;
+  --accent-strong: #b6c9f0;
+  --accent-soft: #1c2231;
+  --accent-ink: #0d1422;
+  --chart-line: #7f9ee0;
+  --chart-grid: rgba(168, 165, 159, .10);
+  --rail: #141519;
+  --rail-text: #a8a59f;
+  --rail-active: #eceae7;
+  --good: #7fc9a3;
+  --good-ink: #10231a;
+  --good-soft: #182620;
+  --danger: #e88b8b;
+  --danger-ink: #2a1315;
+  --danger-soft: #2b1a1b;
+  --warn: #dcae72;
+  --warn-soft: #2a2117;
+  /* Natural, single-source shadow instead of glow: things sit on the surface, they don't emit. */
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .26);
   --sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-family: var(--sans);
@@ -39,13 +46,12 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100svh;
+  /* No technical grid: two very soft washes give the canvas depth without printing a texture
+     across every panel. */
   background:
-    radial-gradient(circle at 80% 2%, rgba(108, 138, 196, .14), transparent 34rem),
-    radial-gradient(circle at 12% 96%, rgba(98, 79, 52, .11), transparent 28rem),
-    linear-gradient(rgba(118, 134, 162, .02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(118, 134, 162, .02) 1px, transparent 1px),
+    radial-gradient(ellipse at 78% -6%, rgba(127, 158, 224, .07), transparent 42rem),
+    radial-gradient(ellipse at 6% 104%, rgba(220, 174, 114, .04), transparent 34rem),
     var(--canvas);
-  background-size: auto, auto, 34px 34px, 34px 34px, auto;
 }
 button, input { font: inherit; }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

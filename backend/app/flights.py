@@ -186,7 +186,7 @@ CLASSIFIER_GROUPS: list[tuple[str, list[str]]] = [
     ]),
     ("turboprop", [
         "king air", "caravan", "cessna 208", "atr ", "atr-", "dash 8", "dhc-8", "q400",
-        "pc-12", "tbm", "pilatus", "saab 340", "beech 1900", "metroliner", "do228",
+        "pc-12", "pc-xii", "tbm", "pilatus", "saab 340", "beech 1900", "metroliner", "do228",
         "twin otter", "dhc-6",
     ]),
     ("light", [
@@ -382,12 +382,17 @@ def _meters_per_sec_to_fpm(value: float | None) -> float | None:
 # ---------------------------------------------------------------------------
 
 def classify_aircraft(type_str: str | None, has_airline: bool) -> str:
+    # Upstream type strings punctuate inconsistently: a real sample had an AW169 helicopter arrive
+    # as "AW.169" and a Pilatus PC-12 as "PC-XII NGX", both of which slipped past every needle here
+    # and fell through to the "jet" default -- a helicopter drawn as an airliner. Matching against
+    # both the raw text and a punctuation-stripped copy catches the separator variants.
     text = (type_str or "").strip().lower()
     if not text:
         return "jet" if has_airline else "light"
+    squashed = text.replace(".", "").replace("-", "").replace(" ", "")
     for kind, needles in CLASSIFIER_GROUPS:
         for needle in needles:
-            if needle in text:
+            if needle in text or needle.replace(".", "").replace("-", "").replace(" ", "") in squashed:
                 return kind
     return "jet"
 

@@ -2,22 +2,22 @@
 .detail-sheet.insight-sheet { width: min(780px, 100%); max-height: min(760px, calc(100svh - 48px)); }
 .insight-headline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 16px 0 14px; }
 .insight-headline > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); display: grid; gap: 3px; }
-.insight-headline span { color: var(--muted); font-size: .6rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.insight-headline span { color: var(--muted); font-size: .62rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
 .insight-headline strong { font: 750 1.05rem var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .insight-headline strong.up { color: var(--warn); }
-.insight-headline strong.down { color: var(--accent-strong); }
-.insight-detail-chart { height: 236px; margin-bottom: 14px; padding: 8px 4px 0; border: 1px solid var(--border); border-radius: 10px; background: #0b1620; }
+.insight-headline strong.down { color: var(--good); }
+.insight-detail-chart { height: 236px; margin-bottom: 14px; padding: 8px 4px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--canvas); }
 .insight-detail-chart .chart-empty { border-top: 0; }
 .state-timeline { height: 100%; margin: 0; padding: 4px 8px; list-style: none; display: grid; align-content: start; gap: 5px; overflow-y: auto; }
 .state-timeline li { min-height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-.state-timeline svg { color: var(--accent); }
+.state-timeline svg { color: var(--muted); }
 .state-timeline strong { font-size: .74rem; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .state-timeline small { color: var(--muted); font-size: .62rem; white-space: nowrap; }
-.insight-explainer { margin-bottom: 16px; padding: 12px 13px; border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); border-radius: 10px; background: var(--accent-soft); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
+.insight-explainer { margin-bottom: 16px; padding: 12px 13px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface-raised) 62%, var(--accent-soft)); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
 .insight-explainer > span { width: 28px; height: 28px; border-radius: 50%; color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 18%, transparent); display: grid; place-items: center; }
 .insight-explainer h3 { margin: 0 0 3px; font-size: .76rem; }
 .insight-explainer p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
-.insight-subheading { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; }
+.insight-subheading { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .factor-grid { margin-bottom: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
 .factor-grid > div { min-width: 0; min-height: 64px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); display: grid; align-content: center; gap: 2px; }
 .factor-grid span { color: var(--muted); font-size: .6rem; letter-spacing: .04em; text-transform: uppercase; }

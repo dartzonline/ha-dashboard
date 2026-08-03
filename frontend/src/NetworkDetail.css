@@ -13,8 +13,8 @@
   padding-bottom: 10px;
 }
 
-.network-detail > header > div { display: flex; align-items: center; gap: 7px; color: var(--accent-strong); }
-.network-detail h3 { margin: 0; color: var(--text); font-size: .84rem; }
+.network-detail > header > div { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.network-detail h3 { margin: 0; color: var(--text); font-size: .88rem; font-weight: 650; }
 .network-detail > header > span { color: var(--muted); font-size: .68rem; }
 
 .network-summary {
@@ -34,12 +34,12 @@
   gap: 2px;
 }
 
-.network-summary span { color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; }
+.network-summary span { color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 .network-summary strong { font-size: 1rem; white-space: nowrap; }
 .network-summary small { color: var(--muted); font-size: .68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .network-summary .tone-down { border-left-color: var(--chart-line); }
-.network-summary .tone-down span { color: var(--accent-strong); }
+.network-summary .tone-down span { color: var(--accent); }
 .network-summary .tone-up { border-left-color: var(--warn); }
 .network-summary .tone-up span { color: var(--warn); }
 .network-summary .tone-devices { border-left-color: var(--good); }

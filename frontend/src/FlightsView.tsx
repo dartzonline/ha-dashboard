@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
+import { AirlineLogo } from './AirlineLogo'
 import { apiUrl } from './api'
 import type { HAEntity } from './types'
 import './FlightsView.css'
@@ -68,12 +69,6 @@ interface FlightsViewProps {
 }
 
 type Phase = 'climb' | 'cruise' | 'descend' | 'ground'
-
-const LOGO_SOURCES = [
-  (code: string) => `https://raw.githubusercontent.com/Jxck-S/airline-logos/main/custom_logos/${code}.png`,
-  (code: string) => `https://raw.githubusercontent.com/Jxck-S/airline-logos/main/radarbox_logos/${code}.png`,
-  (code: string) => `https://raw.githubusercontent.com/Jxck-S/airline-logos/main/flightaware_logos/${code}.png`,
-]
 
 const RADAR_SIZE = 220
 const RADAR_CENTER = RADAR_SIZE / 2
@@ -154,31 +149,6 @@ function polarPoint(bearingDeg: number, distanceKm: number | null, rangeKm: numb
     x: RADAR_CENTER + Math.sin(rad) * radius,
     y: RADAR_CENTER - Math.cos(rad) * radius,
   }
-}
-
-function AirlineLogo({ code }: { code: string | null }) {
-  // Reset the attempt counter when the airline code changes by adjusting state during render
-  // (the React-recommended alternative to an effect that only mirrors a prop).
-  const [state, setState] = useState({ code, attempt: 0 })
-  if (state.code !== code) {
-    setState({ code, attempt: 0 })
-  }
-
-  const initials = code ? code.slice(0, 2).toUpperCase() : '–'
-
-  if (!code || state.attempt >= LOGO_SOURCES.length) {
-    return <span className="airline-logo airline-logo-fallback" aria-hidden="true">{initials}</span>
-  }
-
-  return (
-    <img
-      className="airline-logo"
-      src={LOGO_SOURCES[state.attempt](code)}
-      alt=""
-      aria-hidden="true"
-      onError={() => setState((current) => ({ ...current, attempt: current.attempt + 1 }))}
-    />
-  )
 }
 
 function DelayBadge({ delayMin }: { delayMin: number | undefined }) {

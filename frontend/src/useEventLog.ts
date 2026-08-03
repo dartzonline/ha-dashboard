@@ -4,7 +4,7 @@ export interface LogEntry {
   id: number
   title: string
   message: string
-  tone: 'info' | 'warning' | 'success'
+  tone: 'info' | 'critical' | 'success'
   at: number
 }
 
@@ -12,7 +12,7 @@ interface IncomingAlert {
   id: number
   title: string
   message: string
-  tone: 'info' | 'warning' | 'success'
+  tone: 'info' | 'critical' | 'success'
 }
 
 const MAX_ENTRIES = 200

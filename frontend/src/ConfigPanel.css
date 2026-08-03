@@ -15,6 +15,12 @@
 }
 .config-tabs button.active { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
 
+.config-tab-count {
+  min-width: 20px; padding: 0 5px; border-radius: 999px; color: var(--accent-ink);
+  background: var(--accent); font-size: .68rem; line-height: 18px;
+}
+.config-tabs button.active .config-tab-count { color: var(--accent); background: var(--accent-ink); }
+
 .config-section-pills { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .config-section-pills button {
   min-height: 36px; padding: 0 13px; border: 1px solid var(--border); border-radius: 999px;
@@ -51,6 +57,21 @@
 .config-add-row .detail-action { min-height: 36px; padding: 0 14px; white-space: nowrap; }
 .config-entity-input { font-family: var(--mono); }
 .config-empty { margin: 4px 0 12px; color: var(--muted); font-size: .78rem; }
+
+/* Suggested tiles carry a variable number of controls (summary vs. edit), so they wrap instead of
+   inheriting .config-tile-row's fixed column track. */
+.config-proposal-row { display: flex; flex-wrap: wrap; }
+.config-proposal-row .config-entity-id { flex: 1 1 190px; }
+.config-proposal-summary { flex: 2 1 220px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.config-proposal-summary em {
+  margin-left: 7px; color: var(--accent-strong); font-style: normal; font-size: .66rem;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.config-proposal-row .config-label-input { flex: 2 1 160px; }
+.config-proposal-row select { flex: 1 1 120px; }
+.config-proposal-actions { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+.config-proposal-actions .detail-action { min-height: 34px; padding: 0 12px; white-space: nowrap; }
+.config-subhead { margin: 18px 0 8px; font-size: .8rem; font-weight: 750; letter-spacing: .02em; }
 
 .config-hint { margin: 0 0 14px; color: var(--muted); font-size: .78rem; line-height: 1.5; }
 .config-light-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-bottom: 14px; max-height: 320px; overflow: auto; }

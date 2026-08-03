@@ -25,6 +25,7 @@ import { SecurityPanel } from './SecurityPanel'
 import { Sparkline } from './Sparkline'
 import { useSparkline } from './useSparkline'
 import { StateTimeline } from './StateTimeline'
+import { ConnectionStatus } from './ConnectionStatus'
 import { ThermostatKnob } from './ThermostatKnob'
 import { TrackedAircraftBadge } from './TrackedAircraftBadge'
 import { useAutoDim } from './useAutoDim'
@@ -116,8 +117,11 @@ interface StateAlert {
   id: number
   title: string
   message: string
-  tone: 'info' | 'warning' | 'success'
+  tone: 'info' | 'critical' | 'success'
 }
+
+/** How long an interaction holds the current page before rotation picks itself back up. */
+const AUTO_RESUME_MS = 90_000
 
 const discreteDomains = new Set(['light', 'switch', 'lock', 'cover', 'media_player', 'vacuum'])
 const alertingBinaryClasses = new Set(['door', 'garage_door', 'window', 'opening', 'moisture', 'smoke', 'gas', 'problem', 'safety'])
@@ -129,13 +133,17 @@ function createStateAlert(change: HAStateChange): StateAlert | null {
   if (!discreteDomains.has(domain) && !(domain === 'binary_sensor' && alertingBinaryClasses.has(deviceClass))) return null
 
   const title = String(entity.attributes.friendly_name ?? entity.entity_id.split('.')[1].replaceAll('_', ' '))
-  const dangerousState = ['on', 'open', 'opening', 'unlocked', 'jammed', 'problem'].includes(entity.state)
-  const safeState = ['off', 'closed', 'locked', 'docked', 'idle'].includes(entity.state)
+  // One colour rule across every domain, so the palette is readable at a glance from across the
+  // room without first working out what kind of device it was: anything that became open/on/
+  // unlocked is red, anything that became closed/off/locked is green. Lights and switches are
+  // deliberately included -- a light coming on at 3am is exactly the kind of thing worth noticing.
+  const openState = ['on', 'open', 'opening', 'unlocked', 'jammed', 'problem'].includes(entity.state)
+  const closedState = ['off', 'closed', 'locked', 'docked', 'idle'].includes(entity.state)
   return {
     id: change.id,
     title,
     message: `${formatEntityState(entity, previousState)} → ${formatEntityState(entity, entity.state)}`,
-    tone: dangerousState && domain !== 'light' && domain !== 'switch' ? 'warning' : safeState ? 'success' : 'info',
+    tone: openState ? 'critical' : closedState ? 'success' : 'info',
   }
 }
 
@@ -540,6 +548,7 @@ function App() {
   const [nightModeMessage, setNightModeMessage] = useState('Locks, garage, and indoor lighting')
   const { events, addEvent } = useEventLog()
   const alertTimers = useRef<Map<number, number>>(new Map())
+  const resumeTimer = useRef<number | undefined>(undefined)
   const handleStateChange = useCallback((change: HAStateChange) => {
     const alert = createStateAlert(change)
     if (!alert) return
@@ -567,7 +576,6 @@ function App() {
   } = useDashboardConfig()
   const section = dashboardSections.find((item) => item.id === activeSection) ?? dashboardSections[0]
   const insights = useInsights(activeSection === 'insights')
-  const connectionStatus = health === null ? 'Connecting' : health.home_assistant.connected ? 'Connected' : 'Offline'
   const weatherSlideCount = 4
   const weatherRotationInterval = 10_000
 
@@ -578,7 +586,9 @@ function App() {
 
   // Insights advances through its own panels first, so it holds for slides x interval before the next section.
   useEffect(() => {
-    if (!autoRotate || expandedTile) return
+    // Any open sheet also blocks rotation: now that a pause expires on its own, the page could
+    // otherwise slide out from behind whatever the user still has open.
+    if (!autoRotate || expandedTile || configOpen || securityOpen || eventLogOpen) return
     const interval = activeSection === 'weather' || activeSection === 'flights' ? weatherRotationInterval : rotationInterval
     const timer = window.setTimeout(() => {
       if (activeSection === 'insights' && insightsSlide < insightsSlides.length - 1) {
@@ -600,10 +610,11 @@ function App() {
       setActiveSection(dashboardSections[(currentIndex + 1) % dashboardSections.length].id)
     }, interval)
     return () => window.clearTimeout(timer)
-  }, [autoRotate, expandedTile, activeSection, insightsSlide, weatherSlide, flightsSlide, dashboardSections])
+  }, [autoRotate, expandedTile, configOpen, securityOpen, eventLogOpen, activeSection, insightsSlide, weatherSlide, flightsSlide, dashboardSections])
 
   useEffect(() => () => {
     alertTimers.current.forEach((timer) => window.clearTimeout(timer))
+    if (resumeTimer.current) window.clearTimeout(resumeTimer.current)
   }, [])
 
   useEffect(() => {
@@ -624,8 +635,24 @@ function App() {
 
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
 
+  /**
+   * Interaction pauses rotation so the page being used does not slide away mid-tap. A wall panel
+   * must not then sit on that page forever because somebody brushed it walking past, so the pause
+   * expires on its own and rotation resumes. Pressing the rotation button is treated differently
+   * on purpose: that is a deliberate "hold here", and it sticks until pressed again.
+   */
   function stopRotation() {
     setAutoRotate(false)
+    if (resumeTimer.current) window.clearTimeout(resumeTimer.current)
+    resumeTimer.current = window.setTimeout(() => setAutoRotate(true), AUTO_RESUME_MS)
+  }
+
+  function toggleRotation() {
+    if (resumeTimer.current) {
+      window.clearTimeout(resumeTimer.current)
+      resumeTimer.current = undefined
+    }
+    setAutoRotate((current) => !current)
   }
 
   /** Restarts the sidebar's hide countdown, rate-limited so pointer-move does not churn state. */
@@ -705,7 +732,7 @@ function App() {
       <div className="alert-stack" aria-live="polite" aria-atomic="false">
         {alerts.map((alert) => (
           <button key={alert.id} className={`state-alert ${alert.tone}`} onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))}>
-            <span>{alert.tone === 'warning' ? <AlertTriangle size={20} /> : <BellRing size={20} />}</span>
+            <span>{alert.tone === 'critical' ? <AlertTriangle size={22} /> : <BellRing size={22} />}</span>
             <div><strong>{alert.title}</strong><p>{alert.message}</p></div>
             <X size={17} />
           </button>
@@ -745,12 +772,12 @@ function App() {
             </button>
             <div><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p><h1>{section.label}</h1></div>
           </div>
-          <TrackedAircraftBadge />
+          <TrackedAircraftBadge entities={entities} />
           <div className="clock-block">
             <button className="nav-toggle" onClick={() => { stopRotation(); setEventLogOpen(true) }} title="View activity log" aria-label="View activity log"><History size={18} /></button>
-            <button className={`rotation-status ${autoRotate ? 'is-running' : ''}`} onClick={(event) => { event.stopPropagation(); setAutoRotate((current) => !current) }} title={autoRotate ? 'Pause automatic page rotation' : 'Resume automatic page rotation'}><RotateCw size={15} /><span>{autoRotate ? (activeSection === 'insights' ? `20s · ${insightsSlide + 1}/${insightsSlides.length}` : activeSection === 'weather' ? `10s · ${weatherSlide + 1}/${weatherSlideCount}` : activeSection === 'flights' ? `10s · ${flightsSlide + 1}/${flightsSlideCount}` : '20s') : 'Paused'}</span></button>
+            <button className={`rotation-status ${autoRotate ? 'is-running' : ''}`} onClick={(event) => { event.stopPropagation(); toggleRotation() }} title={autoRotate ? 'Pause automatic page rotation' : 'Resume automatic page rotation'}><RotateCw size={15} /><span>{autoRotate ? (activeSection === 'insights' ? `20s · ${insightsSlide + 1}/${insightsSlides.length}` : activeSection === 'weather' ? `10s · ${weatherSlide + 1}/${weatherSlideCount}` : activeSection === 'flights' ? `10s · ${flightsSlide + 1}/${flightsSlideCount}` : '20s') : 'Paused'}</span></button>
             <strong>{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
-            <span className={connectionStatus === 'Connected' ? 'connected' : connectionStatus === 'Offline' ? 'disconnected' : 'connecting'}><i />{connectionStatus}</span>
+            <ConnectionStatus health={health} entities={entities} onOpen={stopRotation} />
           </div>
         </header>
 

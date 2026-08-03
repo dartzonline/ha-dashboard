@@ -25,6 +25,13 @@ def test_health_has_connection_shape() -> None:
     assert response.json()["home_assistant"]["connected"] is True
 
 
+def test_config_exposes_ignored_entity_ids() -> None:
+    """The discovery tray reads this key on every load; an absent override must not omit it."""
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    assert isinstance(response.json()["ignoredEntityIds"], list)
+
+
 def test_service_requires_json_object() -> None:
     response = client.post("/api/services/light/turn_on", json=["not", "an", "object"])
     assert response.status_code == 422
