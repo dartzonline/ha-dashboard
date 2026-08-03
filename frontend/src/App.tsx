@@ -768,16 +768,16 @@ function App() {
               {sidebarOpen ? <PanelLeftClose size={21} /> : <Menu size={21} />}
             </button>
             <div><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p><h1>{section.label}</h1></div>
-            {/* Utilities live out here on the left so the header's centre belongs to the flight. */}
-            <div className="topbar-utilities">
-              <button className="nav-toggle" onClick={() => { stopRotation(); setEventLogOpen(true) }} title="View activity log" aria-label="View activity log"><History size={17} /></button>
-              <button className={`rotation-status ${autoRotate ? 'is-running' : ''}`} onClick={(event) => { event.stopPropagation(); toggleRotation() }} title={autoRotate ? 'Pause automatic page rotation' : 'Resume automatic page rotation'}><RotateCw size={13} /><span>{autoRotate ? (activeSection === 'insights' ? `${insightsSlide + 1}/${insightsSlides.length}` : activeSection === 'weather' ? `${weatherSlide + 1}/${weatherSlideCount}` : activeSection === 'flights' ? `${flightsSlide + 1}/${flightsSlideCount}` : '20s') : 'Paused'}</span></button>
-            </div>
           </div>
           <TrackedAircraftBadge entities={entities} />
           <div className="clock-block">
             <strong>{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
             <ConnectionStatus health={health} entities={entities} onOpen={stopRotation} />
+            {/* Tucked into the far corner so the header's centre belongs to the flight. */}
+            <div className="topbar-utilities">
+              <button className="nav-toggle" onClick={() => { stopRotation(); setEventLogOpen(true) }} title="View activity log" aria-label="View activity log"><History size={16} /></button>
+              <button className={`rotation-status ${autoRotate ? 'is-running' : ''}`} onClick={(event) => { event.stopPropagation(); toggleRotation() }} title={autoRotate ? 'Pause automatic page rotation' : 'Resume automatic page rotation'}><RotateCw size={13} /><span>{autoRotate ? (activeSection === 'insights' ? `${insightsSlide + 1}/${insightsSlides.length}` : activeSection === 'weather' ? `${weatherSlide + 1}/${weatherSlideCount}` : activeSection === 'flights' ? `${flightsSlide + 1}/${flightsSlideCount}` : '20s') : 'Paused'}</span></button>
+            </div>
           </div>
         </header>
 

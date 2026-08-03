@@ -1,4 +1,4 @@
-import { Crosshair, Locate } from 'lucide-react'
+import { Crosshair, Locate, PlaneTakeoff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { AirlineLogo } from './AirlineLogo'
 import { AircraftSilhouette, aircraftFamily } from './aircraftSilhouettes'
@@ -166,8 +166,17 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
   const aircraft = isTracked ? track?.flight ?? null : nearest
   const callsign = isTracked ? track?.flight?.callsign ?? track?.query ?? null : nearest?.callsign ?? null
 
-  // Nothing pinned and an empty sky is the normal quiet case, not an error worth a placeholder.
-  if (!callsign) return null
+  // An empty sky still holds the centre slot, so the header keeps its shape as flights come and go.
+  if (!callsign) {
+    return (
+      <div className="flight-banner is-idle" title="No tracked flight and no passenger jet overhead">
+        <span className="flight-mode" aria-hidden="true"><PlaneTakeoff size={15} /></span>
+        <div className="flight-body">
+          <div className="flight-identity"><strong>Sky clear</strong><em>No jets overhead</em></div>
+        </div>
+      </div>
+    )
+  }
 
   const type = aircraft?.type ?? null
   const from = isTracked ? track?.route?.fromCode ?? null : nearest?.fromCode ?? null
