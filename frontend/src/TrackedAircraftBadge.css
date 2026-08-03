@@ -33,7 +33,8 @@
 /* Silhouettes are drawn nose-up; the banner wants the profile flying across it. */
 .flight-silhouette {
   flex: 0 0 auto;
-  color: var(--muted);
+  color: var(--fg);
+  opacity: .85;
   transform: rotate(90deg);
 }
 
@@ -121,8 +122,10 @@ span.flight-logo {
 .flight-delay.tone-muted { color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); }
 
 /* Tone follows the flight's own state, applied to the two things that carry identity. */
-.flight-banner.tone-good .flight-silhouette, .flight-banner.tone-good .flight-mode { color: var(--good); }
-.flight-banner.tone-accent .flight-silhouette, .flight-banner.tone-accent .flight-mode { color: var(--accent); }
+.flight-banner.tone-good .flight-silhouette { color: var(--good); opacity: 1; }
+.flight-banner.tone-good .flight-mode { color: var(--good); }
+.flight-banner.tone-accent .flight-silhouette { color: var(--accent); opacity: 1; }
+.flight-banner.tone-accent .flight-mode { color: var(--accent); }
 
 @media (max-width: 1240px) {
   .flight-identity em { display: none; }
