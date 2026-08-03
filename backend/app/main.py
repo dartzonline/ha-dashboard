@@ -60,7 +60,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await close_http_client()
 
 
-app = FastAPI(title="Home Panel", version="1.0.2", lifespan=lifespan)
+app = FastAPI(title="Home Panel", version="1.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -237,6 +237,7 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
         "sections": overrides.get("sections"),
         "nightModeIndoorLights": overrides.get("nightModeIndoorLights") or sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT),
         "energyRatePerKwh": overrides.get("energyRatePerKwh") or default_energy_rate(),
+        "ignoredEntityIds": overrides.get("ignoredEntityIds") or [],
     }
 
 
@@ -276,9 +277,8 @@ async def state(entity_id: str, client: HomeAssistantClient = Depends(get_client
 async def registry() -> dict[str, Any]:
     """Joined entity/device/area registry metadata -- see docs/auto-entity-discovery.md.
 
-    Not used by the frontend yet (that's phase 2+ of the design doc); this is the phase-0
-    plumbing, exposed now so its output can be sanity-checked against a real Home Assistant
-    instance before any classification logic is built on top of it.
+    Consumed by useEntityDiscovery to tell a diagnostic sensor apart from a tile worth proposing;
+    `/api/states` carries none of that, which is why this goes over the WebSocket API instead.
     """
     try:
         return await registry_snapshot.get()

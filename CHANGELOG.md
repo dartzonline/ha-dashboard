@@ -3,6 +3,49 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.1.0 - 2026-08-02
+
+**Service status panel.** The connection indicator in the header is now a button. Tap it and it
+expands into a card listing every service the dashboard depends on — Home Assistant, flight
+positions, flight schedules, weather, rain radar — each with its real state and, when something is
+wrong, the specific thing to do about it. This exists because of the 1.0.2 bug: the flight board
+degrades to an empty list whether the sky is quiet, a key is missing, or OpenSky is rate-limiting,
+and there was no way to tell those apart from the screen. Now there is.
+
+**Aircraft badge in the header.** The slot between the page title and the clock now shows the
+nearest *airliner* overhead — an aircraft silhouette picked from its type (twinjet, widebody,
+four-engine, regional, turboprop, business jet), the airline's logo, callsign, and origin →
+destination. Light aircraft, helicopters and business jets are filtered out; Georgetown Municipal
+is a training field, so without that filter this would show a Cessna doing circuits most of the
+day. When a flight is pinned from the Flights page, the badge alternates between the pinned flight
+and the nearest one every 30 seconds, labelled so the two are never confused.
+
+**Automatic entity discovery is live.** Home Assistant's entity/device/area registries are now
+read over the WebSocket API, which is the only place `entity_category`, `area_id` and
+`disabled_by` exist. New devices are classified into a section, tile kind and icon, and offered in
+a **New devices** tray in Configure — suggest-and-confirm, never a silent auto-add, since a wrong
+tile on a wall display is worse than one placed by hand. Dismissals persist. A dry run over this
+household's real 833 live entities: 621 correctly ignored as diagnostic/config noise, 5 proposed,
+86 flagged for review. Two rules came directly out of that run — companion-app phone telemetry
+(step counts, SSID, storage) is skipped by recognising devices that own a `device_tracker`, and
+helper domains (`input_*`, `timer`, `notify`, `calendar`) never earn a tile.
+
+**Visual redesign.** A calmer, warmer palette replaces the neon-cyan-and-glow treatment: one
+restrained accent used sparingly instead of as system-wide decoration, the technical grid
+background removed, gradient bezels and glow shadows dropped, and ALL-CAPS tracking pulled back to
+the few tiny labels where it earns its place. Also fixed a real contrast bug — the active tile icon
+was rendering dark-on-dark and was effectively invisible.
+
+**Louder, clearer state alerts.** State-change toasts are substantially bigger and now colour-coded
+by meaning across every domain: red when something opened, turned on or unlocked; green when it
+closed, turned off or locked. Colour is carried by three agreeing signals (edge, filled icon chip,
+tinted surface) so it survives the after-sunset auto-dim. The activity log uses the same language.
+
+**Rotation resumes by itself.** Interacting with the dashboard pauses page rotation so the page
+being used doesn't slide away — but that pause now expires after 90 seconds, so a wall panel
+doesn't sit on one page forever because somebody brushed past it. Pressing the rotation button is
+still a deliberate, indefinite hold. Rotation also no longer advances behind an open sheet.
+
 ## 1.0.2 - 2026-08-02
 
 **The actual Flights fix.** The 1.0.1 diagnostic logging paid off immediately:

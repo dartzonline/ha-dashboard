@@ -4,22 +4,22 @@
 .thermo-knob svg:active { cursor: grabbing; }
 .thermo-knob svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 50%; }
 .thermo-track { fill: none; stroke-width: 9; stroke-linecap: round; }
-.thermo-progress { fill: none; stroke-width: 9; stroke-linecap: round; transition: d .12s linear; filter: drop-shadow(0 0 6px rgba(43, 185, 255, .35)); }
-.thermo-handle { fill: #f2fbff; stroke: rgba(9, 20, 30, .75); stroke-width: 1.6; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .45)); }
-.mode-heating .thermo-progress { filter: drop-shadow(0 0 6px rgba(255, 138, 76, .4)); }
+.thermo-progress { fill: none; stroke-width: 9; stroke-linecap: round; transition: d .12s linear; filter: none; }
+.thermo-handle { fill: var(--text); stroke: rgba(8, 8, 10, .8); stroke-width: 1.6; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .45)); }
+.mode-heating .thermo-progress { filter: none; }
 .mode-off .thermo-progress, .mode-idle .thermo-progress { filter: none; }
 
 .thermo-readout { position: absolute; top: 50%; left: 50%; display: grid; justify-items: center; gap: 1px; transform: translate(-50%, -54%); pointer-events: none; text-align: center; }
-.thermo-mode { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: .55rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+.thermo-mode { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: .58rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
 .thermo-readout strong { font: 750 1.6rem var(--mono); line-height: 1; letter-spacing: -.04em; }
 .thermo-readout strong i { font-size: .9rem; font-style: normal; vertical-align: top; }
 .thermo-readout small { color: var(--muted); font-size: .56rem; white-space: nowrap; }
-.mode-cooling .thermo-mode { color: #7de3ff; }
-.mode-heating .thermo-mode { color: #ffb066; }
+.mode-cooling .thermo-mode { color: var(--accent); }
+.mode-heating .thermo-mode { color: var(--warn); }
 
 .thermo-steppers { position: absolute; bottom: 0; display: flex; justify-content: center; gap: 8px; }
 .thermo-steppers button { width: 30px; height: 28px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-raised); display: grid; place-items: center; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease; }
-.thermo-steppers button:hover:not(:disabled) { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--accent-soft); }
+.thermo-steppers button:hover:not(:disabled) { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
 .thermo-knob.is-disabled { opacity: .55; }
 
 .thermo-knob.size-tile { width: 118px; padding-bottom: 4px; }

@@ -2,14 +2,16 @@
    A themed container sets --sky-a / --sky-b / --sky-glow from the .sky-* class below and paints its
    own background from them, so the tint and the animation always agree. */
 
-.sky-sunny  { --sky-a: #2a3550; --sky-b: #16202f; --sky-glow: #f2c66a; --sky-ink: #ffdf9e; }
-.sky-cloudy { --sky-a: #222d3f; --sky-b: #141c28; --sky-glow: #9db4d0; --sky-ink: #cfdcec; }
-.sky-rain   { --sky-a: #1b2739; --sky-b: #101823; --sky-glow: #6ea8e6; --sky-ink: #b8d4f2; }
-.sky-storm  { --sky-a: #1d2133; --sky-b: #0d1019; --sky-glow: #9b8ef0; --sky-ink: #d0c9ff; }
-.sky-snow   { --sky-a: #253044; --sky-b: #151d29; --sky-glow: #cfe4f7; --sky-ink: #e8f3ff; }
-.sky-fog    { --sky-a: #242c37; --sky-b: #161c24; --sky-glow: #a8b4c0; --sky-ink: #d5dde5; }
-.sky-sunny.is-night { --sky-a: #171f38; --sky-b: #0a0f1c; --sky-glow: #8fa8e8; --sky-ink: #cbd9ff; }
-.is-night { --sky-a: #151b28; --sky-b: #0a0e16; }
+/* Sky hues are deliberately low-chroma so a weather panel still belongs to the warm-neutral
+   shell; the condition reads from the glow/ink pair and the animation, not from a saturated wash. */
+.sky-sunny  { --sky-a: #2c2f3a; --sky-b: #1a1b21; --sky-glow: #e8be74; --sky-ink: #f2d9a6; }
+.sky-cloudy { --sky-a: #262830; --sky-b: #191a1f; --sky-glow: #aeb3bc; --sky-ink: #d7d8d8; }
+.sky-rain   { --sky-a: #212630; --sky-b: #16181d; --sky-glow: #7f9ee0; --sky-ink: #c4d2ea; }
+.sky-storm  { --sky-a: #24252f; --sky-b: #141419; --sky-glow: #9a93c6; --sky-ink: #cec9e3; }
+.sky-snow   { --sky-a: #2a2c33; --sky-b: #1a1b20; --sky-glow: #dde2e9; --sky-ink: #eceff2; }
+.sky-fog    { --sky-a: #282a2e; --sky-b: #1a1b1e; --sky-glow: #b4b1ac; --sky-ink: #dedcd7; }
+.sky-sunny.is-night { --sky-a: #1e2130; --sky-b: #131419; --sky-glow: #8fa0c8; --sky-ink: #ccd3e6; }
+.is-night { --sky-a: #1b1c22; --sky-b: #121317; }
 
 /* Shared surface treatment, so the weather hero and a city card read as the same object. */
 .sky-surface {
@@ -37,7 +39,7 @@
   height: 74px;
   border-radius: 50%;
   background: radial-gradient(circle at 40% 36%, #ffe7a8, var(--sky-glow) 52%, rgba(242, 198, 106, 0) 72%);
-  box-shadow: 0 0 46px 12px rgba(242, 198, 106, .2);
+  box-shadow: 0 0 42px 10px rgba(232, 190, 116, .14);
   animation: sky-sun-breathe 6s ease-in-out infinite;
 }
 
@@ -62,7 +64,7 @@
   height: 54px;
   border-radius: 50%;
   background: radial-gradient(circle at 34% 32%, #f2f6ff, #b9c8e8 62%, #8fa3c8);
-  box-shadow: 0 0 34px 8px rgba(160, 185, 240, .22);
+  box-shadow: 0 0 30px 7px rgba(190, 198, 220, .16);
 }
 
 .sky-star {

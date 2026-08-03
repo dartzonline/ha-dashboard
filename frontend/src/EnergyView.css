@@ -1,12 +1,12 @@
 .energy-view { margin-bottom: 16px; padding: 14px 12px 12px; border-radius: 10px; background: var(--surface-raised); }
 .energy-view > header { padding: 0 2px 10px; border: 0; display: flex; align-items: center; justify-content: space-between; }
-.energy-view > header > div { display: flex; align-items: center; gap: 7px; color: var(--accent-strong); }
-.energy-view h3 { margin: 0; color: var(--text); font-size: .82rem; }
+.energy-view > header > div { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.energy-view h3 { margin: 0; color: var(--text); font-size: .86rem; font-weight: 650; }
 .energy-view > header > span { color: var(--muted); font-size: .65rem; }
 
 .energy-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin-bottom: 10px; }
 .energy-stats div { min-width: 0; padding: 8px; border-radius: 7px; background: var(--surface); display: flex; flex-direction: column; }
-.energy-stats span { color: var(--muted); font-size: .58rem; text-transform: uppercase; }
+.energy-stats span { color: var(--muted); font-size: .6rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
 .energy-stats strong { margin-top: 2px; font-size: .78rem; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .energy-stats .trend-up { color: var(--danger); flex-shrink: 0; }
 .energy-stats .trend-down { color: var(--good); flex-shrink: 0; }
@@ -15,9 +15,9 @@
 .energy-bill {
   margin-bottom: 10px;
   padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--border));
   border-radius: 9px;
-  background: linear-gradient(120deg, color-mix(in srgb, var(--warn-soft) 55%, var(--surface)), var(--surface));
+  background: color-mix(in srgb, var(--surface) 70%, var(--warn-soft));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -28,13 +28,13 @@
 .energy-bill-main { min-width: 0; display: flex; align-items: center; gap: 11px; }
 .energy-bill-icon { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); display: grid; place-items: center; }
 .energy-bill-main > div { min-width: 0; display: grid; }
-.energy-bill-main span { color: var(--muted); font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.energy-bill-main span { color: var(--muted); font-size: .62rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .energy-bill-main strong { font-size: 1.5rem; font-weight: 750; letter-spacing: -.03em; line-height: 1.15; }
 .energy-bill-main small { color: var(--muted); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; }
 
 .energy-bill-side { display: flex; align-items: center; gap: 8px; }
 .energy-bill-side > div { padding: 7px 11px; border-radius: 8px; background: var(--surface); display: grid; gap: 1px; }
-.energy-bill-side span { color: var(--muted); font-size: .58rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+.energy-bill-side span { color: var(--muted); font-size: .6rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
 .energy-bill-side strong { font-size: .95rem; white-space: nowrap; }
 
 .energy-rate-value { padding: 0; border: 0; background: none; color: var(--text); display: flex; align-items: baseline; gap: 4px; cursor: pointer; font: inherit; }
@@ -50,7 +50,7 @@
 .energy-chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 @media (min-width: 1000px) { .energy-chart-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
-.energy-chart-title { margin: 0 0 4px; color: var(--accent-strong); display: flex; align-items: center; gap: 6px; font-size: .72rem; }
+.energy-chart-title { margin: 0 0 4px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 600; }
 .energy-chart { height: 196px; border-top: 1px solid var(--border); padding-top: 6px; }
 .energy-chart-empty { height: 100%; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: .72rem; }
 .energy-chart-empty.loading svg { animation: energy-pulse 1.2s ease-in-out infinite; }
@@ -65,10 +65,10 @@
 .energy-daily-chart { height: 196px; }
 
 .energy-whole-home { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 10px; border-radius: 7px; background: var(--surface); color: var(--muted); font-size: .68rem; }
-.energy-whole-home svg { color: var(--accent-strong); flex-shrink: 0; }
+.energy-whole-home svg { color: var(--accent); flex-shrink: 0; }
 
 .energy-view-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 16px; color: var(--muted); text-align: center; }
-.energy-view-empty svg { color: var(--accent-strong); }
+.energy-view-empty svg { color: var(--muted); }
 .energy-view-empty p { margin: 0; color: var(--text); font-size: .9rem; font-weight: 600; }
 .energy-view-empty span { font-size: .74rem; max-width: 320px; }
 

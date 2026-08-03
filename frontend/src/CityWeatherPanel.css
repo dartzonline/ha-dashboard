@@ -3,7 +3,7 @@
   inset: 0;
   z-index: 60;
   padding: 4vh 4vw;
-  background: rgba(3, 8, 16, .72);
+  background: rgba(8, 8, 10, .72);
   display: grid;
   place-items: center;
   backdrop-filter: blur(4px);
@@ -18,9 +18,9 @@
   max-height: 92vh;
   overflow-y: auto;
   padding: 18px 20px 22px;
-  border: 1px solid color-mix(in srgb, var(--marker-color) 38%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--marker-color) 24%, var(--border));
   border-radius: 14px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .55);
 }
 
 /* The animated sky sits behind everything; content is lifted out of it. */
@@ -37,13 +37,13 @@
 
 .city-weather-sheet > header span {
   color: var(--marker-color);
-  font-size: .62rem;
-  font-weight: 800;
-  letter-spacing: .16em;
+  font-size: .64rem;
+  font-weight: 600;
+  letter-spacing: .1em;
   text-transform: uppercase;
 }
 
-.city-weather-sheet > header h2 { margin: 3px 0 2px; font-size: 1.5rem; letter-spacing: -.03em; }
+.city-weather-sheet > header h2 { margin: 3px 0 2px; font-size: 1.5rem; font-weight: 700; letter-spacing: -.025em; }
 .city-weather-sheet > header small { color: var(--muted); font-size: .78rem; }
 
 .city-weather-sheet > header button {
@@ -64,9 +64,9 @@
 .city-weather-sheet h3 {
   margin: 18px 0 8px;
   color: var(--muted);
-  font-size: .66rem;
-  font-weight: 800;
-  letter-spacing: .14em;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .09em;
   text-transform: uppercase;
 }
 
@@ -90,7 +90,7 @@
   place-items: center;
 }
 
-.city-weather-now > strong { font-size: 2.6rem; font-weight: 750; letter-spacing: -.05em; line-height: 1; }
+.city-weather-now > strong { font-size: 2.6rem; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
 .city-weather-now p { margin: 0; font-size: .92rem; font-weight: 600; }
 .city-weather-now small { color: var(--muted); font-size: .76rem; }
 
@@ -106,7 +106,7 @@
   padding: 9px 8px;
   border-radius: 9px;
   /* Translucent so the themed sky reads through the cards instead of being boxed out. */
-  background: rgba(10, 17, 27, .55);
+  background: color-mix(in srgb, var(--canvas) 55%, transparent);
   backdrop-filter: blur(3px);
   display: grid;
   justify-items: center;
@@ -116,7 +116,7 @@
 
 .city-weather-stats svg { color: var(--marker-color); }
 .city-weather-stats strong { font-size: .88rem; white-space: nowrap; }
-.city-weather-stats span { color: var(--muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .07em; }
+.city-weather-stats span { color: var(--muted); font-size: .62rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
 
 .city-weather-hours, .city-weather-days {
   display: grid;
@@ -130,7 +130,7 @@
   padding: 10px 6px;
   border: 1px solid var(--border);
   border-radius: 9px;
-  background: rgba(10, 17, 27, .55);
+  background: color-mix(in srgb, var(--canvas) 55%, transparent);
   backdrop-filter: blur(3px);
   display: grid;
   justify-items: center;

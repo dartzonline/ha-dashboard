@@ -1,0 +1,144 @@
+/* Topbar connection chip and the service panel it expands into. Colours come entirely from the
+   shared design tokens so this follows the rest of the theme rather than defining its own. */
+.connection-wrap { position: relative; flex: 0 0 auto; }
+
+.connection-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font: inherit;
+  font-size: .74rem;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .16s ease, color .16s ease, background .16s ease;
+}
+
+.connection-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+/* The count of things not currently healthy, so the collapsed chip still carries the headline. */
+.connection-chip em {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  color: var(--canvas);
+  background: currentColor;
+  display: grid;
+  place-items: center;
+  font-size: .62rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.connection-chip.is-ok { color: var(--good); border-color: color-mix(in srgb, var(--good) 34%, var(--border)); }
+.connection-chip.is-degraded, .connection-chip.is-unconfigured { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 38%, var(--border)); }
+.connection-chip.is-down { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 42%, var(--border)); }
+.connection-chip:hover { background: var(--surface-raised); }
+
+.connection-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(310px, calc(100vw - 24px));
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  animation: connection-panel-in .14s ease-out;
+}
+
+@keyframes connection-panel-in { from { opacity: 0; transform: translateY(-4px); } }
+
+.connection-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 9px 7px;
+}
+
+.connection-panel > header strong { font-size: .78rem; font-weight: 700; }
+
+.connection-panel > header button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.connection-panel > header button:hover { color: var(--text); background: var(--surface); }
+
+.connection-panel ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1px; }
+
+.connection-panel li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: 8px;
+}
+
+.connection-panel li:hover { background: var(--surface); }
+.connection-panel li > div { min-width: 0; display: grid; gap: 1px; }
+.connection-panel li strong { font-size: .76rem; font-weight: 650; }
+.connection-panel li small { color: var(--muted); font-size: .69rem; line-height: 1.35; }
+
+/* Only present when there is a concrete next step, so it should read as advice, not noise. */
+.connection-panel li em {
+  margin-top: 3px;
+  color: var(--warn);
+  font-size: .66rem;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.connection-dot {
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--canvas);
+  background: var(--muted);
+}
+
+.connection-panel li.is-ok .connection-dot { background: var(--good); }
+.connection-panel li.is-degraded .connection-dot, .connection-panel li.is-unconfigured .connection-dot { background: var(--warn); }
+.connection-panel li.is-down .connection-dot { background: var(--danger); }
+
+.connection-panel > footer {
+  padding: 7px 9px 6px;
+  color: var(--muted);
+  font-size: .64rem;
+}
+
+@media (max-width: 680px) {
+  .connection-chip { height: 28px; padding: 0 8px; font-size: .66rem; }
+  .connection-chip span { display: none; }
+  .connection-panel { width: min(290px, calc(100vw - 20px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-panel { animation: none; }
+}

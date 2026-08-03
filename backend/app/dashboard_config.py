@@ -27,6 +27,9 @@ class DashboardConfigPayload(BaseModel):
     sections: list[DashboardSection] | None = None
     nightModeIndoorLights: list[str] | None = None
     energyRatePerKwh: float | None = None
+    # Entities the household has explicitly declined from the "New devices" tray, so discovery
+    # (docs/auto-entity-discovery.md) stops re-proposing them every session.
+    ignoredEntityIds: list[str] | None = None
 
 
 def _storage_path() -> Path:

@@ -30,6 +30,8 @@ export interface DashboardConfigResponse {
   sections: DashboardSection[] | null
   nightModeIndoorLights: string[]
   energyRatePerKwh: number
+  /** Entities dismissed from the "New devices" tray, so discovery stops re-proposing them. */
+  ignoredEntityIds: string[]
 }
 
 export interface NightModeResponse {

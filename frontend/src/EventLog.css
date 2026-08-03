@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(7, 12, 19, .5);
+  background: rgba(8, 8, 10, .58);
   animation: event-log-backdrop-in .18s ease-out;
 }
 
@@ -16,9 +16,9 @@
   width: min(380px, 100%);
   display: flex;
   flex-direction: column;
-  background: linear-gradient(165deg, #111a28, #0d1420 60%, #0b121c);
-  border-left: 1px solid color-mix(in srgb, var(--border) 80%, #fff);
-  box-shadow: -24px 0 60px rgba(0, 0, 0, .35);
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -24px 0 60px rgba(0, 0, 0, .45);
   animation: event-log-drawer-in .22s ease-out;
 }
 
@@ -64,7 +64,7 @@
 
 .event-log-header button:hover {
   color: var(--text);
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--surface-raised) 60%, var(--accent-soft));
 }
 
 .event-log-body {
@@ -95,9 +95,10 @@
   padding: 6px 4px;
   color: var(--muted);
   font-size: .68rem;
-  letter-spacing: .06em;
+  font-weight: 600;
+  letter-spacing: .07em;
   text-transform: uppercase;
-  background: linear-gradient(180deg, #0d1420 70%, transparent);
+  background: linear-gradient(180deg, var(--surface) 70%, transparent);
 }
 
 .event-log-group ul {
@@ -113,23 +114,27 @@
   padding: 9px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--surface);
+  background: var(--surface-raised);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }
 
+/* Same tone language as the state-change toasts: red = opened / on / unlocked,
+   green = closed / off / locked, accent = everything else. */
 .event-log-row > i {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--accent);
 }
 
 .event-log-row.tone-success > i { background: var(--good); }
-.event-log-row.tone-warning > i { background: var(--warn); }
+.event-log-row.tone-critical > i { background: var(--danger); }
 .event-log-row.tone-info > i { background: var(--accent); }
+.event-log-row.tone-critical { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.event-log-row.tone-success { border-color: color-mix(in srgb, var(--good) 26%, var(--border)); }
 
 .event-log-row-main {
   min-width: 0;

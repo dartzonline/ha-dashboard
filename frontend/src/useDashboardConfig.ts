@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiUrl } from './api'
 import { dashboardSections as defaultSections } from './dashboardConfig'
+import { primeIgnoredEntityIds } from './useEntityDiscovery'
 import type { DashboardConfigResponse, DashboardSection } from './types'
 
 /** Sections rendered from the shared tile grid; Insights/World/Weather have dedicated views that ignore section.tiles. */
@@ -38,6 +39,9 @@ export function useDashboardConfig() {
         }
         setNightModeIndoorLights(data.nightModeIndoorLights)
         if (Number.isFinite(data.energyRatePerKwh)) setEnergyRatePerKwh(data.energyRatePerKwh)
+        // Entity discovery owns this slice (it writes dismissals back through the same merging PUT),
+        // but this response already carries it -- hand it over instead of fetching /api/config twice.
+        primeIgnoredEntityIds(data.ignoredEntityIds ?? [])
       })
       .catch(() => undefined)
       .finally(() => { if (!stopped) setLoading(false) })
@@ -75,6 +79,8 @@ export function useDashboardConfig() {
     setSections(defaultSections)
     setNightModeIndoorLights(data.nightModeIndoorLights)
     if (Number.isFinite(data.energyRatePerKwh)) setEnergyRatePerKwh(data.energyRatePerKwh)
+    // A reset clears the stored overrides, dismissals included, so discovery starts proposing again.
+    primeIgnoredEntityIds(data.ignoredEntityIds ?? [])
     setCustomized(false)
     return { sections: defaultSections, nightModeIndoorLights: data.nightModeIndoorLights }
   }
