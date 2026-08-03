@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
+from .entity_registry import RegistrySnapshot
 from .event_bridge import EventBridge
 from .flights import close_http_client, get_http_client
 from .flights import router as flights_router
@@ -23,6 +24,7 @@ from .ha_client import HomeAssistantClient
 settings = load_settings()
 bridge = EventBridge(settings)
 ha_client = HomeAssistantClient(settings)
+registry_snapshot = RegistrySnapshot(bridge)
 
 NIGHT_MODE_INDOOR_LIGHTS_DEFAULT = {
     "light.smart_wi_fi_switch_2",
@@ -268,6 +270,20 @@ async def state(entity_id: str, client: HomeAssistantClient = Depends(get_client
         return await client.state(entity_id)
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
+
+
+@app.get("/api/registry", dependencies=[Depends(require_configuration)])
+async def registry() -> dict[str, Any]:
+    """Joined entity/device/area registry metadata -- see docs/auto-entity-discovery.md.
+
+    Not used by the frontend yet (that's phase 2+ of the design doc); this is the phase-0
+    plumbing, exposed now so its output can be sanity-checked against a real Home Assistant
+    instance before any classification logic is built on top of it.
+    """
+    try:
+        return await registry_snapshot.get()
+    except (RuntimeError, TimeoutError) as error:
+        raise HTTPException(502, f"Home Assistant registry request failed: {error}") from error
 
 
 @app.get("/api/entity-picture/{entity_id}", dependencies=[Depends(require_configuration)])
