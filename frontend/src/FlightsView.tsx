@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Info, Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { AirlineLogo } from './AirlineLogo'
 import { ShowcaseAircraft, type ShowcaseAircraftType } from './aircraftSilhouettes'
+import { AllRoutesMap } from './AllRoutesMap'
 import { apiUrl } from './api'
 import { RouteMap } from './RouteMap'
 import type { HAEntity } from './types'
@@ -277,6 +278,14 @@ function isMappable(entry: TrackEntry) {
 const MAP_FOCUS_HOLD_MS = 45_000
 /** How long each mappable flight holds the map when nothing is selected. */
 const MAP_ROTATE_MS = 20_000
+/** Minimum horizontal drag that counts as a swipe between map screens rather than a tap. */
+const MAP_SWIPE_PX = 45
+
+/** One screen in the map rotation: a single flight's route, or every tracked flight at once. */
+type MapScreen = { kind: 'single'; entry: TrackEntry } | { kind: 'all' }
+
+/** Sentinel focus value for the combined map, which has no flight number to key on. */
+const ALL_ROUTES_FOCUS = '__all__'
 
 /**
  * One pinned flight, in full. Every flight on the board gets one of these rather than the old
@@ -568,12 +577,6 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
   const [mapFocus, setMapFocus] = useState<string | null>(null)
   const [mapRotation, setMapRotation] = useState(0)
 
-  useEffect(() => {
-    if (mappableFlights.length <= 1 || mapFocus) return
-    const timer = window.setInterval(() => setMapRotation((value) => value + 1), MAP_ROTATE_MS)
-    return () => window.clearInterval(timer)
-  }, [mappableFlights.length, mapFocus])
-
   // A wall panel should not stay on someone's stale tap, so a chosen flight releases the map back
   // to the rotation on its own.
   useEffect(() => {
@@ -582,12 +585,54 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     return () => window.clearTimeout(timer)
   }, [mapFocus])
 
+  // The per-flight maps plus, once there is more than one flight, a combined view of all of them.
+  // Modelled as one extra screen in the same rotation rather than another slide, so the overview
+  // arrives in the same swipe as the flights it summarises.
+  const mapScreens = useMemo<MapScreen[]>(() => {
+    const screens: MapScreen[] = mappableFlights.map((entry) => ({ kind: 'single', entry }))
+    if (mappableFlights.length > 1) screens.push({ kind: 'all' })
+    return screens
+  }, [mappableFlights])
+
+  useEffect(() => {
+    if (mapScreens.length <= 1 || mapFocus) return
+    const timer = window.setInterval(() => setMapRotation((value) => value + 1), MAP_ROTATE_MS)
+    return () => window.clearInterval(timer)
+  }, [mapScreens.length, mapFocus])
+
   // Derived rather than stored: flights are unpinned between polls, so an index into a shrinking
   // list has to wrap on read, and a focused flight that landed and expired falls back to rotation.
-  const mapped = mappableFlights.length > 0
-    ? mappableFlights.find((entry) => entry.query === mapFocus)
-      ?? mappableFlights[mapRotation % mappableFlights.length]
-    : null
+  const focusIndex = mapFocus === ALL_ROUTES_FOCUS
+    ? mapScreens.findIndex((screen) => screen.kind === 'all')
+    : mapScreens.findIndex((screen) => screen.kind === 'single' && screen.entry.query === mapFocus)
+  const screenIndex = mapScreens.length === 0
+    ? -1
+    : focusIndex >= 0 ? focusIndex : mapRotation % mapScreens.length
+  const screen = screenIndex >= 0 ? mapScreens[screenIndex] : null
+  const mapped = screen?.kind === 'single' ? screen.entry : null
+
+  function stepMap(delta: number) {
+    if (mapScreens.length <= 1) return
+    const next = (screenIndex + delta + mapScreens.length) % mapScreens.length
+    const target = mapScreens[next]
+    setMapFocus(target.kind === 'all' ? ALL_ROUTES_FOCUS : target.entry.query ?? null)
+  }
+
+  // Horizontal drags move between map screens; a vertical drag is the page's own scroll/swipe and
+  // must pass through untouched.
+  const mapSwipe = useRef<{ x: number; y: number } | null>(null)
+  function onMapPointerDown(event: React.PointerEvent) {
+    mapSwipe.current = { x: event.clientX, y: event.clientY }
+  }
+  function onMapPointerUp(event: React.PointerEvent) {
+    const start = mapSwipe.current
+    mapSwipe.current = null
+    if (!start) return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    if (Math.abs(deltaX) < MAP_SWIPE_PX || Math.abs(deltaX) <= Math.abs(deltaY)) return
+    stepMap(deltaX < 0 ? 1 : -1)
+  }
 
   return (
     <section className="flights-view" aria-label="Flight tracker">
@@ -705,30 +750,51 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
 
         {slide === 1 && (
           <section className="flights-panel track-panel" aria-label="Track a flight">
-            {mapped ? (
-              <div className="track-stage">
-                <RouteMap
-                  from={{
-                    code: mapped.route?.fromCode ?? null,
-                    city: mapped.route?.fromCity ?? null,
-                    lat: mapped.route?.fromLat ?? null,
-                    lon: mapped.route?.fromLon ?? null,
-                  }}
-                  to={{
-                    code: mapped.route?.toCode ?? null,
-                    city: mapped.route?.toCity ?? null,
-                    lat: mapped.route?.toLat ?? null,
-                    lon: mapped.route?.toLon ?? null,
-                  }}
-                  position={mapped.flight ? { lat: mapped.flight.lat, lon: mapped.flight.lon, trackDeg: mapped.flight.trackDeg } : null}
-                  progress={mapped.progress}
-                  callsign={mapped.flight?.callsign ?? mapped.query}
-                  caption={mapped.mode === 'await' ? 'Route · awaiting position' : mapped.etaLine ?? shortModeLabel(mapped.mode)}
-                />
-                {mappableFlights.length > 1 && (
-                  <div className="track-stage-dots" aria-hidden="true">
-                    {mappableFlights.map((entry) => (
-                      <i key={entry.query ?? entry.flight?.icao24} className={entry === mapped ? 'is-active' : ''} />
+            {screen ? (
+              <div className="track-stage" onPointerDown={onMapPointerDown} onPointerUp={onMapPointerUp}>
+                {screen.kind === 'all' ? (
+                  <AllRoutesMap
+                    routes={mappableFlights.map((entry) => ({
+                      key: entry.query ?? entry.flight?.icao24 ?? '',
+                      callsign: entry.flight?.callsign ?? entry.query ?? '—',
+                      from: { code: entry.route?.fromCode ?? null, lat: entry.route?.fromLat ?? null, lon: entry.route?.fromLon ?? null },
+                      to: { code: entry.route?.toCode ?? null, lat: entry.route?.toLat ?? null, lon: entry.route?.toLon ?? null },
+                      position: entry.flight ? { lat: entry.flight.lat, lon: entry.flight.lon, trackDeg: entry.flight.trackDeg } : null,
+                      progress: entry.progress,
+                      isLanded: entry.mode === 'landed',
+                    }))}
+                  />
+                ) : (
+                  <RouteMap
+                    from={{
+                      code: screen.entry.route?.fromCode ?? null,
+                      city: screen.entry.route?.fromCity ?? null,
+                      lat: screen.entry.route?.fromLat ?? null,
+                      lon: screen.entry.route?.fromLon ?? null,
+                    }}
+                    to={{
+                      code: screen.entry.route?.toCode ?? null,
+                      city: screen.entry.route?.toCity ?? null,
+                      lat: screen.entry.route?.toLat ?? null,
+                      lon: screen.entry.route?.toLon ?? null,
+                    }}
+                    position={screen.entry.flight ? { lat: screen.entry.flight.lat, lon: screen.entry.flight.lon, trackDeg: screen.entry.flight.trackDeg } : null}
+                    progress={screen.entry.progress}
+                    callsign={screen.entry.flight?.callsign ?? screen.entry.query}
+                    caption={screen.entry.mode === 'await' ? 'Route · awaiting position' : screen.entry.etaLine ?? shortModeLabel(screen.entry.mode)}
+                  />
+                )}
+                {mapScreens.length > 1 && (
+                  <div className="track-stage-dots">
+                    {mapScreens.map((item, index) => (
+                      <button
+                        key={item.kind === 'all' ? ALL_ROUTES_FOCUS : item.entry.query ?? item.entry.flight?.icao24 ?? index}
+                        type="button"
+                        className={`${index === screenIndex ? 'is-active' : ''} ${item.kind === 'all' ? 'is-all' : ''}`.trim()}
+                        onClick={() => setMapFocus(item.kind === 'all' ? ALL_ROUTES_FOCUS : item.entry.query ?? null)}
+                        aria-label={item.kind === 'all' ? 'Show every tracked flight on one map' : `Show ${item.entry.query ?? 'this flight'} on the map`}
+                        aria-current={index === screenIndex}
+                      />
                     ))}
                   </div>
                 )}
