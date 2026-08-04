@@ -51,6 +51,13 @@ class TestPinExpiry:
         long_landed = pin(seen_at=now - 100, landed_at=now - flights.TRACK_LINGER_S - 1)
         assert flights._pin_is_expired(long_landed, now) is True
 
+    def test_a_landed_flight_is_still_on_the_board_hours_later(self):
+        """Someone meeting an arrival checks the gate and baggage claim after it is on the ground, so
+        a landed flight has to outlast the landing by hours -- half an hour retired them first."""
+        now = time.time()
+        landed_three_hours_ago = pin(seen_at=now - 11_000, landed_at=now - 10_800)
+        assert flights._pin_is_expired(landed_three_hours_ago, now) is False
+
     def test_a_flight_never_seen_is_given_up_on_eventually(self):
         now = time.time()
         fresh = pin(pinned_at=now - 60)

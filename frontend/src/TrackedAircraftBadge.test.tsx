@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TrackedAircraftBadge } from './TrackedAircraftBadge'
 import { AIRCRAFT_ART, arrivalVerdict, artKeyForAircraft } from './flightBadge'
@@ -59,6 +59,20 @@ function silhouette() {
 
 function dots() {
   return Array.from(document.querySelectorAll('.flight-dots i'))
+}
+
+function banner() {
+  return document.querySelector('.flight-banner') as HTMLElement
+}
+
+/** A press-and-release across the banner, as a finger dragging it sideways would produce. */
+function drag(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const target = banner()
+  fireEvent.pointerDown(target, { clientX: from.x, clientY: from.y })
+  fireEvent.pointerUp(target, { clientX: to.x, clientY: to.y })
+  // The browser follows every release over the same element with a click; the banner has to tell
+  // the two apart itself, so the test always sends both.
+  fireEvent.click(target)
 }
 
 afterEach(() => {
@@ -248,5 +262,172 @@ describe('TrackedAircraftBadge', () => {
       await vi.advanceTimersByTimeAsync(30_000)
     })
     expect(dots().map((dot) => dot.className)).toEqual(['', 'is-active', ''])
+  })
+})
+
+describe('TrackedAircraftBadge navigation', () => {
+  /** Renders with a navigation callback and returns the calls made to it. */
+  async function renderLinked(track: unknown, nearby: unknown = EMPTY_SKY) {
+    const onOpenFlights = vi.fn()
+    vi.stubGlobal('fetch', mockApi(track, nearby))
+    await act(async () => {
+      render(<TrackedAircraftBadge entities={ENTITIES} onOpenFlights={onOpenFlights} />)
+    })
+    return onOpenFlights
+  }
+
+  it('sends a tap on a pinned flight to the tracking page', async () => {
+    const onOpenFlights = await renderLinked(trackPayload())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    fireEvent.click(banner())
+    expect(onOpenFlights).toHaveBeenCalledWith(1)
+  })
+
+  it('sends a tap on the jet overhead to the radar instead', async () => {
+    // The two halves of the banner have different homes; landing both on the tracking page would
+    // make half the taps look like they went to the wrong place.
+    const onOpenFlights = await renderLinked({ query: null, mode: null, flight: null, route: null, flights: [] }, {
+      aircraft: [{ callsign: 'AAL9', airlineCode: 'AA', type: 'B738', kind: 'jet', fromCode: 'DFW', toCode: 'AUS', distanceKm: 8 }],
+    })
+    await waitFor(() => expect(screen.getByText('AAL9')).toBeTruthy())
+
+    fireEvent.click(banner())
+    expect(onOpenFlights).toHaveBeenCalledWith(0)
+  })
+
+  it('sends a tap on an empty sky to the radar', async () => {
+    const onOpenFlights = await renderLinked({ query: null, mode: null, flight: null, route: null, flights: [] })
+    await waitFor(() => expect(screen.getByText('Sky clear')).toBeTruthy())
+
+    fireEvent.click(banner())
+    expect(onOpenFlights).toHaveBeenCalledWith(0)
+  })
+
+  it('steps to the next flight on a swipe without also navigating away from it', async () => {
+    // The reported failure mode: the swipe brought UAL455 into view and the release's own click
+    // immediately left the page, so the flight the user swiped to was never actually visible.
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { drag({ x: 200, y: 40 }, { x: 120, y: 44 }) })
+
+    expect(screen.getByText('UAL455')).toBeTruthy()
+    expect(onOpenFlights).not.toHaveBeenCalled()
+  })
+
+  it('swipes back to the previous flight when dragged the other way', async () => {
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { drag({ x: 120, y: 40 }, { x: 200, y: 44 }) })
+
+    // Two readings, so stepping back from the first wraps round to the last.
+    expect(screen.getByText('UAL455')).toBeTruthy()
+    expect(onOpenFlights).not.toHaveBeenCalled()
+  })
+
+  it('treats a short drag as a tap and follows the banner', async () => {
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { drag({ x: 200, y: 40 }, { x: 185, y: 42 }) })
+
+    expect(onOpenFlights).toHaveBeenCalledWith(1)
+    expect(screen.getByText('SWA771')).toBeTruthy()
+  })
+
+  it('treats a mostly-vertical drag as a tap rather than a swipe', async () => {
+    // The wall panel's own vertical page gestures pass through the banner; reading them as flight
+    // swipes would change the flight every time the user scrolled.
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { drag({ x: 200, y: 40 }, { x: 140, y: 160 }) })
+
+    expect(onOpenFlights).toHaveBeenCalledWith(1)
+    expect(screen.getByText('SWA771')).toBeTruthy()
+  })
+
+  it('still follows a drag when there is only one flight to show', async () => {
+    // With nothing to swipe between, a sideways drag has to stay a tap. Marking it as a swipe
+    // anyway consumed the release's click, so the only banner on the board did nothing at all.
+    const onOpenFlights = await renderLinked(trackPayload())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { drag({ x: 200, y: 40 }, { x: 100, y: 44 }) })
+
+    expect(onOpenFlights).toHaveBeenCalledWith(1)
+  })
+
+  it('accepts a tap on the gesture after a swipe', async () => {
+    // The swipe flag is cleared when the next gesture starts rather than when a click consumes it:
+    // a swipe whose click never arrives would otherwise eat the following genuine tap.
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { drag({ x: 200, y: 40 }, { x: 120, y: 44 }) })
+    expect(onOpenFlights).not.toHaveBeenCalled()
+
+    await act(async () => { drag({ x: 150, y: 40 }, { x: 150, y: 40 }) })
+    expect(onOpenFlights).toHaveBeenCalledWith(1)
+  })
+
+  it('steps through flights on the arrow keys without leaving the page', async () => {
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { fireEvent.keyDown(banner(), { key: 'ArrowRight' }) })
+    expect(screen.getByText('UAL455')).toBeTruthy()
+    expect(onOpenFlights).not.toHaveBeenCalled()
+
+    await act(async () => { fireEvent.keyDown(banner(), { key: 'ArrowLeft' }) })
+    expect(screen.getByText('SWA771')).toBeTruthy()
+    expect(onOpenFlights).not.toHaveBeenCalled()
+  })
+
+  it('follows the banner on Enter', async () => {
+    const onOpenFlights = await renderLinked(trackPayload())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { fireEvent.keyDown(banner(), { key: 'Enter' }) })
+    expect(onOpenFlights).toHaveBeenCalledWith(1)
+  })
+
+  it('picks a flight from its dot without opening the Flights page', async () => {
+    // Choosing which flight to look at is a different intent from navigating to it, so the dot's
+    // click must not reach the banner underneath.
+    const onOpenFlights = await renderLinked(twoPinned())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    await act(async () => { fireEvent.click(dots()[1]) })
+
+    expect(screen.getByText('UAL455')).toBeTruthy()
+    expect(dots().map((dot) => dot.className)).toEqual(['', 'is-active'])
+    expect(onOpenFlights).not.toHaveBeenCalled()
+  })
+
+  it('is inert when the header gave it nowhere to go', async () => {
+    vi.stubGlobal('fetch', mockApi(trackPayload(), EMPTY_SKY))
+    await act(async () => {
+      render(<TrackedAircraftBadge entities={ENTITIES} />)
+    })
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    expect(banner().getAttribute('role')).toBeNull()
+    expect(banner().getAttribute('tabindex')).toBeNull()
+    expect(banner().className).not.toContain('is-linked')
+    // Nothing to assert but the absence of a crash: the click has no handler to reach.
+    await act(async () => { fireEvent.click(banner()) })
+    expect(screen.getByText('SWA771')).toBeTruthy()
+  })
+
+  it('announces itself as a button only once it has somewhere to go', async () => {
+    await renderLinked(trackPayload())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+
+    expect(banner().getAttribute('role')).toBe('button')
+    expect(banner().getAttribute('tabindex')).toBe('0')
+    expect(banner().className).toContain('is-linked')
   })
 })
