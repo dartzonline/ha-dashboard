@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, AlertTriangle, Battery, BellRing, Bot, ChartNoAxesCombined,
   ArrowDown, ArrowUp, ChevronDown, CloudSun, History, Lightbulb,
@@ -121,6 +121,9 @@ interface StateAlert {
 
 /** How long an interaction holds the current page before rotation picks itself back up. */
 const AUTO_RESUME_MS = 90_000
+
+/** Sections the unattended rotation passes over. They stay reachable from the sidebar and by swipe. */
+const ROTATION_EXCLUDED_SECTIONS = new Set(['scenes'])
 
 const discreteDomains = new Set(['light', 'switch', 'lock', 'cover', 'media_player', 'vacuum'])
 const alertingBinaryClasses = new Set(['door', 'garage_door', 'window', 'opening', 'moisture', 'smoke', 'gas', 'problem', 'safety'])
@@ -572,6 +575,13 @@ function App() {
     reset: resetDashboardConfig,
   } = useDashboardConfig()
   const section = dashboardSections.find((item) => item.id === activeSection) ?? dashboardSections[0]
+
+  // Scenes is a page of buttons to press, not something to watch go by, so the unattended rotation
+  // skips it. It stays in the sidebar and in swipe order — this only affects the automatic cycle.
+  const rotationSections = useMemo(
+    () => dashboardSections.filter((item) => !ROTATION_EXCLUDED_SECTIONS.has(item.id)),
+    [dashboardSections],
+  )
   const insights = useInsights(activeSection === 'insights')
   const weatherSlideCount = 4
   const weatherRotationInterval = 10_000
@@ -600,14 +610,18 @@ function App() {
         setFlightsSlide(flightsSlide + 1)
         return
       }
-      const currentIndex = dashboardSections.findIndex((item) => item.id === activeSection)
+      if (rotationSections.length === 0) return
       setInsightsSlide(0)
       setWeatherSlide(0)
       setFlightsSlide(0)
-      setActiveSection(dashboardSections[(currentIndex + 1) % dashboardSections.length].id)
+      // A section that rotation skips is not in this list, so `findIndex` returns -1 and the +1
+      // lands on the first rotating section -- which is what should happen when the cycle resumes
+      // from a page it does not itself visit.
+      const currentIndex = rotationSections.findIndex((item) => item.id === activeSection)
+      setActiveSection(rotationSections[(currentIndex + 1) % rotationSections.length].id)
     }, interval)
     return () => window.clearTimeout(timer)
-  }, [autoRotate, expandedTile, configOpen, securityOpen, eventLogOpen, activeSection, insightsSlide, weatherSlide, flightsSlide, dashboardSections])
+  }, [autoRotate, expandedTile, configOpen, securityOpen, eventLogOpen, activeSection, insightsSlide, weatherSlide, flightsSlide, rotationSections])
 
   useEffect(() => () => {
     alertTimers.current.forEach((timer) => window.clearTimeout(timer))

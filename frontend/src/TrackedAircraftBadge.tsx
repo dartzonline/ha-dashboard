@@ -1,5 +1,5 @@
 import { Crosshair, Locate } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AirlineLogo } from './AirlineLogo'
 import { aircraftFamily } from './aircraftSilhouettes'
 import type { AircraftFamily } from './aircraftSilhouettes'
@@ -89,6 +89,8 @@ function isPassengerJet(aircraft: NearbyAircraft) {
 
 /** How long each reading holds before the banner rotates to the next one. */
 const ALTERNATE_MS = 30_000
+/** Minimum horizontal drag that counts as a swipe between flights rather than a tap. */
+const SWIPE_PX = 40
 
 /**
  * Header chip for what is in the sky. Every flight pinned from the Flights page takes a turn,
@@ -99,6 +101,10 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
   const [track, setTrack] = useState<TrackResponse | null>(null)
   const [nearest, setNearest] = useState<NearbyAircraft | null>(null)
   const [step, setStep] = useState(0)
+  // Declared with the other hooks rather than beside the swipe handlers below, which sit after this
+  // component's early return for an empty sky.
+  const swipe = useRef<{ x: number; y: number } | null>(null)
+  const swiped = useRef(false)
   const coordinates = homeCoordinates(entities)
   const latitude = coordinates?.latitude ?? null
   const longitude = coordinates?.longitude ?? null
@@ -172,6 +178,35 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
   // Flights are pinned and unpinned between polls, so the position is derived rather than stored:
   // wrapping on read means a shrinking list can never leave the index pointing past the end.
   const position = readings.length > 0 ? step % readings.length : 0
+
+  // Swiping the banner steps through the flights by hand. `step` only ever increases, so moving
+  // back adds `readings.length - 1` rather than subtracting -- keeping it non-negative means the
+  // modulo above stays correct.
+  function onPointerDown(event: React.PointerEvent) {
+    swipe.current = { x: event.clientX, y: event.clientY }
+  }
+  function onPointerUp(event: React.PointerEvent) {
+    const start = swipe.current
+    swipe.current = null
+    if (!start) return
+    const deltaX = event.clientX - start.x
+    const deltaY = event.clientY - start.y
+    // A short or mostly-vertical drag is a tap or the page's own gesture, and must fall through to
+    // the click handler that opens the Flights page.
+    if (Math.abs(deltaX) < SWIPE_PX || Math.abs(deltaX) <= Math.abs(deltaY)) return
+    if (readings.length > 1) setStep((current) => current + (deltaX < 0 ? 1 : readings.length - 1))
+    swiped.current = true
+  }
+
+  function openFlights(slide: number) {
+    // A swipe ends in a click event too, which would otherwise navigate away from the flight the
+    // swipe just brought into view.
+    if (swiped.current) {
+      swiped.current = false
+      return
+    }
+    onOpenFlights?.(slide)
+  }
   const reading = readings[position] ?? null
   const entry = reading?.kind === 'tracked' ? reading.entry : null
   const overhead = reading?.kind === 'nearest' ? reading.aircraft : null
@@ -223,14 +258,22 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
   return (
     <div
       className={`flight-banner tone-${tone} ${isTracked ? 'is-tracking' : 'is-nearest'} ${onOpenFlights ? 'is-linked' : ''}`.trim()}
-      title={`${isTracked ? `Tracking ${callsign}` : `Nearest passenger jet overhead: ${callsign}${type ? ` · ${type}` : ''}`} — ${destination}`}
-      onClick={onOpenFlights ? () => onOpenFlights(targetSlide) : undefined}
-      onKeyDown={onOpenFlights ? (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
+      title={`${isTracked ? `Tracking ${callsign}` : `Nearest passenger jet overhead: ${callsign}${type ? ` · ${type}` : ''}`} — ${destination}${readings.length > 1 ? ' · swipe for the next flight' : ''}`}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onClick={onOpenFlights ? () => openFlights(targetSlide) : undefined}
+      onKeyDown={(event) => {
+        // Arrow keys step the rotation; Enter/Space follows the banner to the Flights page.
+        if (readings.length > 1 && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+          event.preventDefault()
+          setStep((current) => current + (event.key === 'ArrowRight' ? 1 : readings.length - 1))
+          return
+        }
+        if (onOpenFlights && (event.key === 'Enter' || event.key === ' ')) {
           event.preventDefault()
           onOpenFlights(targetSlide)
         }
-      } : undefined}
+      }}
       role={onOpenFlights ? 'button' : undefined}
       tabIndex={onOpenFlights ? 0 : undefined}
     >
@@ -264,11 +307,14 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
         )}
 
         {readings.length > 1 && (
-          <span className="flight-dots" aria-hidden="true">
+          <span className="flight-dots">
             {readings.map((item, order) => (
               <i
                 key={`${item.kind}-${item.kind === 'tracked' ? item.entry.query ?? order : item.aircraft.callsign ?? order}`}
                 className={order === position ? 'is-active' : ''}
+                // Stops the parent's click handler from also opening the Flights page: picking a
+                // flight to look at here is a different intent from navigating to it.
+                onClick={(event) => { event.stopPropagation(); setStep(order) }}
               />
             ))}
           </span>

@@ -177,8 +177,23 @@ main.is-fixed-view .flights-view {
    idle airframe showcase. */
 .track-stage { position: relative; min-height: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
 .track-stage-dots { position: absolute; left: 50%; bottom: 9px; z-index: 5; display: flex; gap: 5px; transform: translateX(-50%); }
-.track-stage-dots i { width: 16px; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 50%, transparent); }
-.track-stage-dots i.is-active { background: var(--accent); }
+/* Tappable as well as indicative: on a wall panel these are the only way to pick a specific map
+   without waiting out the rotation. The transparent box-shadow enlarges the hit area past the
+   3px bar a finger can see. */
+.track-stage-dots button {
+  width: 16px;
+  height: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+  box-shadow: 0 0 0 5px transparent;
+  cursor: pointer;
+}
+.track-stage-dots button.is-active { background: var(--accent); }
+/* The combined map is a different kind of screen rather than another flight, so its dot differs. */
+.track-stage-dots button.is-all { width: 9px; background: color-mix(in srgb, var(--fg) 45%, transparent); }
+.track-stage-dots button.is-all.is-active { background: var(--fg); }
 
 /* Every pinned flight gets a card. Six of them have to fit the bottom half of a wall panel, so
    they flow into as many columns as the width allows and the board scrolls past that. */

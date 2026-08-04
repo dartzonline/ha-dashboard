@@ -93,6 +93,8 @@ span.flight-logo {
   background: color-mix(in srgb, var(--muted) 42%, transparent);
 }
 .flight-dots i.is-active { background: var(--accent); }
+/* Tappable: the transparent ring gives a 5px dot a finger-sized hit area without changing its look. */
+.flight-dots i { cursor: pointer; box-shadow: 0 0 0 4px transparent; }
 
 .flight-identity strong { font: 750 1.02rem/1 var(--mono); letter-spacing: -.01em; }
 .flight-identity em { color: var(--muted); font-size: .68rem; font-style: normal; font-weight: 600; }
