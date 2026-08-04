@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
+import { Info, Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { AirlineLogo } from './AirlineLogo'
 import { ShowcaseAircraft, type ShowcaseAircraftType } from './aircraftSilhouettes'
 import { apiUrl } from './api'
@@ -67,6 +67,8 @@ interface TrackEntry {
   schedule: TrackSchedule
   progress: number
   etaLine: string | null
+  /** Why a pinned flight has no live position yet — set by the backend only while awaiting. */
+  awaitReason?: string | null
 }
 
 /** The first pinned flight is flattened at the top level; `flights` lists every pin. */
@@ -360,6 +362,11 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
       </div>
 
       {entry.etaLine && <p className="track-eta">{entry.etaLine}</p>}
+
+      {/* "Awaiting" alone reads as a broken tracker; the backend says which kind of waiting it is. */}
+      {entry.mode === 'await' && entry.awaitReason && (
+        <p className="track-await-reason"><Info size={11} aria-hidden="true" />{entry.awaitReason}</p>
+      )}
 
       {/* Units live in the label so the number itself always fits the column: at card width
           "34,000 ft" was being clipped to "34,00…". */}
@@ -705,7 +712,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                   position={mapped.flight ? { lat: mapped.flight.lat, lon: mapped.flight.lon, trackDeg: mapped.flight.trackDeg } : null}
                   progress={mapped.progress}
                   callsign={mapped.flight?.callsign ?? mapped.query}
-                  caption={mapped.etaLine ?? shortModeLabel(mapped.mode)}
+                  caption={mapped.mode === 'await' ? 'Route · awaiting position' : mapped.etaLine ?? shortModeLabel(mapped.mode)}
                 />
                 {mappableFlights.length > 1 && (
                   <div className="track-stage-dots" aria-hidden="true">

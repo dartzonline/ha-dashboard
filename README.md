@@ -216,6 +216,14 @@ The Flights section is a from-scratch port of [FlyInk-Board](https://github.com/
 
 The flight-history lookup asks OpenSky for a 24-hour window. It used to ask for 36 hours, which OpenSky rejected every single time with `HTTP 400 — "You can only query across 2 partitions (days)"`, so that history tier never actually contributed a route.
 
+**Why a pinned flight says "Awaiting".** A pin follows the callsign an aircraft actually transmits, and that is not always the flight number you typed:
+
+- **Regional affiliates keep the number and swap the designator** — AA3456 flies as ENY3456. The scan accepts an aircraft broadcasting the same flight number under another airline's designator, but only if it is airborne on the corridor between that flight's own scheduled origin and destination and heading toward the destination. Anything that fails those checks is refused rather than guessed at — every airline has a flight 3456, and a wrong aircraft on the map is worse than an honest wait.
+- **True codeshares renumber the flight.** AA9195 is sold by American and flown Hyderabad–Delhi by a partner under its own callsign and its own number; nothing in the sky broadcasts `AAL9195`. The route still draws on the map, but following it live needs a schedule feed — that is what `AIRLABS_KEY` is for.
+- **The feed may simply be rate-limited.** Anonymous OpenSky returns `429 Too many requests` readily. A rate-limited fetch falls back to the aircraft's last known position for a few minutes rather than dropping the flight, and the card says the feed is not answering instead of blaming the flight. `OPENSKY_CLIENT_ID`/`OPENSKY_CLIENT_SECRET` raise the limit and are the single best thing to set for reliable tracking.
+
+Each of those states is named on the flight's own card, so "Awaiting" is never just a shrug.
+
 **When the board is empty**, `GET /api/flights/status` says whether the sky is quiet or a key is missing: which upstreams are configured, whether the OpenSky token request and states query succeed, and the last error seen per upstream.
 
 No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Three optional credentials improve it further — where you set them depends on how you're running the dashboard:

@@ -3,6 +3,40 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.3.1 - 2026-08-04
+
+Flights that sat on "Awaiting" while they were demonstrably in the air. Three separate causes, all
+of which looked identical on screen:
+
+**A flight number is sold by one airline and flown by another.** AA3456 is in the sky transmitting
+ENY3456, so a scan for the exact callsign never found it and the pin waited forever. The scan now
+also accepts an aircraft broadcasting the same flight number under a different airline's
+designator — but only one that is airborne on the corridor between that flight's own scheduled
+origin and destination and pointed at the destination. Without a known route to check against, or
+for an aircraft that fails any of those, it is refused rather than guessed at: a wrong aircraft on
+the map is worse than an honest wait. Verified live against the current sky — AA3656, AA3667 and
+AA3915 all track now, through Envoy's callsigns.
+
+**Anonymous OpenSky answers `429 Too many requests`, and that was being read as "no position".** A
+tracked flight would flip to "Awaiting" between polls and back again. A rate-limited fetch now falls
+back to the aircraft's last known position for a few minutes instead of dropping the flight; a fetch
+that succeeds and returns nothing still clears it, because then the aircraft really has stopped
+reporting.
+
+**The board was causing its own rate limiting.** Each unresolved pin scanned the entire planet on
+every ten-second poll — six pins meant thirty-six full-planet queries a minute. One snapshot is now
+shared by the whole board for a cache lifetime.
+
+"Awaiting" also says which of those it is, on the flight's card: no aircraft transmitting that
+callsign (with a note that codeshares fly under the operating airline's callsign, and that
+`AIRLABS_KEY` follows those), the aircraft known but quiet, or the feed itself not answering — that
+last one naming `OPENSKY_CLIENT_ID`/`OPENSKY_CLIENT_SECRET`, which raise the limit. A genuine
+codeshare like AA9195, sold by American and flown Hyderabad–Delhi by a partner, still cannot be
+followed live without a schedule key, but its route is drawn on the map and the card now says why.
+
+The route map no longer draws an aircraft on the origin when there is no position for it — the
+route is shown, without pretending to know where on it the flight is.
+
 ## 1.3.0 - 2026-08-03
 
 A tracked flight is now shown on a map. Once both ends of a route have resolved, the top half of

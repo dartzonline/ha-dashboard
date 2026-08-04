@@ -82,6 +82,24 @@ describe('Track page', () => {
     expect(screen.getByText(/No flight pinned/)).toBeTruthy()
   })
 
+  it('says why a flight is still awaiting instead of leaving "Awaiting" unexplained', async () => {
+    // AA9195 is sold by American and flown by a partner: nothing in the sky transmits AAL9195.
+    mockTrack([flight('AA9195', {
+      mode: 'await',
+      flight: null,
+      progress: 0,
+      etaLine: null,
+      route: { fromCode: 'HYD', fromCity: 'Hyderabad', fromLat: 17.23, fromLon: 78.43, toCode: 'DEL', toCity: 'New Delhi', toLat: 28.57, toLon: 77.1 },
+      awaitReason: 'No aircraft is transmitting AAL9195. If this is a codeshare it is flying under the operating airline\'s own callsign.',
+    })])
+    render(<FlightsView entities={NO_ENTITIES} slide={1} onSelectSlide={() => {}} />)
+
+    await waitFor(() => expect(screen.getByText(/If this is a codeshare/)).toBeTruthy())
+    // The route is still known, so the map still draws it — just without an aircraft on it.
+    expect(document.querySelector('.route-map')).toBeTruthy()
+    expect(document.querySelector('.route-aircraft')).toBeNull()
+  })
+
   it('falls back to the showcase when a tracked flight has no plottable route', async () => {
     // Route resolved by code only — one endpoint unknown, so there is nothing to draw a line between.
     mockTrack([flight('SWA771', { route: { fromCode: 'LAX', fromCity: 'Los Angeles', fromLat: 33.94, fromLon: -118.41, toCode: null, toCity: null, toLat: null, toLon: null } })])
