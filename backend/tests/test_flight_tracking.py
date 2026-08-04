@@ -99,6 +99,35 @@ class TestPinBoard:
         assert flights._track == {}
 
 
+class TestRoutePayload:
+    """The Track page draws a real map now, which needs the endpoints' coordinates, not just codes."""
+
+    def test_both_ends_carry_their_coordinates(self):
+        payload = flights.route_payload(
+            {"code": "LAX", "city": "Los Angeles", "lat": 33.94, "lon": -118.41},
+            {"code": "AUS", "city": "Austin", "lat": 30.19, "lon": -97.67},
+        )
+        assert payload == {
+            "fromCode": "LAX", "fromCity": "Los Angeles", "fromLat": 33.94, "fromLon": -118.41,
+            "toCode": "AUS", "toCity": "Austin", "toLat": 30.19, "toLon": -97.67,
+        }
+
+    def test_a_half_resolved_route_still_reports_the_side_it_knows(self):
+        payload = flights.route_payload({"code": "LAX", "city": "Los Angeles", "lat": 33.94, "lon": -118.41}, None)
+        assert payload["fromCode"] == "LAX"
+        assert payload["toCode"] is None
+        assert payload["toLat"] is None
+
+    def test_an_airport_without_coordinates_reports_none_rather_than_guessing(self):
+        # resolve_airport() returns lat/lon of None for a field outside the bundled table.
+        payload = flights.route_payload(flights.resolve_airport("KZZZ"), None)
+        assert payload["fromCode"] == "ZZZ"
+        assert payload["fromLat"] is None
+
+    def test_no_route_at_all_stays_none(self):
+        assert flights.route_payload(None, None) is None
+
+
 def _run(coro):
     import asyncio
 

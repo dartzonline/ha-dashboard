@@ -3,6 +3,41 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.3.0 - 2026-08-03
+
+A tracked flight is now shown on a map. Once both ends of a route have resolved, the top half of
+the Track page becomes the route itself: the great circle drawn over real dark map tiles, origin and
+destination marked in the dashboard's own accent and warn tones, and the aircraft sitting on the
+stretch it has already flown — solid behind it, dashed ahead. The map picks its own zoom to fit the
+route, so a hop across Texas and a transpacific leg are both legible, and it follows the great
+circle rather than a straight line: a San Francisco–Shanghai flight arcs past the Aleutians and
+across the date line the way it actually flies. With several flights pinned the map cycles through
+them every 20 seconds, and tapping a card holds it there. The rotating aircraft-icon showcase now
+appears only when nothing is being tracked, which is what it was for.
+
+Every pinned flight gets a full card. Previously the first flight got a detail card and the rest got
+a one-line row each, so half the board was unreadable; now each card carries the route, progress,
+times, delay and telemetry, and they flow into as many columns as the screen allows.
+
+The header's flight banner no longer collides with the clock. It sat in a row that centred it in
+whatever space was left over, so it drifted with the length of the page name and, on the Flights and
+Weather pages, ran underneath the time. The header is now a three-column grid whose columns cannot
+overlap, and the rotation timer beside the clock has a fixed-width label so the banner stops
+stepping sideways when it changes between "20s" and "Paused".
+
+The world map's night side is lit. It was a black wash over a daytime photograph; it now shows
+NASA's Black Marble — the same globe photographed at night — so night is cities in the dark with a
+deep blue dusk over them, against the sunlit Blue Marble on the day side. The boundary between them
+is the real terminator, computed from today's solar declination and this minute's subsolar
+longitude and blurred into a twilight band, so the August Arctic stays lit around the clock and
+Antarctica stays dark.
+
+Route endpoints now travel with their coordinates (`fromLat`/`fromLon`/`toLat`/`toLon` on
+`GET /api/flights/track`), which is what the map draws from. Covered by new tests on both sides:
+the route payload including half-resolved routes and airports with no coordinates, and on the
+frontend the projection, the great-circle arc, date-line unwrapping, and that every tracked flight
+renders a card.
+
 ## 1.2.5 - 2026-08-03
 
 Tracking a flight now lasts until the flight actually concludes. Two things were cutting it short: a
