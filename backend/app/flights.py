@@ -94,7 +94,16 @@ SEARCH_RADII: list[float] = [75, 150, 300, 700]
 STATES_CACHE_TTL = 60.0
 ROUTE_CACHE_TTL = 3600.0
 AIRCRAFT_CACHE_TTL = 86400.0
-TRACK_LINGER_S = 600.0
+# How long a landed flight stays on the board before it is retired.
+TRACK_LINGER_S = 1800.0
+# A pin that never once produced a live position is dropped after this, so a typo cannot sit on the
+# board forever. The clock only runs while the flight has never been seen.
+TRACK_UNSEEN_S = 21600.0
+# A cached hex that stops returning a state vector is re-resolved after this. Callsigns are reused
+# day to day, so a hex resolved from a stale scan can otherwise strand the pin in "await" for good.
+TRACK_RERESOLVE_S = 420.0
+# Each pinned flight costs its own upstream calls per poll, so the board is deliberately small.
+MAX_TRACKED_FLIGHTS = 6
 
 # ---------------------------------------------------------------------------
 # Static reference data
@@ -221,14 +230,9 @@ _route_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 # key: (icao24 lower, callsign upper | None) -> (fetched_at, adsbdb aircraft dict | None, adsbdb flightroute dict | None)
 _aircraft_cache: dict[tuple[str, str | None], tuple[float, dict[str, Any] | None, dict[str, Any] | None]] = {}
 
-# Pinned-flight tracking state, guarded by asyncio.Lock (single async process).
-_track: dict[str, Any] = {
-    "query": None,
-    "icao_callsign": None,
-    "iata_number": None,
-    "icao24": None,
-    "landed_at": None,
-}
+# Pinned-flight tracking state, guarded by asyncio.Lock (single async process). Keyed by the
+# normalised callsign and insertion-ordered, so the dashboard rotates flights in the order pinned.
+_track: dict[str, dict[str, Any]] = {}
 _track_lock = asyncio.Lock()
 
 
@@ -911,13 +915,13 @@ def _empty_track_context() -> dict[str, Any]:
     }
 
 
-async def _clear_pin() -> None:
+async def _clear_pins(query: str | None = None) -> None:
+    """Drop one pin, or every pin when no query is given."""
     async with _track_lock:
-        _track["query"] = None
-        _track["icao_callsign"] = None
-        _track["iata_number"] = None
-        _track["icao24"] = None
-        _track["landed_at"] = None
+        if query is None:
+            _track.clear()
+            return
+        _track.pop(normalize_query(query)[0], None)
 
 
 def _format_eta(hours_left: float) -> str:
@@ -930,97 +934,114 @@ def _format_eta(hours_left: float) -> str:
     return f"ETA ~{time_label} · {minutes_left} min left"
 
 
-async def _build_track_context() -> dict[str, Any]:
-    async with _track_lock:
-        query = _track["query"]
-        icao_callsign = _track["icao_callsign"]
-        iata_number = _track["iata_number"]
-        icao24 = _track["icao24"]
-        landed_at = _track["landed_at"]
+def _pin_is_expired(pin: dict[str, Any], now: float) -> bool:
+    """A pin retires once the flight has concluded, never merely because it went quiet.
 
-    if not query:
-        return _empty_track_context()
+    Losing the aircraft from OpenSky's state vector is routine -- coverage gaps, a transponder
+    between updates -- so a pin that has been seen airborne is kept until it lands and the linger
+    window passes. Only a pin that never produced a single position is given up on, and then only
+    after long enough that a flight pinned before pushback still gets tracked.
+    """
+    landed_at = pin.get("landed_at")
+    if landed_at is not None:
+        return (now - landed_at) > TRACK_LINGER_S
+    if pin.get("seen_at") is None:
+        return (now - pin["pinned_at"]) > TRACK_UNSEEN_S
+    return False
 
-    if landed_at is not None and (time.time() - landed_at) > TRACK_LINGER_S:
-        await _clear_pin()
-        return _empty_track_context()
 
-    async with _SharedClient() as client:
-        schedule = await airlabs_schedule(client, iata_number)
-        airlabs_icao24 = schedule.pop("_icao24", None)
+async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> dict[str, Any]:
+    query = pin["query"]
+    icao_callsign = pin["icao_callsign"]
+    key = pin["key"]
 
-        if not icao24:
-            icao24 = airlabs_icao24 or await resolve_icao24_by_callsign(client, icao_callsign)
-            if icao24:
-                async with _track_lock:
-                    if _track["query"] == query:
-                        _track["icao24"] = icao24
+    schedule = await airlabs_schedule(client, pin["iata_number"])
+    airlabs_icao24 = schedule.pop("_icao24", None)
 
-        state_row = await fetch_state_by_icao24(client, icao24) if icao24 else None
-
-        flight = await build_aircraft_entry(client, state_row) if state_row else None
-
-        p_lat = state_row[6] if state_row else None
-        p_lon = state_row[5] if state_row else None
-        p_track = state_row[10] if state_row else None
-        p_vrate = state_row[11] if state_row else None
-        p_alt = (state_row[13] if state_row[13] is not None else state_row[7]) if state_row else None
-        has_airline = bool(derive_airline_code(icao_callsign))
-
-        route = await adsbdb_route_lookup(client, icao_callsign) if icao_callsign else None
-        origin, dest = await resolve_route(
-            client, route, icao_callsign, icao24, p_lat, p_lon, p_track, p_vrate, p_alt, has_airline,
-        )
-
-        route_out: dict[str, Any] | None = None
-        progress = 0.0
-        eta_line: str | None = None
-
-        on_ground = bool(state_row[8]) if state_row else None
-        mode = "await"
-        if state_row is not None:
-            mode = "landed" if on_ground else "track"
-        if schedule.get("status") in ("landed", "arrived"):
-            mode = "landed"
-
-        if origin or dest:
-            # Show whatever side is known -- e.g. destination alone from live descent inference,
-            # with the origin still unresolved -- rather than nothing until both sides agree.
-            route_out = {
-                "fromCode": origin.get("code") if origin else None,
-                "fromCity": origin.get("city") if origin else None,
-                "toCode": dest.get("code") if dest else None,
-                "toCity": dest.get("city") if dest else None,
-            }
-
-        if origin and dest:
-            o_lat, o_lon = origin.get("lat"), origin.get("lon")
-            d_lat, d_lon = dest.get("lat"), dest.get("lon")
-            if None not in (o_lat, o_lon, d_lat, d_lon) and p_lat is not None and p_lon is not None:
-                route_km = haversine(o_lat, o_lon, d_lat, d_lon)
-                d_from = haversine(o_lat, o_lon, p_lat, p_lon)
-                d_to = haversine(p_lat, p_lon, d_lat, d_lon)
-                stale = (d_from + d_to) > route_km * 1.6 + 60
-                if not stale and (d_from + d_to) > 0:
-                    frac = d_from / (d_from + d_to)
-                    progress = max(0.0, min(1.0, frac))
-
-                    velocity = state_row[9]
-                    speed_kt = _meters_per_sec_to_knots(velocity)
-                    if mode == "track" and speed_kt is not None and speed_kt > 30:
-                        speed_kmh = velocity * 3.6
-                        if speed_kmh > 0:
-                            eta_line = _format_eta(d_to / speed_kmh)
-
-        if mode == "landed":
-            if landed_at is None:
-                async with _track_lock:
-                    if _track["query"] == query:
-                        _track["landed_at"] = time.time()
-        elif landed_at is not None:
+    icao24 = pin["icao24"]
+    # A hex that has stopped returning a state vector may simply be the wrong aircraft: callsigns
+    # get reused daily, so re-resolve rather than let one bad lookup strand the flight in "await".
+    stale_hex = (
+        icao24 is not None
+        and pin["seen_at"] is None
+        and (time.time() - pin["resolved_at"]) > TRACK_RERESOLVE_S
+    )
+    if not icao24 or stale_hex:
+        resolved = airlabs_icao24 or await resolve_icao24_by_callsign(client, icao_callsign)
+        if resolved:
+            icao24 = resolved
             async with _track_lock:
-                if _track["query"] == query:
-                    _track["landed_at"] = None
+                if key in _track:
+                    _track[key]["icao24"] = resolved
+                    _track[key]["resolved_at"] = time.time()
+
+    state_row = await fetch_state_by_icao24(client, icao24) if icao24 else None
+
+    flight = await build_aircraft_entry(client, state_row) if state_row else None
+
+    p_lat = state_row[6] if state_row else None
+    p_lon = state_row[5] if state_row else None
+    p_track = state_row[10] if state_row else None
+    p_vrate = state_row[11] if state_row else None
+    p_alt = (state_row[13] if state_row[13] is not None else state_row[7]) if state_row else None
+    has_airline = bool(derive_airline_code(icao_callsign))
+
+    route = await adsbdb_route_lookup(client, icao_callsign) if icao_callsign else None
+    origin, dest = await resolve_route(
+        client, route, icao_callsign, icao24, p_lat, p_lon, p_track, p_vrate, p_alt, has_airline,
+    )
+
+    route_out: dict[str, Any] | None = None
+    progress = 0.0
+    eta_line: str | None = None
+
+    on_ground = bool(state_row[8]) if state_row else None
+    mode = "await"
+    if state_row is not None:
+        mode = "landed" if on_ground else "track"
+    # A live airborne aircraft outranks the schedule feed, which reports the same flight number's
+    # previous leg as "landed" and would otherwise retire a flight that has only just taken off.
+    if mode != "track" and schedule.get("status") in ("landed", "arrived"):
+        mode = "landed"
+
+    if origin or dest:
+        # Show whatever side is known -- e.g. destination alone from live descent inference,
+        # with the origin still unresolved -- rather than nothing until both sides agree.
+        route_out = {
+            "fromCode": origin.get("code") if origin else None,
+            "fromCity": origin.get("city") if origin else None,
+            "toCode": dest.get("code") if dest else None,
+            "toCity": dest.get("city") if dest else None,
+        }
+
+    if origin and dest:
+        o_lat, o_lon = origin.get("lat"), origin.get("lon")
+        d_lat, d_lon = dest.get("lat"), dest.get("lon")
+        if None not in (o_lat, o_lon, d_lat, d_lon) and p_lat is not None and p_lon is not None:
+            route_km = haversine(o_lat, o_lon, d_lat, d_lon)
+            d_from = haversine(o_lat, o_lon, p_lat, p_lon)
+            d_to = haversine(p_lat, p_lon, d_lat, d_lon)
+            stale = (d_from + d_to) > route_km * 1.6 + 60
+            if not stale and (d_from + d_to) > 0:
+                frac = d_from / (d_from + d_to)
+                progress = max(0.0, min(1.0, frac))
+
+                velocity = state_row[9]
+                speed_kt = _meters_per_sec_to_knots(velocity)
+                if mode == "track" and speed_kt is not None and speed_kt > 30:
+                    speed_kmh = velocity * 3.6
+                    if speed_kmh > 0:
+                        eta_line = _format_eta(d_to / speed_kmh)
+
+    async with _track_lock:
+        live = _track.get(key)
+        if live is not None:
+            if state_row is not None:
+                live["seen_at"] = time.time()
+            if mode == "landed":
+                live["landed_at"] = live["landed_at"] or time.time()
+            else:
+                live["landed_at"] = None
 
     return {
         "query": query,
@@ -1033,27 +1054,57 @@ async def _build_track_context() -> dict[str, Any]:
     }
 
 
+async def _build_track_board() -> dict[str, Any]:
+    """Every pinned flight, plus the first one flattened for callers that expect a single flight."""
+    now = time.time()
+    async with _track_lock:
+        for key in [k for k, pin in _track.items() if _pin_is_expired(pin, now)]:
+            del _track[key]
+        pins = [dict(pin) for pin in _track.values()]
+
+    if not pins:
+        return {**_empty_track_context(), "flights": []}
+
+    async with _SharedClient() as client:
+        flights = list(await asyncio.gather(*(_build_pin_context(client, pin) for pin in pins)))
+
+    return {**flights[0], "flights": flights}
+
+
 @router.post("/track")
 async def pin_track(body: TrackRequest) -> dict[str, Any]:
-    icao_callsign, iata_number = normalize_query(body.query)
+    query = body.query.strip()
+    icao_callsign, iata_number = normalize_query(query)
+    if not icao_callsign:
+        return await _build_track_board()
+
     async with _track_lock:
-        _track["query"] = body.query.strip()
-        _track["icao_callsign"] = icao_callsign
-        _track["iata_number"] = iata_number
-        _track["icao24"] = None
-        _track["landed_at"] = None
-    return await _build_track_context()
+        if icao_callsign not in _track and len(_track) >= MAX_TRACKED_FLIGHTS:
+            # Oldest pin makes way, so pinning never silently does nothing once the board is full.
+            del _track[next(iter(_track))]
+        _track[icao_callsign] = {
+            "key": icao_callsign,
+            "query": query,
+            "icao_callsign": icao_callsign,
+            "iata_number": iata_number,
+            "icao24": None,
+            "resolved_at": 0.0,
+            "pinned_at": time.time(),
+            "seen_at": None,
+            "landed_at": None,
+        }
+    return await _build_track_board()
 
 
 @router.delete("/track")
-async def unpin_track() -> dict[str, Any]:
-    await _clear_pin()
-    return await _build_track_context()
+async def unpin_track(query: str | None = None) -> dict[str, Any]:
+    await _clear_pins(query)
+    return await _build_track_board()
 
 
 @router.get("/track")
 async def get_track() -> dict[str, Any]:
-    return await _build_track_context()
+    return await _build_track_board()
 
 
 # ---------------------------------------------------------------------------

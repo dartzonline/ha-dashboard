@@ -42,22 +42,47 @@
 
 .flight-identity { display: flex; align-items: center; gap: 8px; min-width: 0; }
 
-.flight-logo {
+/* The airline gets its own panel on the right rather than a 24px chip lost in the identity row:
+   at banner scale a tail logo is the fastest way to recognise the flight. */
+.flight-airline {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  border-radius: 5px;
+  margin-left: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  /* A lighter panel so dark or transparent logo artwork still separates from the banner. */
+  background: color-mix(in srgb, var(--canvas) 62%, var(--surface-raised));
+  display: grid;
+  place-items: center;
+}
+
+.flight-logo {
+  width: 76px;
+  height: 48px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  /* contain plus padding: never crop or stretch a tail fin to fit the box. */
   object-fit: contain;
-  background: color-mix(in srgb, var(--canvas) 45%, transparent);
 }
 
 span.flight-logo {
   display: grid;
   place-items: center;
   color: var(--muted);
-  font-size: .56rem;
+  font-size: .92rem;
   font-weight: 800;
+  letter-spacing: .04em;
 }
+
+/* Position in the rotation, so it is obvious the banner has more flights to show. */
+.flight-dots { display: flex; align-items: center; gap: 5px; }
+.flight-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
+}
+.flight-dots i.is-active { background: var(--accent); }
 
 .flight-identity strong { font: 750 1.02rem/1 var(--mono); letter-spacing: -.01em; }
 .flight-identity em { color: var(--muted); font-size: .68rem; font-style: normal; font-weight: 600; }
@@ -130,11 +155,13 @@ span.flight-logo {
 @media (max-width: 1240px) {
   .flight-identity em { display: none; }
   .flight-track { width: clamp(64px, 8vw, 120px); }
+  .flight-logo { width: 58px; height: 40px; }
 }
 
 @media (max-width: 1040px) {
   .flight-banner { gap: 9px; padding: 5px 10px 5px 7px; min-height: 52px; }
   .flight-eta { display: none; }
+  .flight-airline { display: none; }
 }
 
 @media (max-width: 860px) {

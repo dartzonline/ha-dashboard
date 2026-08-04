@@ -1,5 +1,5 @@
 import { Crosshair, Locate } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AirlineLogo } from './AirlineLogo'
 import { aircraftFamily } from './aircraftSilhouettes'
 import type { AircraftFamily } from './aircraftSilhouettes'
@@ -29,7 +29,7 @@ interface NearbyAircraft {
   distanceKm: number | null
 }
 
-interface TrackResponse {
+interface TrackEntry {
   query: string | null
   mode: 'track' | 'landed' | 'await' | null
   flight: NearbyAircraft | null
@@ -40,6 +40,14 @@ interface TrackResponse {
   /** Live time-to-run from ground speed, e.g. "in 42 min"; the only ETA when no schedule exists. */
   etaLine?: string | null
 }
+
+/** The first pinned flight stays flattened at the top level; `flights` carries all of them. */
+interface TrackResponse extends TrackEntry {
+  flights?: TrackEntry[]
+}
+
+/** One slot in the rotation: either a pinned flight or the nearest airliner overhead. */
+type Reading = { kind: 'tracked'; entry: TrackEntry } | { kind: 'nearest'; aircraft: NearbyAircraft }
 
 /**
  * Rendered as real inline SVG rather than a CSS mask: a mask silently degrades to a solid coloured
@@ -78,18 +86,18 @@ function isPassengerJet(aircraft: NearbyAircraft) {
   return PASSENGER_FAMILIES.has(aircraftFamily(aircraft.type))
 }
 
-/** How long each of the two readings holds when a pinned flight and an overhead airliner both exist. */
+/** How long each reading holds before the banner rotates to the next one. */
 const ALTERNATE_MS = 30_000
 
 /**
- * Header chip for what is in the sky. A flight pinned from the Flights page wins, because pinning
- * is a deliberate choice; otherwise this falls back to the nearest passenger jet overhead. A symbol
- * rather than a caption says which of the two is showing, keeping the space for the flight itself.
+ * Header chip for what is in the sky. Every flight pinned from the Flights page takes a turn,
+ * followed by the nearest passenger jet overhead, so pinning never permanently hides the sky.
+ * A symbol rather than a caption says which kind is showing, keeping the space for the flight itself.
  */
 export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEntity> }) {
   const [track, setTrack] = useState<TrackResponse | null>(null)
   const [nearest, setNearest] = useState<NearbyAircraft | null>(null)
-  const [showingNearest, setShowingNearest] = useState(false)
+  const [step, setStep] = useState(0)
   const coordinates = homeCoordinates(entities)
   const latitude = coordinates?.latitude ?? null
   const longitude = coordinates?.longitude ?? null
@@ -142,20 +150,31 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
     }
   }, [latitude, longitude])
 
-  const hasTracked = Boolean(track?.query && track.mode)
-  const hasNearest = Boolean(nearest?.callsign)
+  const readings = useMemo<Reading[]>(() => {
+    // Older backends only sent the flattened first flight; treat that as a one-entry list.
+    const pinned = track?.flights ?? (track ? [track] : [])
+    const list: Reading[] = pinned
+      .filter((entry) => Boolean(entry.query) || entry.flight !== null)
+      .map((entry) => ({ kind: 'tracked', entry }))
+    if (nearest?.callsign) list.push({ kind: 'nearest', aircraft: nearest })
+    return list
+  }, [track, nearest])
 
   useEffect(() => {
-    if (!hasTracked || !hasNearest) return
-    const timer = window.setInterval(() => setShowingNearest((current) => !current), ALTERNATE_MS)
+    if (readings.length <= 1) return
+    const timer = window.setInterval(() => setStep((current) => current + 1), ALTERNATE_MS)
     return () => window.clearInterval(timer)
-  }, [hasTracked, hasNearest])
+  }, [readings.length])
 
-  // With a flight pinned there are two things worth showing and only one slot, so they take turns
-  // rather than the pin hiding the sky for as long as it stays pinned.
-  const isTracked = hasTracked && (!hasNearest || !showingNearest)
-  const aircraft = isTracked ? track?.flight ?? null : nearest
-  const callsign = isTracked ? track?.flight?.callsign ?? track?.query ?? null : nearest?.callsign ?? null
+  // Flights are pinned and unpinned between polls, so the position is derived rather than stored:
+  // wrapping on read means a shrinking list can never leave the index pointing past the end.
+  const position = readings.length > 0 ? step % readings.length : 0
+  const reading = readings[position] ?? null
+  const entry = reading?.kind === 'tracked' ? reading.entry : null
+  const overhead = reading?.kind === 'nearest' ? reading.aircraft : null
+  const isTracked = entry !== null
+  const aircraft = entry ? entry.flight : overhead
+  const callsign = entry ? entry.flight?.callsign ?? entry.query ?? null : overhead?.callsign ?? null
 
   // An empty sky still holds the centre slot, so the header keeps its shape as flights come and go.
   if (!callsign) {
@@ -170,15 +189,15 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
   }
 
   const type = aircraft?.type ?? null
-  const from = isTracked ? track?.route?.fromCode ?? null : nearest?.fromCode ?? null
-  const to = isTracked ? track?.route?.toCode ?? null : nearest?.toCode ?? null
-  const tone = isTracked ? (track?.mode === 'track' ? 'good' : track?.mode === 'landed' ? 'accent' : 'muted') : 'accent'
+  const from = entry ? entry.route?.fromCode ?? null : overhead?.fromCode ?? null
+  const to = entry ? entry.route?.toCode ?? null : overhead?.toCode ?? null
+  const tone = entry ? (entry.mode === 'track' ? 'good' : entry.mode === 'landed' ? 'accent' : 'muted') : 'accent'
 
-  const progress = Math.max(0, Math.min(1, track?.progress ?? 0))
-  const eta = clockOf(track?.schedule?.arrEstimated ?? track?.schedule?.arrScheduled)
-  const verdict = isTracked ? arrivalVerdict(track?.schedule) : null
-  const arrival = eta ? `Arrives ${eta}` : track?.etaLine ?? null
-  const distance = !isTracked && nearest?.distanceKm != null ? `${Math.round(nearest.distanceKm)} km` : null
+  const progress = Math.max(0, Math.min(1, entry?.progress ?? 0))
+  const eta = clockOf(entry?.schedule?.arrEstimated ?? entry?.schedule?.arrScheduled)
+  const verdict = entry ? arrivalVerdict(entry.schedule) : null
+  const arrival = eta ? `Arrives ${eta}` : entry?.etaLine ?? null
+  const distance = overhead?.distanceKm != null ? `${Math.round(overhead.distanceKm)} km` : null
 
   return (
     <div
@@ -193,7 +212,6 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
 
       <div className="flight-body">
         <div className="flight-identity">
-          <AirlineLogo code={aircraft?.airlineCode ?? null} className="flight-logo" />
           <strong>{callsign}</strong>
           {distance && <span className="flight-distance">{distance}</span>}
         </div>
@@ -214,6 +232,17 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
             <span>{to ?? '—'}</span>
           </div>
         )}
+
+        {readings.length > 1 && (
+          <span className="flight-dots" aria-hidden="true">
+            {readings.map((item, order) => (
+              <i
+                key={`${item.kind}-${item.kind === 'tracked' ? item.entry.query ?? order : item.aircraft.callsign ?? order}`}
+                className={order === position ? 'is-active' : ''}
+              />
+            ))}
+          </span>
+        )}
       </div>
 
       {isTracked && (arrival || verdict) && (
@@ -222,6 +251,10 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
           {verdict && <span className={`flight-delay tone-${verdict.tone}`}>{verdict.label}</span>}
         </div>
       )}
+
+      <div className="flight-airline">
+        <AirlineLogo code={aircraft?.airlineCode ?? null} className="flight-logo" />
+      </div>
     </div>
   )
 }

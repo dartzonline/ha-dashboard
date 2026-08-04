@@ -53,7 +53,7 @@ interface TrackRoute {
   toCity: string | null
 }
 
-interface TrackResponse {
+interface TrackEntry {
   query: string | null
   mode: 'track' | 'landed' | 'await' | null
   flight: Aircraft | null
@@ -61,6 +61,11 @@ interface TrackResponse {
   schedule: TrackSchedule
   progress: number
   etaLine: string | null
+}
+
+/** The first pinned flight is flattened at the top level; `flights` lists every pin. */
+interface TrackResponse extends TrackEntry {
+  flights?: TrackEntry[]
 }
 
 interface FlightsViewProps {
@@ -76,6 +81,9 @@ const RADAR_CENTER = RADAR_SIZE / 2
 const RADAR_RADIUS = 92
 const RING_COUNT = 3
 const TICK_COUNT = 12
+
+// Matches the backend pin cap: pinning beyond this evicts the oldest.
+const MAX_TRACKED = 6
 
 // Real-map backdrop behind the radar overlay: free, keyless CARTO dark tiles (the same
 // source FlyInk-Board's own web dashboard used for its radar map), positioned by ordinary
@@ -133,6 +141,13 @@ function modeLabel(mode: TrackResponse['mode']) {
   if (mode === 'landed') return 'Landed'
   if (mode === 'await') return 'Awaiting'
   return 'Unknown'
+}
+
+function shortModeLabel(mode: TrackResponse['mode']) {
+  if (mode === 'track') return 'En route'
+  if (mode === 'landed') return 'Landed'
+  if (mode === 'await') return 'Waiting'
+  return '—'
 }
 
 function modeTone(mode: TrackResponse['mode']): 'good' | 'accent' | 'muted' {
@@ -334,6 +349,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
       if (response.ok) {
         const payload: TrackResponse = await response.json()
         setTrack(payload)
+        setQueryInput('')
         setTrackNotice(`Tracking ${trimmed}`)
         window.setTimeout(() => setTrackNotice(null), 4000)
       }
@@ -357,6 +373,21 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     try {
       await fetch(apiUrl('flights/track'), { method: 'DELETE' })
       setTrack(null)
+    } catch {
+      // Network hiccup; the 10s poll reconciles state.
+    } finally {
+      setTrackBusy(false)
+    }
+  }
+
+  async function untrackFlight(query: string) {
+    setTrackBusy(true)
+    try {
+      const response = await fetch(apiUrl(`flights/track?query=${encodeURIComponent(query)}`), { method: 'DELETE' })
+      if (response.ok) {
+        const payload: TrackResponse = await response.json()
+        setTrack(payload)
+      }
     } catch {
       // Network hiccup; the 10s poll reconciles state.
     } finally {
@@ -391,6 +422,8 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
   const progressPct = Math.round(Math.min(Math.max(track?.progress ?? 0, 0), 1) * 100)
   const schedule = track?.schedule ?? {}
   const isPinned = Boolean(track && track.query && track.mode)
+  const trackedFlights = track?.flights ?? []
+  const atTrackCap = trackedFlights.length >= MAX_TRACKED
 
   return (
     <section className="flights-view" aria-label="Flight tracker">
@@ -529,10 +562,33 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                 />
               </div>
               <button type="submit" className="track-action track-action-go" disabled={!queryInput.trim() || trackBusy}>Track</button>
-              <button type="button" className="track-action track-action-stop" onClick={stopTracking} disabled={!isPinned || trackBusy}>
-                <X size={14} />Stop
+              <button type="button" className="track-action track-action-stop" onClick={stopTracking} disabled={trackedFlights.length === 0 || trackBusy}>
+                <X size={14} />Clear all
               </button>
             </form>
+
+            {atTrackCap && <p className="track-cap-hint">Board full ({MAX_TRACKED}) — adding another drops the oldest.</p>}
+
+            {trackedFlights.length > 0 && (
+              <ul className="track-list" aria-label="Tracked flights">
+                {trackedFlights.map((entry, index) => (
+                  <li className="track-list-row" key={entry.query ?? `pin-${index}`}>
+                    <strong className="track-list-call">{entry.query ?? '—'}</strong>
+                    <span className="track-list-route">{entry.route?.fromCode ?? '—'} → {entry.route?.toCode ?? '—'}</span>
+                    <span className={`track-list-status tone-${modeTone(entry.mode)}`}>{shortModeLabel(entry.mode)}</span>
+                    <button
+                      type="button"
+                      className="track-list-remove"
+                      aria-label={`Stop tracking ${entry.query ?? 'flight'}`}
+                      disabled={trackBusy || !entry.query}
+                      onClick={() => { if (entry.query) void untrackFlight(entry.query) }}
+                    >
+                      <X size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {!isPinned || !track ? (
               <div className="track-empty">
