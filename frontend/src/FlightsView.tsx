@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
+import { Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { AirlineLogo } from './AirlineLogo'
 import { ShowcaseAircraft, type ShowcaseAircraftType } from './aircraftSilhouettes'
 import { apiUrl } from './api'
+import { RouteMap } from './RouteMap'
 import type { HAEntity } from './types'
 import './FlightsView.css'
 
@@ -49,8 +50,13 @@ interface TrackSchedule {
 interface TrackRoute {
   fromCode: string | null
   fromCity: string | null
+  /** Endpoint coordinates, present whenever the airport resolved to a known field. */
+  fromLat?: number | null
+  fromLon?: number | null
   toCode: string | null
   toCity: string | null
+  toLat?: number | null
+  toLon?: number | null
 }
 
 interface TrackEntry {
@@ -255,6 +261,122 @@ function TrackShowcase() {
   )
 }
 
+/** True when both ends resolved to real coordinates, which is what the route map needs to draw. */
+function isMappable(entry: TrackEntry) {
+  const route = entry.route
+  return Boolean(
+    route
+    && typeof route.fromLat === 'number' && typeof route.fromLon === 'number'
+    && typeof route.toLat === 'number' && typeof route.toLon === 'number',
+  )
+}
+
+/** How long a tapped flight holds the map before it rejoins the rotation. */
+const MAP_FOCUS_HOLD_MS = 45_000
+/** How long each mappable flight holds the map when nothing is selected. */
+const MAP_ROTATE_MS = 20_000
+
+/**
+ * One pinned flight, in full. Every flight on the board gets one of these rather than the old
+ * arrangement where the first pin got a detail card and the rest got a single-line row.
+ */
+function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy }: {
+  entry: TrackEntry
+  isFocused: boolean
+  mappable: boolean
+  onFocus: () => void
+  onRemove: () => void
+  busy: boolean
+}) {
+  const schedule = entry.schedule ?? {}
+  const progressPct = Math.round(Math.min(Math.max(entry.progress ?? 0, 0), 1) * 100)
+  const callsign = entry.flight?.callsign ?? entry.query ?? '—'
+
+  return (
+    <article
+      className={`track-card ${isFocused ? 'is-focused' : ''} ${mappable ? 'is-mappable' : ''}`}
+      role={mappable ? 'button' : undefined}
+      tabIndex={mappable ? 0 : undefined}
+      aria-pressed={mappable ? isFocused : undefined}
+      title={mappable ? `Show ${callsign} on the map` : undefined}
+      onClick={() => { if (mappable) onFocus() }}
+      onKeyDown={(event) => {
+        if (mappable && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          onFocus()
+        }
+      }}
+    >
+      <header className="track-card-head">
+        <AirlineLogo code={entry.flight?.airlineCode ?? null} />
+        <div className="track-card-title">
+          <strong>{callsign}</strong>
+          <span>{entry.flight?.airline ?? entry.flight?.type ?? 'Awaiting signal'}</span>
+        </div>
+        <span className={`track-mode tone-${modeTone(entry.mode)}`}>{modeLabel(entry.mode)}</span>
+        <button
+          type="button"
+          className="track-list-remove"
+          aria-label={`Stop tracking ${entry.query ?? 'flight'}`}
+          disabled={busy || !entry.query}
+          onClick={(event) => { event.stopPropagation(); onRemove() }}
+        >
+          <X size={13} />
+        </button>
+      </header>
+
+      <div className="track-route">
+        <div className="track-route-end">
+          <strong>{entry.route?.fromCode ?? '—'}</strong>
+          <span>{entry.route?.fromCity ?? 'Not yet known'}</span>
+        </div>
+        <span className="track-route-arrow"><Plane size={15} /></span>
+        <div className="track-route-end">
+          <strong>{entry.route?.toCode ?? '—'}</strong>
+          <span>{entry.route?.toCity ?? 'Not yet known'}</span>
+        </div>
+      </div>
+
+      <div className="track-progress">
+        <div className="track-progress-track">
+          <div className="track-progress-fill" style={{ width: `${progressPct}%` }} />
+          <span className="track-progress-plane" style={{ left: `${progressPct}%` }}><Plane size={12} /></span>
+        </div>
+      </div>
+
+      <div className="track-schedule">
+        <div className="track-schedule-col">
+          <span>Departure</span>
+          <strong>{formatClock(schedule.depActual ?? schedule.depScheduled)}</strong>
+        </div>
+        <div className="track-schedule-col">
+          <span>Arrival</span>
+          <strong>{formatClock(schedule.arrEstimated ?? schedule.arrScheduled)}</strong>
+        </div>
+        <div className="track-schedule-col">
+          <span>Status</span>
+          <DelayBadge delayMin={schedule.delayMin} />
+        </div>
+      </div>
+
+      {entry.etaLine && <p className="track-eta">{entry.etaLine}</p>}
+
+      {/* Units live in the label so the number itself always fits the column: at card width
+          "34,000 ft" was being clipped to "34,00…". */}
+      {entry.flight && (
+        <div className="track-telemetry">
+          <div><span>Alt ft</span><strong>{entry.flight.altitudeFt !== null ? formatNumber(entry.flight.altitudeFt) : '—'}</strong></div>
+          <div><span>Speed kt</span><strong>{entry.flight.speedKt !== null ? formatNumber(entry.flight.speedKt) : '—'}</strong></div>
+          <div><span>Track</span><strong>{entry.flight.trackDeg !== null ? `${Math.round(entry.flight.trackDeg)}°` : '—'}</strong></div>
+          <div><span>Dist km</span><strong>{entry.flight.distanceKm !== null ? entry.flight.distanceKm.toFixed(0) : '—'}</strong></div>
+        </div>
+      )}
+
+      {mappable && <span className="track-card-maphint"><MapIcon size={11} />{isFocused ? 'On the map' : 'Show on map'}</span>}
+    </article>
+  )
+}
+
 export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps) {
   const [nearby, setNearby] = useState<NearbyResponse | null>(null)
   const [nearbyError, setNearbyError] = useState<string | null>(null)
@@ -419,11 +541,35 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     { label: 'W', deg: 270 },
   ]
 
-  const progressPct = Math.round(Math.min(Math.max(track?.progress ?? 0, 0), 1) * 100)
-  const schedule = track?.schedule ?? {}
-  const isPinned = Boolean(track && track.query && track.mode)
-  const trackedFlights = track?.flights ?? []
+  const trackedFlights = useMemo(() => track?.flights ?? [], [track])
   const atTrackCap = trackedFlights.length >= MAX_TRACKED
+
+  // A tracked flight earns the top half of the page: the plane-icon showcase only runs when there
+  // is no route to draw, which is the state it was written for.
+  const mappableFlights = useMemo(() => trackedFlights.filter(isMappable), [trackedFlights])
+  const [mapFocus, setMapFocus] = useState<string | null>(null)
+  const [mapRotation, setMapRotation] = useState(0)
+
+  useEffect(() => {
+    if (mappableFlights.length <= 1 || mapFocus) return
+    const timer = window.setInterval(() => setMapRotation((value) => value + 1), MAP_ROTATE_MS)
+    return () => window.clearInterval(timer)
+  }, [mappableFlights.length, mapFocus])
+
+  // A wall panel should not stay on someone's stale tap, so a chosen flight releases the map back
+  // to the rotation on its own.
+  useEffect(() => {
+    if (!mapFocus) return
+    const timer = window.setTimeout(() => setMapFocus(null), MAP_FOCUS_HOLD_MS)
+    return () => window.clearTimeout(timer)
+  }, [mapFocus])
+
+  // Derived rather than stored: flights are unpinned between polls, so an index into a shrinking
+  // list has to wrap on read, and a focused flight that landed and expired falls back to rotation.
+  const mapped = mappableFlights.length > 0
+    ? mappableFlights.find((entry) => entry.query === mapFocus)
+      ?? mappableFlights[mapRotation % mappableFlights.length]
+    : null
 
   return (
     <section className="flights-view" aria-label="Flight tracker">
@@ -541,7 +687,37 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
 
         {slide === 1 && (
           <section className="flights-panel track-panel" aria-label="Track a flight">
-            <TrackShowcase />
+            {mapped ? (
+              <div className="track-stage">
+                <RouteMap
+                  from={{
+                    code: mapped.route?.fromCode ?? null,
+                    city: mapped.route?.fromCity ?? null,
+                    lat: mapped.route?.fromLat ?? null,
+                    lon: mapped.route?.fromLon ?? null,
+                  }}
+                  to={{
+                    code: mapped.route?.toCode ?? null,
+                    city: mapped.route?.toCity ?? null,
+                    lat: mapped.route?.toLat ?? null,
+                    lon: mapped.route?.toLon ?? null,
+                  }}
+                  position={mapped.flight ? { lat: mapped.flight.lat, lon: mapped.flight.lon, trackDeg: mapped.flight.trackDeg } : null}
+                  progress={mapped.progress}
+                  callsign={mapped.flight?.callsign ?? mapped.query}
+                  caption={mapped.etaLine ?? shortModeLabel(mapped.mode)}
+                />
+                {mappableFlights.length > 1 && (
+                  <div className="track-stage-dots" aria-hidden="true">
+                    {mappableFlights.map((entry) => (
+                      <i key={entry.query ?? entry.flight?.icao24} className={entry === mapped ? 'is-active' : ''} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <TrackShowcase />
+            )}
             <div className="track-console">
             <form
               className="track-form"
@@ -569,86 +745,27 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
 
             {atTrackCap && <p className="track-cap-hint">Board full ({MAX_TRACKED}) — adding another drops the oldest.</p>}
 
-            {trackedFlights.length > 0 && (
-              <ul className="track-list" aria-label="Tracked flights">
-                {trackedFlights.map((entry, index) => (
-                  <li className="track-list-row" key={entry.query ?? `pin-${index}`}>
-                    <strong className="track-list-call">{entry.query ?? '—'}</strong>
-                    <span className="track-list-route">{entry.route?.fromCode ?? '—'} → {entry.route?.toCode ?? '—'}</span>
-                    <span className={`track-list-status tone-${modeTone(entry.mode)}`}>{shortModeLabel(entry.mode)}</span>
-                    <button
-                      type="button"
-                      className="track-list-remove"
-                      aria-label={`Stop tracking ${entry.query ?? 'flight'}`}
-                      disabled={trackBusy || !entry.query}
-                      onClick={() => { if (entry.query) void untrackFlight(entry.query) }}
-                    >
-                      <X size={13} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {!isPinned || !track ? (
+            {trackedFlights.length === 0 ? (
               <div className="track-empty">
                 <PlaneTakeoff size={28} />
                 <p>No flight pinned. Track one from the Radar page or type a flight number above.</p>
               </div>
             ) : (
-              <div className="track-card">
-                <div className={`track-mode tone-${modeTone(track.mode)}`}>{modeLabel(track.mode)}</div>
-
-                {track.route && (
-                  <div className="track-route">
-                    <div className="track-route-end">
-                      <strong>{track.route.fromCode ?? '—'}</strong>
-                      <span>{track.route.fromCity ?? 'Not yet known'}</span>
-                    </div>
-                    <span className="track-route-arrow"><Plane size={16} /></span>
-                    <div className="track-route-end">
-                      <strong>{track.route.toCode ?? '—'}</strong>
-                      <span>{track.route.toCity ?? 'Not yet known'}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="track-progress">
-                  <div className="track-progress-track">
-                    <div className="track-progress-fill" style={{ width: `${progressPct}%` }} />
-                    <span className="track-progress-plane" style={{ left: `${progressPct}%` }}><Plane size={13} /></span>
-                  </div>
-                </div>
-
-                <div className="track-schedule">
-                  <div className="track-schedule-col">
-                    <span>Departure</span>
-                    <strong>{formatClock(schedule.depActual ?? schedule.depScheduled)}</strong>
-                    {schedule.depScheduled && <small>Sched {formatClock(schedule.depScheduled)}</small>}
-                  </div>
-                  <div className="track-schedule-col">
-                    <span>Arrival</span>
-                    <strong>{formatClock(schedule.arrEstimated ?? schedule.arrScheduled)}</strong>
-                    {schedule.arrScheduled && <small>Sched {formatClock(schedule.arrScheduled)}</small>}
-                  </div>
-                  <div className="track-schedule-col">
-                    <span>Status</span>
-                    <DelayBadge delayMin={schedule.delayMin} />
-                  </div>
-                </div>
-
-                {track.etaLine && <p className="track-eta">{track.etaLine}</p>}
-
-                {track.flight && (
-                  <div className="track-telemetry">
-                    <div><span>Altitude</span><strong>{track.flight.altitudeFt !== null ? `${formatNumber(track.flight.altitudeFt)} ft` : '—'}</strong></div>
-                    <div><span>Speed</span><strong>{track.flight.speedKt !== null ? `${formatNumber(track.flight.speedKt)} kt` : '—'}</strong></div>
-                    <div><span>Heading</span><strong>{track.flight.trackDeg !== null ? `${Math.round(track.flight.trackDeg)}°` : '—'}</strong></div>
-                    <div><span>Distance</span><strong>{track.flight.distanceKm !== null ? `${track.flight.distanceKm.toFixed(1)} km` : '—'}</strong></div>
-                  </div>
-                )}
+              <div className="track-board" aria-label="Tracked flights">
+                {trackedFlights.map((entry, index) => (
+                  <TrackedFlightCard
+                    key={entry.query ?? `pin-${index}`}
+                    entry={entry}
+                    isFocused={entry === mapped}
+                    mappable={isMappable(entry)}
+                    busy={trackBusy}
+                    onFocus={() => setMapFocus(entry.query)}
+                    onRemove={() => { if (entry.query) void untrackFlight(entry.query) }}
+                  />
+                ))}
               </div>
             )}
+
             </div>
           </section>
         )}

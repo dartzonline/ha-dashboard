@@ -302,6 +302,26 @@ def resolve_airport(icao: str | None) -> dict[str, Any] | None:
     return {"code": code, "city": None, "lat": None, "lon": None}
 
 
+def route_payload(origin: dict[str, Any] | None, dest: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The route as the frontend consumes it: codes and cities to read, coordinates to draw.
+
+    The coordinates are what lets the Track page plot a real route line instead of a bar; they are
+    emitted per-side, because one endpoint is routinely known while the other is still unresolved.
+    """
+    if not (origin or dest):
+        return None
+    return {
+        "fromCode": origin.get("code") if origin else None,
+        "fromCity": origin.get("city") if origin else None,
+        "fromLat": origin.get("lat") if origin else None,
+        "fromLon": origin.get("lon") if origin else None,
+        "toCode": dest.get("code") if dest else None,
+        "toCity": dest.get("city") if dest else None,
+        "toLat": dest.get("lat") if dest else None,
+        "toLon": dest.get("lon") if dest else None,
+    }
+
+
 def on_corridor(plat: float | None, plon: float | None, origin: dict[str, Any] | None, dest: dict[str, Any] | None) -> bool:
     """True if the aircraft's current position is plausibly on the route between origin and dest.
 
@@ -1004,15 +1024,9 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
     if mode != "track" and schedule.get("status") in ("landed", "arrived"):
         mode = "landed"
 
-    if origin or dest:
-        # Show whatever side is known -- e.g. destination alone from live descent inference,
-        # with the origin still unresolved -- rather than nothing until both sides agree.
-        route_out = {
-            "fromCode": origin.get("code") if origin else None,
-            "fromCity": origin.get("city") if origin else None,
-            "toCode": dest.get("code") if dest else None,
-            "toCity": dest.get("city") if dest else None,
-        }
+    # Show whatever side is known -- e.g. destination alone from live descent inference, with the
+    # origin still unresolved -- rather than nothing until both sides agree.
+    route_out = route_payload(origin, dest)
 
     if origin and dest:
         o_lat, o_lon = origin.get("lat"), origin.get("lon")

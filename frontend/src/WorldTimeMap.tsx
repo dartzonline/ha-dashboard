@@ -1,6 +1,7 @@
 import { Clock3, Globe2, MapPin, MoonStar, Navigation, SunMedium, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { CityWeatherPanel } from './CityWeatherPanel'
+import { terminatorPath } from './daylight'
 import './WorldTimeMap.css'
 import { countryCode, worldCities } from './worldCities'
 
@@ -41,6 +42,9 @@ interface Reading {
 
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago'
 const satelliteMapUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74218/world.200412.3x5400x2700.jpg'
+/** NASA's Black Marble: the same globe, photographed at night. Both images are equirectangular at
+    the same extent, so the day and night layers register pixel for pixel. */
+const nightLightsUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/79000/79765/dnb_land_ocean_ice.2012.3600x1800.jpg'
 const pinAccent = '#7fd4ff'
 
 // Jewel-tone accents drawn from the app's own palette (warn/accent/good, plus the violet
@@ -190,8 +194,8 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
   const [selectedId, setSelectedId] = useState('home')
   const [pin, setPin] = useState<Reading | null>(null)
   const [weatherFor, setWeatherFor] = useState<Reading | null>(null)
-  const utcHour = now.getUTCHours() + now.getUTCMinutes() / 60
-  const daylightCenter = ((24 - utcHour) / 24) * 100
+  // Recomputed only when the minute rolls over: the shape depends on nothing finer than that.
+  const nightPath = useMemo(() => terminatorPath(now), [now])
   const zoneHours = useMemo(() => Array.from({ length: 24 }, (_, index) => (now.getUTCHours() - 12 + index + 24) % 24), [now])
 
   const presetReadings: Reading[] = locations.map((location) => ({
@@ -269,15 +273,23 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
           {zoneHours.map((hour, index) => <span key={`${index}-${hour}`} className={hour === 12 ? 'is-noon' : hour === 0 ? 'is-midnight' : ''}>{hour === 0 ? '12a' : hour > 12 ? hour - 12 : hour}</span>)}
         </div>
         <div className="world-map" role="group" aria-label="Interactive satellite world time map">
-          <svg viewBox="0 0 1000 500" preserveAspectRatio="none" role="img" aria-label="NASA satellite world map with day and night regions">
+          <svg viewBox="0 0 1000 500" preserveAspectRatio="none" role="img" aria-label="NASA satellite world map: sunlit by day, city lights by night">
             <defs>
-              <radialGradient id="nightShade" cx={`${daylightCenter}%`} cy="42%" r="56%">
-                <stop offset="0" stopColor="#020611" stopOpacity="0" />
-                <stop offset=".38" stopColor="#020611" stopOpacity=".06" />
-                <stop offset=".58" stopColor="#01040d" stopOpacity=".56" />
-                <stop offset=".76" stopColor="#01030a" stopOpacity=".86" />
-                <stop offset="1" stopColor="#000208" stopOpacity=".95" />
-              </radialGradient>
+              {/* Twilight is a band, not a line: blurring the terminator is what turns the two
+                  layers into a dawn and a dusk instead of a hard cut across the map. */}
+              <filter id="dusk" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="17" />
+              </filter>
+              {/* White where it is night: what the city-lights layer and the darkening show through. */}
+              <mask id="nightSide">
+                <rect width="1000" height="500" fill="#000" />
+                <path d={nightPath} fill="#fff" filter="url(#dusk)" />
+              </mask>
+              {/* The complement, for the warm sunlit wash. */}
+              <mask id="daySide">
+                <rect width="1000" height="500" fill="#fff" />
+                <path d={nightPath} fill="#000" filter="url(#dusk)" />
+              </mask>
               <linearGradient id="mapTint" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stopColor="#06152b" stopOpacity=".08" />
                 <stop offset="1" stopColor="#020715" stopOpacity=".32" />
@@ -286,7 +298,14 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
             <rect width="1000" height="500" className="map-ocean" />
             <image className="satellite-layer" href={satelliteMapUrl} x="0" y="0" width="1000" height="500" preserveAspectRatio="none" />
             <rect width="1000" height="500" fill="url(#mapTint)" />
-            <rect width="1000" height="500" fill="url(#nightShade)" />
+            {/* Dusk rather than a blackout: enough to read as night, and a base the lights sit on
+                even if the second NASA image never loads. */}
+            <rect className="night-shade" width="1000" height="500" mask="url(#nightSide)" />
+            {/* Screened on, so the black ocean of the night image adds nothing and only the lit
+                cities come through. */}
+            <image className="night-lights" href={nightLightsUrl} x="0" y="0" width="1000" height="500" preserveAspectRatio="none" mask="url(#nightSide)" />
+            {/* Daylight given its own warmth, strongest under the sun. */}
+            <rect className="day-wash" width="1000" height="500" mask="url(#daySide)" />
             <g className="map-grid">
               {Array.from({ length: 23 }, (_, index) => <line key={`v-${index}`} x1={(index + 1) * (1000 / 24)} x2={(index + 1) * (1000 / 24)} y1="0" y2="500" />)}
               {[125, 250, 375].map((y) => <line key={`h-${y}`} x1="0" x2="1000" y1={y} y2={y} />)}
@@ -339,8 +358,8 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
             </button>
           )}
 
-          <a className="map-credit" href="https://visibleearth.nasa.gov/images/74218/december-blue-marble-next-generation" target="_blank" rel="noreferrer">NASA Blue Marble</a>
-          <div className="map-legend" aria-hidden="true"><span><SunMedium size={14} /> Day</span><span><MoonStar size={14} /> Night</span></div>
+          <a className="map-credit" href="https://visibleearth.nasa.gov/images/74218/december-blue-marble-next-generation" target="_blank" rel="noreferrer">NASA Blue Marble · Black Marble</a>
+          <div className="map-legend" aria-hidden="true"><span><SunMedium size={14} /> Sunlit</span><span><MoonStar size={14} /> City lights</span></div>
         </div>
       </div>
 

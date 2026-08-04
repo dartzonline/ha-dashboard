@@ -1,8 +1,11 @@
 /* The flight banner is the centrepiece of the header: a large horizontal aircraft, the airline,
    and where it is going. Everything else in the topbar is deliberately smaller than this. */
 .flight-banner {
-  flex: 0 1 auto;
+  /* A grid item in the header's centre column: it must be allowed to shrink (min-width) and to
+     clip its own nowrap contents (overflow) rather than push the clock off the right edge. */
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   min-height: 58px;
   padding: 6px 14px 6px 10px;
   border: 1px solid var(--border);

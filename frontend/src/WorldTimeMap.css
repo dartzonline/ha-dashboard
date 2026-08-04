@@ -30,10 +30,17 @@
 /* The whole map is the control; markers sit above this and stop the event. */
 .map-surface { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; cursor: crosshair; }
 .map-surface:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
-/* Direct child only: this is the basemap layer, not the pin/legend glyphs nested inside it. */
-.world-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Direct child only: this is the basemap layer, not the pin/legend glyphs nested inside it.
+   isolate keeps the layers' blend modes inside the map instead of reaching the page behind it. */
+.world-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; isolation: isolate; }
 .map-ocean { fill: #0a0b0f; }
 .satellite-layer { filter: saturate(1.15) contrast(1.12) brightness(1.02); }
+/* Night reads as dusk, not a hole in the map: deep blue at two thirds rather than near-black, so
+   coastlines stay visible under the city lights. */
+.night-shade { fill: #030a1a; opacity: .66; }
+.night-lights { mix-blend-mode: screen; opacity: .95; filter: saturate(1.25) brightness(1.12); }
+/* Sunlit half, warmed slightly so the two sides differ in temperature and not only brightness. */
+.day-wash { fill: #ffd9a3; opacity: .1; mix-blend-mode: soft-light; }
 .map-grid line { stroke: rgba(210, 208, 202, .11); stroke-width: .8; vector-effect: non-scaling-stroke; }
 .route-line { fill: none; stroke: color-mix(in srgb, var(--accent) 42%, transparent); stroke-width: 1.3; stroke-dasharray: 5 7; vector-effect: non-scaling-stroke; }
 /* Refined jewel-tone dots instead of thick-bordered map pins: a small glass-highlight
