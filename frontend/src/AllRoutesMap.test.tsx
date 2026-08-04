@@ -131,7 +131,10 @@ describe('AllRoutesMap', () => {
     expect(document.querySelector('.all-route-aircraft')).toBeNull()
   })
 
-  it('keeps a date-line route and a European one in the same copy of the world', () => {
+  it('draws a date-line route and a European route on the same screen', () => {
+    // SIN→SFO is unwrapped east past the date line and ends up around lon 238, while BCN→DFW stays
+    // in the −97..2 range. Both have to land inside one viewport rather than one being flung into a
+    // neighbouring copy of the world.
     stubSize()
     render(
       <AllRoutesMap
@@ -143,12 +146,26 @@ describe('AllRoutesMap', () => {
     )
 
     const labels = labelPositions()
-    // eslint-disable-next-line no-console
-    console.log('PROBE A labels', JSON.stringify(Array.from(labels.entries())))
     expect(labels.size).toBe(2)
+    for (const [callsign, at] of labels) {
+      expect(Number.isFinite(at.x), `${callsign} x`).toBe(true)
+      expect(at.x, `${callsign} x`).toBeGreaterThanOrEqual(0)
+      expect(at.x, `${callsign} x`).toBeLessThanOrEqual(WIDTH)
+      expect(at.y, `${callsign} y`).toBeGreaterThanOrEqual(0)
+      expect(at.y, `${callsign} y`).toBeLessThanOrEqual(HEIGHT)
+    }
+    // And they are genuinely two separate routes on that screen, not stacked on one point.
+    expect(Math.abs(labels.get('SQ34')!.x - labels.get('AAL69')!.x)).toBeGreaterThan(20)
   })
 
-  it('PROBE B', () => {
+  it('re-seats an arc that its own unwrap left a full turn away from the others', () => {
+    // This is the case `align` exists for: SFO is more than 180° from the SIN reference, so the
+    // SFO→BCN arc unwraps around lon −122 while the SIN→SFO arc sits above 100. Left alone the two
+    // are a whole 360° apart in projected space and one is drawn off the edge of the world.
+    const reference = SIN.lon
+    const strayOrigin = unwrap(greatCircle(SFO, BCN, 48), SFO.lon)[0].lon
+    expect(Math.round((reference - strayOrigin) / 360)).not.toBe(0)
+
     stubSize()
     render(
       <AllRoutesMap
@@ -158,11 +175,22 @@ describe('AllRoutesMap', () => {
         ]}
       />,
     )
-    // eslint-disable-next-line no-console
-    console.log('PROBE B labels', JSON.stringify(Array.from(labelPositions().entries())))
-    // eslint-disable-next-line no-console
-    console.log('PROBE B turns', Math.round((SIN.lon - unwrap(greatCircle(SFO, BCN, 8), SFO.lon)[0].lon) / 360))
-    // eslint-disable-next-line no-console
-    console.log('PROBE B turns-A', Math.round((SIN.lon - unwrap(greatCircle(BCN, DFW, 8), BCN.lon)[0].lon) / 360))
+
+    const labels = labelPositions()
+    expect(labels.size).toBe(2)
+    for (const [callsign, at] of labels) {
+      expect(at.x, `${callsign} x`).toBeGreaterThanOrEqual(0)
+      expect(at.x, `${callsign} x`).toBeLessThanOrEqual(WIDTH)
+      expect(at.y, `${callsign} y`).toBeGreaterThanOrEqual(0)
+      expect(at.y, `${callsign} y`).toBeLessThanOrEqual(HEIGHT)
+    }
+
+    // Both routes touch SFO, so the arrival dot of the first and the departure dot of the second
+    // are the same airport and must land on the same pixel. An unaligned arc puts them a whole
+    // world apart, which is the visible symptom: one route drawn off the side of the map.
+    const [inbound, outbound] = groups().map((group) => Array.from(group.querySelectorAll('circle.all-route-end')))
+    const arrival = Number(inbound[1].getAttribute('cx'))
+    const departure = Number(outbound[0].getAttribute('cx'))
+    expect(departure).toBeCloseTo(arrival, 1)
   })
 })

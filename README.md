@@ -226,7 +226,7 @@ Each of those states is named on the flight's own card, so "Awaiting" is never j
 
 **When the board is empty**, `GET /api/flights/status` says whether the sky is quiet or a key is missing: which upstreams are configured, whether the OpenSky token request and states query succeed, and the last error seen per upstream.
 
-No API key is required for live positions and routes (OpenSky anonymous tier + adsbdb, both free). Three optional credentials improve it further — where you set them depends on how you're running the dashboard:
+No API key is required, for positions, routes or schedules. Positions come from OpenSky's anonymous tier and fall back to three keyless community feeds (adsb.lol, adsb.fi, airplanes.live) whenever it is rate-limited or quiet; routes come from adsbdb and adsb.lol; gates, terminals and delays come from a free schedule source. Optional credentials add to that rather than switching it on — where you set them depends on how you're running the dashboard:
 
 - **Home Assistant add-on:** the add-on's **Configuration** tab (Settings → Apps/Add-ons → Home Panel → Configuration) has fields for `opensky_client_id`, `opensky_client_secret`, and `airlabs_key`. Fill them in and restart the add-on — `backend/addon_entrypoint.py` reads Supervisor's `/data/options.json` and exports them as the environment variables below before the backend starts.
 - **Native/Compose:** set the same values as env vars in `backend/.env`:
@@ -236,8 +236,15 @@ OPENSKY_CLIENT_ID=...      # free OpenSky account -> API client credentials; rai
                            # AND unlocks that aircraft's real flight history, the most reliable
                            # route source available here (see "Route accuracy" below)
 OPENSKY_CLIENT_SECRET=...
-AIRLABS_KEY=...            # free tier from airlabs.co; adds scheduled times and delay status to tracked flights only
+AIRLABS_KEY=...            # free tier from airlabs.co; a second opinion on scheduled times and delays
+AIRLABS_DAILY_BUDGET=30    # optional cap on AirLabs calls per UTC day, so a metered key cannot be
+                           # drained; past the cap schedules fall back to the free source. 0 disables
+                           # AirLabs entirely
 ```
+
+Every metered call is cached and drawn from that daily budget, and `/api/flights/status` reports
+which feed is actually carrying the board plus how much allowance is left — so an empty screen can
+always be told apart from a quiet sky.
 
 ## Kiosk mode
 

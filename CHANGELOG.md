@@ -3,6 +3,42 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.4.0 - 2026-08-04
+
+The flight screens went blank. The AirLabs allowance had run out, and positions came from OpenSky
+alone — whose anonymous tier rate-limits constantly — so there was nothing left to draw. Both halves
+of that are now fixed, and neither depends on an API key.
+
+**Positions fall back to three keyless feeds.** When OpenSky returns nothing, the radar and the
+tracked flights come from adsb.lol, adsb.fi or airplanes.live, whichever answers first. None needs a
+key. They also carry each aircraft's registration and type inline, which saves a separate lookup per
+aircraft, and they can answer "which aircraft is flying this callsign" directly — replacing the
+whole-planet scan that resolving a pin used to require. Verified with no credentials configured at
+all and OpenSky deliberately unreachable: the radar still fills and pinned flights still track.
+
+**Schedules no longer need a key either.** Gate, terminal, baggage claim, delay and live status now
+come from a free source, with AirLabs filling anything it misses and cross-checking the rest. Long-
+haul routes finally draw properly: a worldwide airport database supplies the coordinates the local
+airport table never had, so a Barcelona–Dallas flight gets a real arc and a real percentage instead
+of a flat bar.
+
+**A quota cannot be silently drained again.** Every metered call is cached for five minutes and spent
+from a persisted daily budget that stops before the cap rather than after it. Polling drops to 30s
+for tracked flights and 60s for the radar, and pauses entirely while the dashboard is not on screen.
+The status panel reports the feed actually carrying the board and how much allowance is left, rather
+than blaming OpenSky while the screen is visibly full of aircraft.
+
+**Every tracked flight on one map.** Rotating through one route at a time never showed two flights
+converging on the same airport. The combined view joins the same rotation as one more screen on the
+Track page — each route in its own colour with the flight number on the path, landed flights greyed
+but still present.
+
+**The header banner is now a shortcut.** Tapping a pinned flight opens the tracking map; tapping the
+jet overhead opens the radar. The banner and the map both take horizontal swipes to move between
+flights, and the dots are tappable for direct selection. Scenes has been dropped from the unattended
+rotation — it is a page of buttons to press, not something to watch go by — and stays reachable from
+the sidebar and by swipe.
+
 ## 1.3.1 - 2026-08-04
 
 Flights that sat on "Awaiting" while they were demonstrably in the air. Three separate causes, all
