@@ -13,6 +13,7 @@ matching this codebase's `HomeAssistantClient.health()` pattern.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import math
 import os
 import time
@@ -92,6 +93,10 @@ SEARCH_RADII: list[float] = [75, 150, 300, 700]
 
 # Cache TTLs (seconds), mirroring the source project's cache lifetimes.
 STATES_CACHE_TTL = 60.0
+# How long a tracked aircraft's last known state vector stands in for a rate-limited fetch.
+STATE_ROW_TTL = 180.0
+# A feed failure this recent is treated as the reason a pinned flight has no position.
+UPSTREAM_STALE_S = 120.0
 ROUTE_CACHE_TTL = 3600.0
 AIRCRAFT_CACHE_TTL = 86400.0
 # How long a landed flight stays on the board before it is retired.
@@ -220,6 +225,20 @@ _last_upstream_error: dict[str, dict[str, Any]] = {}
 
 def _note_upstream(source: str, detail: str) -> None:
     _last_upstream_error[source] = {"detail": detail, "at": time.time()}
+
+
+def upstream_failing(source: str, now: float | None = None) -> bool:
+    """Has this feed failed recently enough to be the explanation for a missing position?"""
+    entry = _last_upstream_error.get(source)
+    return bool(entry) and ((now or time.time()) - entry["at"]) < UPSTREAM_STALE_S
+
+
+# key: icao24 (lower) -> (fetched_at, state vector). Carries a tracked flight across the gaps in a
+# rate-limited feed; see fetch_state_by_icao24.
+_state_row_cache: dict[str, tuple[float, list[Any]]] = {}
+
+# Single-slot list holding (fetched_at, states) for the whole-planet snapshot; see _all_states.
+_all_states_cache: list[tuple[float, list[Any]]] = []
 
 # key: (round(lat, 2), round(lon, 2), radius_km) -> (fetched_at, states)
 _states_cache: dict[tuple[float, float, float], tuple[float, list[Any]]] = {}
@@ -538,39 +557,143 @@ async def fetch_states_in_radius(
 
 
 async def fetch_state_by_icao24(client: httpx.AsyncClient, icao24: str) -> list[Any] | None:
+    """The aircraft's current state vector, or the last one seen if the feed is unreachable.
+
+    Anonymous OpenSky answers `429 Too many requests` freely, and a pinned board polling every ten
+    seconds runs into it constantly. Treating that failure as "no position" is what made a flight
+    that is demonstrably airborne flip to "Awaiting" between polls, so a rate-limited fetch falls
+    back to the last known row for a few minutes instead. A *successful* fetch that returns nothing
+    is different -- the aircraft really has stopped reporting -- and clears the cache.
+    """
+    key = icao24.lower()
     headers = await _opensky_headers(client)
+    reachable = True
+    states: list[Any] = []
     try:
         response = await client.get(
-            OPENSKY_STATES_URL, params={"icao24": icao24.lower()}, headers=headers, timeout=15
+            OPENSKY_STATES_URL, params={"icao24": key}, headers=headers, timeout=15
         )
         response.raise_for_status()
         payload = response.json()
         states = payload.get("states") or []
-    except (httpx.HTTPError, ValueError):
+    except (httpx.HTTPError, ValueError) as error:
+        _note_upstream("opensky_states", str(error))
+        reachable = False
+
+    if states:
+        _state_row_cache[key] = (time.time(), states[0])
+        return states[0]
+    if reachable:
+        _state_row_cache.pop(key, None)
         return None
-    return states[0] if states else None
+
+    cached = _state_row_cache.get(key)
+    return cached[1] if cached and (time.time() - cached[0]) < STATE_ROW_TTL else None
 
 
-async def resolve_icao24_by_callsign(client: httpx.AsyncClient, callsign: str | None) -> str | None:
+def flight_number_of(callsign: str | None) -> str | None:
+    """The numeric part of a callsign: AAL9195 -> "9195". None when it has no trailing number.
+
+    An airline's own designator is only half of a callsign; the number is the half that survives
+    being handed to a partner. `operated_by` below matches on it.
+    """
+    text = (callsign or "").strip().upper()
+    # Airline callsign shape only -- three letters then the number. Anything else is a registration
+    # (N172SP, D-EABC), and reading "172" out of a Cessna's tail number as a flight number would
+    # let a light aircraft stand in for an airliner.
+    if len(text) < 4 or not text[:3].isalpha():
+        return None
+    digits = "".join(itertools.takewhile(str.isdigit, text[3:]))
+    return digits or None
+
+
+def operated_by(
+    row: list[Any],
+    icao_callsign: str,
+    origin: dict[str, Any] | None,
+    dest: dict[str, Any] | None,
+) -> bool:
+    """Is this state vector plausibly the pinned flight, flying under another airline's callsign?
+
+    Regional affiliates keep the mainline flight number and swap the designator -- AA3456 flies as
+    ENY3456 -- so an exact-callsign scan misses a large share of what people actually pin. Matching
+    the number alone would be far too loose (every airline has a flight 3456), so a non-exact match
+    additionally has to be airborne on the corridor between the pinned flight's own origin and
+    destination, and pointed at that destination. Without a known route there is nothing to check
+    against and the candidate is refused rather than guessed at.
+    """
+    number = flight_number_of(icao_callsign)
+    candidate = (row[1] or "").strip().upper() if len(row) > 1 and row[1] else ""
+    if not number or not candidate or candidate == icao_callsign:
+        return False
+    if flight_number_of(candidate) != number:
+        return False
+    if not (origin and dest):
+        return False
+    o_lat, o_lon, d_lat, d_lon = origin.get("lat"), origin.get("lon"), dest.get("lat"), dest.get("lon")
+    if None in (o_lat, o_lon, d_lat, d_lon):
+        return False
+
+    lat, lon, track = row[6], row[5], row[10]
+    if lat is None or lon is None or bool(row[8]):  # airborne positions only
+        return False
+    if not on_corridor(lat, lon, origin, dest):
+        return False
+    # Flying the corridor in the wrong direction is the return leg, not this flight.
+    return track is not None and angle_off(track, bearing(lat, lon, d_lat, d_lon)) <= 75
+
+
+async def _all_states(client: httpx.AsyncClient) -> list[Any]:
+    """The whole state vector, cached and shared.
+
+    Every unresolved pin used to scan the entire world on every ten-second poll -- six pins meant
+    thirty-six full-planet queries a minute, which is how a board of ordinary flights talked itself
+    into the rate limit that then made them all look untrackable. One snapshot now serves the whole
+    board for a cache lifetime.
+    """
+    now = time.time()
+    if _all_states_cache and (now - _all_states_cache[0][0]) < STATES_CACHE_TTL:
+        return _all_states_cache[0][1]
+
+    headers = await _opensky_headers(client)
+    try:
+        response = await client.get(OPENSKY_STATES_URL, headers=headers, timeout=20)
+        response.raise_for_status()
+        states = response.json().get("states") or []
+    except (httpx.HTTPError, ValueError) as error:
+        _note_upstream("opensky_states", str(error))
+        return []
+
+    _all_states_cache[:] = [(now, states)]
+    return states
+
+
+async def resolve_icao24_by_callsign(
+    client: httpx.AsyncClient,
+    callsign: str | None,
+    origin: dict[str, Any] | None = None,
+    dest: dict[str, Any] | None = None,
+) -> str | None:
     """One-time full-states scan filtered by callsign; caller should cache the result."""
     if not callsign:
         return None
-    headers = await _opensky_headers(client)
-    try:
-        response = await client.get(OPENSKY_STATES_URL, headers=headers, timeout=15)
-        response.raise_for_status()
-        payload = response.json()
-        states = payload.get("states") or []
-    except (httpx.HTTPError, ValueError):
+    states = await _all_states(client)
+    if not states:
         return None
 
     target = callsign.strip().upper()
+    fallback: str | None = None
     for row in states:
         if not isinstance(row, list) or len(row) < 2:
             continue
         cs = (row[1] or "").strip().upper() if row[1] else ""
         if cs == target:
             return row[0]
+        # The exact callsign always wins, so the whole list is scanned before settling for this.
+        if fallback is None and len(row) > 10 and operated_by(row, target, origin, dest):
+            fallback = row[0]
+    if fallback:
+        return fallback
     return None
 
 
@@ -932,6 +1055,7 @@ def _empty_track_context() -> dict[str, Any]:
         "schedule": {},
         "progress": 0.0,
         "etaLine": None,
+        "awaitReason": None,
     }
 
 
@@ -952,6 +1076,42 @@ def _format_eta(hours_left: float) -> str:
     except ValueError:  # pragma: no cover - non-POSIX strftime fallback
         time_label = eta_dt.strftime("%I:%M %p").lstrip("0")
     return f"ETA ~{time_label} · {minutes_left} min left"
+
+
+def await_reason(
+    icao_callsign: str,
+    icao24: str | None,
+    has_route: bool,
+    has_schedule_key: bool,
+    feed_failing: bool = False,
+    has_opensky_key: bool = False,
+) -> str:
+    """Why a pinned flight has no live position, in the terms the person pinning it can act on.
+
+    "Awaiting" on its own is indistinguishable from a bug, and the most common cause is not one:
+    a flight number sold by one airline and flown by another transmits the *operating* airline's
+    callsign, so nothing in the sky is broadcasting the number that was typed. Position-by-number
+    matching (`operated_by`) recovers the affiliate case, where the number is kept; a true codeshare
+    renumbers the flight and only a schedule feed can connect the two.
+    """
+    # A failing feed explains any of the cases below, and is the only one the flight itself is not
+    # responsible for, so it is said first rather than blaming the flight for the outage.
+    if feed_failing:
+        return (
+            "The position feed is not answering right now"
+            + ("." if has_opensky_key else
+               " — anonymous OpenSky is rate-limited; add OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET for a higher limit.")
+        )
+    if icao24:
+        return f"{icao_callsign} is known but its aircraft has not reported a position recently."
+    if has_route and not has_schedule_key:
+        return (
+            f"No aircraft is transmitting {icao_callsign}. If this is a codeshare it is flying "
+            "under the operating airline's own callsign — set AIRLABS_KEY to follow those."
+        )
+    if has_route:
+        return f"No aircraft is transmitting {icao_callsign}; the schedule feed has no live position for it either."
+    return f"No aircraft is transmitting {icao_callsign} right now, and no route is on file for it."
 
 
 def _pin_is_expired(pin: dict[str, Any], now: float) -> bool:
@@ -978,6 +1138,12 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
     schedule = await airlabs_schedule(client, pin["iata_number"])
     airlabs_icao24 = schedule.pop("_icao24", None)
 
+    # Fetched before the aircraft rather than after it: the scheduled endpoints are what a
+    # partner-operated match is checked against, and the lookup is cached either way.
+    route = await adsbdb_route_lookup(client, icao_callsign) if icao_callsign else None
+    db_origin = _airport_obj(route.get("origin")) if route else None
+    db_dest = _airport_obj(route.get("destination")) if route else None
+
     icao24 = pin["icao24"]
     # A hex that has stopped returning a state vector may simply be the wrong aircraft: callsigns
     # get reused daily, so re-resolve rather than let one bad lookup strand the flight in "await".
@@ -987,7 +1153,9 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
         and (time.time() - pin["resolved_at"]) > TRACK_RERESOLVE_S
     )
     if not icao24 or stale_hex:
-        resolved = airlabs_icao24 or await resolve_icao24_by_callsign(client, icao_callsign)
+        resolved = airlabs_icao24 or await resolve_icao24_by_callsign(
+            client, icao_callsign, db_origin, db_dest,
+        )
         if resolved:
             icao24 = resolved
             async with _track_lock:
@@ -1006,7 +1174,6 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
     p_alt = (state_row[13] if state_row[13] is not None else state_row[7]) if state_row else None
     has_airline = bool(derive_airline_code(icao_callsign))
 
-    route = await adsbdb_route_lookup(client, icao_callsign) if icao_callsign else None
     origin, dest = await resolve_route(
         client, route, icao_callsign, icao24, p_lat, p_lon, p_track, p_vrate, p_alt, has_airline,
     )
@@ -1065,6 +1232,17 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
         "schedule": schedule,
         "progress": round(progress, 4),
         "etaLine": eta_line,
+        "awaitReason": (
+            await_reason(
+                icao_callsign,
+                icao24,
+                bool(route_out),
+                bool(os.getenv("AIRLABS_KEY")),
+                upstream_failing("opensky_states"),
+                bool(os.getenv("OPENSKY_CLIENT_ID") and os.getenv("OPENSKY_CLIENT_SECRET")),
+            )
+            if mode == "await" else None
+        ),
     }
 
 

@@ -140,7 +140,9 @@ export function RouteMap({ from, to, position, progress = 0, callsign, caption }
       return `${index === 0 ? 'M' : 'L'}${screen.x.toFixed(1)} ${screen.y.toFixed(1)}`
     }).join(' ')
 
-    const marker = plane ?? arc[splitIndex]
+    // With no live position and no progress there is nothing to place: drawing the glyph on the
+    // origin anyway would claim the aircraft is sitting there, which is not something we know.
+    const marker = plane ?? (progress > 0 ? arc[splitIndex] : null)
     const heading = position?.trackDeg ?? bearingBetween(
       arc[Math.max(0, splitIndex - 1)],
       arc[Math.min(arc.length - 1, splitIndex + 1)],
@@ -152,7 +154,7 @@ export function RouteMap({ from, to, position, progress = 0, callsign, caption }
       remaining: path([...(plane ? [plane] : []), ...arc.slice(splitIndex)]),
       start: toScreen(arc[0]),
       end: toScreen(arc[arc.length - 1]),
-      aircraft: toScreen(marker),
+      aircraft: marker ? toScreen(marker) : null,
       heading,
       isLive: Boolean(plane),
     }
@@ -189,10 +191,12 @@ export function RouteMap({ from, to, position, progress = 0, callsign, caption }
             <circle className="route-end-dot" r="5" />
           </g>
 
-          <g className={`route-aircraft ${geometry.isLive ? 'is-live' : 'is-estimated'}`} transform={`translate(${geometry.aircraft.x} ${geometry.aircraft.y})`}>
-            <circle className="route-aircraft-halo" r="13" />
-            <path className="route-aircraft-glyph" transform={`rotate(${geometry.heading})`} d="M0,-9 L4.8,7 L0,4 L-4.8,7 Z" />
-          </g>
+          {geometry.aircraft && (
+            <g className={`route-aircraft ${geometry.isLive ? 'is-live' : 'is-estimated'}`} transform={`translate(${geometry.aircraft.x} ${geometry.aircraft.y})`}>
+              <circle className="route-aircraft-halo" r="13" />
+              <path className="route-aircraft-glyph" transform={`rotate(${geometry.heading})`} d="M0,-9 L4.8,7 L0,4 L-4.8,7 Z" />
+            </g>
+          )}
         </svg>
       )}
 
