@@ -6,6 +6,7 @@ import type { AircraftFamily } from './aircraftSilhouettes'
 import { apiUrl } from './api'
 import { AIRCRAFT_ART, arrivalVerdict, artKeyForAircraft, clockOf } from './flightBadge'
 import type { TrackSchedule } from './flightBadge'
+import { FLIGHTS_RADAR_SLIDE, FLIGHTS_TRACK_SLIDE } from './flightsSlides'
 import type { HAEntity } from './types'
 import { homeCoordinates } from './useServiceStatus'
 import './TrackedAircraftBadge.css'
@@ -94,7 +95,7 @@ const ALTERNATE_MS = 30_000
  * followed by the nearest passenger jet overhead, so pinning never permanently hides the sky.
  * A symbol rather than a caption says which kind is showing, keeping the space for the flight itself.
  */
-export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEntity> }) {
+export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Map<string, HAEntity>; onOpenFlights?: (slide: number) => void }) {
   const [track, setTrack] = useState<TrackResponse | null>(null)
   const [nearest, setNearest] = useState<NearbyAircraft | null>(null)
   const [step, setStep] = useState(0)
@@ -118,7 +119,9 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
     }
 
     load()
-    const timer = window.setInterval(load, 10_000)
+    // Each poll costs one upstream lookup per pinned flight, so this is deliberately slower than
+    // the banner's 30s rotation -- the flight on screen changes far more often than its data does.
+    const timer = window.setInterval(load, 30_000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
@@ -179,7 +182,19 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
   // An empty sky still holds the centre slot, so the header keeps its shape as flights come and go.
   if (!callsign) {
     return (
-      <div className="flight-banner is-idle" title="No tracked flight and no passenger jet overhead">
+      <div
+        className={`flight-banner is-idle ${onOpenFlights ? 'is-linked' : ''}`.trim()}
+        title={onOpenFlights ? 'No tracked flight and no passenger jet overhead — open the radar' : 'No tracked flight and no passenger jet overhead'}
+        onClick={onOpenFlights ? () => onOpenFlights(FLIGHTS_RADAR_SLIDE) : undefined}
+        onKeyDown={onOpenFlights ? (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            onOpenFlights(FLIGHTS_RADAR_SLIDE)
+          }
+        } : undefined}
+        role={onOpenFlights ? 'button' : undefined}
+        tabIndex={onOpenFlights ? 0 : undefined}
+      >
         <span className="flight-mode" aria-hidden="true"><PackAircraftIcon type={null} size={15} /></span>
         <div className="flight-body">
           <div className="flight-identity"><strong>Sky clear</strong><em>No jets overhead</em></div>
@@ -199,10 +214,25 @@ export function TrackedAircraftBadge({ entities }: { entities: Map<string, HAEnt
   const arrival = eta ? `Arrives ${eta}` : entry?.etaLine ?? null
   const distance = overhead?.distanceKm != null ? `${Math.round(overhead.distanceKm)} km` : null
 
+  // The banner shows one of two different things, and each has its own page: tapping a pinned
+  // flight should land on the route map, tapping the jet overhead on the radar. Sending both to
+  // the same slide would make half the taps look like they went to the wrong place.
+  const targetSlide = isTracked ? FLIGHTS_TRACK_SLIDE : FLIGHTS_RADAR_SLIDE
+  const destination = isTracked ? 'Open the tracking page' : 'Open the radar'
+
   return (
     <div
-      className={`flight-banner tone-${tone} ${isTracked ? 'is-tracking' : 'is-nearest'}`}
-      title={isTracked ? `Tracking ${callsign}` : `Nearest passenger jet overhead: ${callsign}${type ? ` · ${type}` : ''}`}
+      className={`flight-banner tone-${tone} ${isTracked ? 'is-tracking' : 'is-nearest'} ${onOpenFlights ? 'is-linked' : ''}`.trim()}
+      title={`${isTracked ? `Tracking ${callsign}` : `Nearest passenger jet overhead: ${callsign}${type ? ` · ${type}` : ''}`} — ${destination}`}
+      onClick={onOpenFlights ? () => onOpenFlights(targetSlide) : undefined}
+      onKeyDown={onOpenFlights ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpenFlights(targetSlide)
+        }
+      } : undefined}
+      role={onOpenFlights ? 'button' : undefined}
+      tabIndex={onOpenFlights ? 0 : undefined}
     >
       <span className="flight-mode" aria-label={isTracked ? 'Tracking this flight' : 'Nearest aircraft overhead'}>
         {isTracked ? <Crosshair size={15} aria-hidden="true" /> : <Locate size={15} aria-hidden="true" />}

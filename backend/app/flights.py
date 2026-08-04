@@ -24,6 +24,8 @@ import httpx
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from . import flight_sources
+
 router = APIRouter(prefix="/api/flights")
 
 # A module-wide client reuses TCP/TLS connections across requests instead of paying a fresh
@@ -227,6 +229,37 @@ def _note_upstream(source: str, detail: str) -> None:
     _last_upstream_error[source] = {"detail": detail, "at": time.time()}
 
 
+# Which feed last answered a position query, so /status can say the board is alive on a fallback
+# rather than reporting OpenSky as broken and leaving the screen looking unexplained.
+_active_position_source: dict[str, Any] = {"name": "opensky", "at": 0.0}
+
+
+def _note_source(name: str) -> None:
+    _active_position_source["name"] = name
+    _active_position_source["at"] = time.time()
+
+
+def _prime_aircraft_cache(records: list[dict[str, Any]]) -> None:
+    """Seed the adsbdb aircraft cache from registration/type a community feed already returned.
+
+    Only fills empty slots: a real adsbdb answer carries more (owner, manufacturer) and must not
+    be overwritten by the thinner feed version.
+    """
+    now = time.time()
+    for record in records:
+        icao24 = (record.get("hex") or "").strip().lower().lstrip("~")
+        if not icao24:
+            continue
+        info = flight_sources.aircraft_info_from_feed(record)
+        if not info:
+            continue
+        cache_key = (icao24, None)
+        cached = _aircraft_cache.get(cache_key)
+        if cached and cached[1]:
+            continue
+        _aircraft_cache[cache_key] = (now, info, cached[2] if cached else None)
+
+
 def upstream_failing(source: str, now: float | None = None) -> bool:
     """Has this feed failed recently enough to be the explanation for a missing position?"""
     entry = _last_upstream_error.get(source)
@@ -319,6 +352,41 @@ def resolve_airport(icao: str | None) -> dict[str, Any] | None:
         return {"code": iata, "city": name, "lat": lat, "lon": lon}
     code = icao[1:] if (len(icao) == 4 and icao[0] == "K") else icao
     return {"code": code, "city": None, "lat": None, "lon": None}
+
+
+IATA_TO_AIRPORT: dict[str, tuple[str, float, float]] = {
+    iata: (name, lat, lon) for iata, name, lat, lon in AIRPORTS.values()
+}
+
+
+def _schedule_airport(code: str | None, city: str | None) -> dict[str, Any] | None:
+    """A schedule feed's IATA code as a route endpoint, with coordinates when the code is known.
+
+    The schedule sources give codes and city names but no coordinates, and coordinates are what
+    the route map and progress maths need. `AIRPORTS` supplies them for the fields it covers;
+    elsewhere the endpoint is still worth showing as a label.
+    """
+    if not code:
+        return None
+    code = code.strip().upper()
+    known = IATA_TO_AIRPORT.get(code)
+    if known:
+        name, lat, lon = known
+        return {"code": code, "city": city or name, "lat": lat, "lon": lon}
+    return {"code": code, "city": city, "lat": None, "lon": None}
+
+
+def _merge_airport(primary: dict[str, Any] | None, extra: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Keep the schedule's naming, borrow whatever fields it left empty (chiefly coordinates)."""
+    if not primary:
+        return extra
+    if not extra:
+        return primary
+    # A code mismatch means the two sources disagree about the routing; trust the schedule, which
+    # is specific to today, over the historical callsign mapping.
+    if primary.get("code") and extra.get("code") and primary["code"] != extra["code"]:
+        return primary
+    return {**extra, **{key: value for key, value in primary.items() if value is not None}}
 
 
 def route_payload(origin: dict[str, Any] | None, dest: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -531,7 +599,12 @@ async def _opensky_headers(client: httpx.AsyncClient) -> dict[str, str]:
 async def fetch_states_in_radius(
     client: httpx.AsyncClient, lat: float, lon: float, radius_km: float
 ) -> list[list[Any]]:
-    """Bbox states query around (lat, lon), cached ~60s per rounded lat/lon+radius."""
+    """Bbox states query around (lat, lon), cached ~60s per rounded lat/lon+radius.
+
+    Falls back to the keyless community feeds when OpenSky returns nothing. Anonymous OpenSky
+    rate-limits constantly, and treating that as "no aircraft nearby" is what left the radar
+    blank; the feeds need no key and cover the same airspace.
+    """
     key = (round(lat, 2), round(lon, 2), radius_km)
     now = time.time()
     cached = _states_cache.get(key)
@@ -551,6 +624,16 @@ async def fetch_states_in_radius(
     except (httpx.HTTPError, ValueError) as error:
         _note_upstream("opensky_states", str(error))
         states = []
+
+    if not states:
+        states, records, feed = await flight_sources.feed_states_in_radius(
+            client, lat, lon, radius_km, _note_upstream
+        )
+        if feed:
+            _note_source(feed)
+            # The feeds return registration and type alongside the position, so priming the
+            # aircraft cache here spares one adsbdb request per aircraft on screen.
+            _prime_aircraft_cache(records)
 
     _states_cache[key] = (now, states)
     return states
@@ -583,6 +666,17 @@ async def fetch_state_by_icao24(client: httpx.AsyncClient, icao24: str) -> list[
     if states:
         _state_row_cache[key] = (time.time(), states[0])
         return states[0]
+
+    # Before concluding the aircraft has gone quiet, ask the keyless feeds -- they frequently have
+    # a position when OpenSky's anonymous tier has either throttled us or simply lacks coverage.
+    row, record, feed = await flight_sources.feed_lookup(client, "hex", key, _note_upstream)
+    if row:
+        _note_source(feed or "adsb")
+        if record:
+            _prime_aircraft_cache([record])
+        _state_row_cache[key] = (time.time(), row)
+        return row
+
     if reachable:
         _state_row_cache.pop(key, None)
         return None
@@ -674,9 +768,25 @@ async def resolve_icao24_by_callsign(
     origin: dict[str, Any] | None = None,
     dest: dict[str, Any] | None = None,
 ) -> str | None:
-    """One-time full-states scan filtered by callsign; caller should cache the result."""
+    """Find the aircraft flying a callsign, preferring a direct lookup over a whole-planet scan.
+
+    The community feeds answer "which aircraft is flying SWA2275" in one small request. OpenSky
+    has no such endpoint -- the only way is to download every state vector on earth and scan it --
+    so the feeds are tried first here even when OpenSky is healthy.
+    """
     if not callsign:
         return None
+
+    row, record, feed = await flight_sources.feed_lookup(
+        client, "callsign", callsign.strip().upper(), _note_upstream
+    )
+    if row and row[0]:
+        _note_source(feed or "adsb")
+        if record:
+            _prime_aircraft_cache([record])
+        _state_row_cache[str(row[0]).lower()] = (time.time(), row)
+        return row[0]
+
     states = await _all_states(client)
     if not states:
         return None
@@ -869,11 +979,19 @@ async def resolve_route(
 # ---------------------------------------------------------------------------
 
 async def airlabs_schedule(client: httpx.AsyncClient, iata_number: str | None) -> dict[str, Any]:
-    """Schedule/delay for one pinned flight. Returns {} whenever unset or empty."""
+    """Schedule/delay for one pinned flight. Returns {} whenever unset or empty.
+
+    Guarded by the daily budget: this used to be the one uncached upstream here, called once per
+    pinned flight on every poll, which is how a metered key got spent.
+    """
     api_key = os.getenv("AIRLABS_KEY")
     if not api_key or not iata_number:
         return {}
+    if not flight_sources.budget.allows("airlabs"):
+        _note_upstream("airlabs", "daily budget reached -- using free sources until UTC midnight")
+        return {}
 
+    flight_sources.budget.spend("airlabs")
     try:
         response = await client.get(
             AIRLABS_FLIGHT_URL,
@@ -907,6 +1025,53 @@ async def airlabs_schedule(client: httpx.AsyncClient, iata_number: str | None) -
     icao24 = data.get("hex")
     if icao24:
         result["_icao24"] = icao24
+    result["source"] = "airlabs"
+    return result
+
+
+# key: iata number -> (fetched_at, schedule dict). A schedule changes on the order of minutes, not
+# seconds, so a poll-rate cache here is what keeps the metered/scraped sources to a trickle.
+_schedule_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+SCHEDULE_CACHE_TTL = 300.0
+# An empty answer is retried sooner than a good one, but not on every poll.
+SCHEDULE_EMPTY_TTL = 120.0
+
+
+async def resolve_schedule(client: httpx.AsyncClient, iata_number: str | None) -> dict[str, Any]:
+    """Schedule for a pinned flight from whichever source can answer, cached for both.
+
+    FlightStats is the authoritative source here: it reports gate, terminal, baggage claim and a
+    live status the keyed feed does not, and it needs no key. AirLabs runs second as the
+    documented API, and fills any field the scrape left empty -- so losing either one degrades
+    the detail on screen rather than emptying it.
+    """
+    if not iata_number:
+        return {}
+
+    key = iata_number.strip().upper()
+    now = time.time()
+    cached = _schedule_cache.get(key)
+    if cached:
+        ttl = SCHEDULE_CACHE_TTL if cached[1] else SCHEDULE_EMPTY_TTL
+        if now - cached[0] < ttl:
+            return dict(cached[1])
+
+    result: dict[str, Any] = {}
+    if flight_sources.budget.allows("flightstats"):
+        flight_sources.budget.spend("flightstats")
+        result = await flight_sources.schedule_from_flightstats(client, key, _note_upstream)
+
+    airlabs = await airlabs_schedule(client, key)
+    if airlabs:
+        # Merged rather than replaced: whichever source answered first keeps its fields, and the
+        # other one only supplies what is still missing.
+        for field, value in airlabs.items():
+            if value is not None and result.get(field) is None:
+                result[field] = value
+        if result.get("source") != "flightstats":
+            result["source"] = "airlabs"
+
+    _schedule_cache[key] = (now, dict(result))
     return result
 
 
@@ -1135,14 +1300,39 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
     icao_callsign = pin["icao_callsign"]
     key = pin["key"]
 
-    schedule = await airlabs_schedule(client, pin["iata_number"])
+    schedule = await resolve_schedule(client, pin["iata_number"])
     airlabs_icao24 = schedule.pop("_icao24", None)
+    # A true codeshare flies under the operating airline's own callsign, so nothing in the sky is
+    # broadcasting the number that was typed. The schedule sources know the real callsign, which
+    # makes those flights findable instead of stuck on "Awaiting".
+    schedule_callsign = schedule.pop("_callsign", None)
 
     # Fetched before the aircraft rather than after it: the scheduled endpoints are what a
     # partner-operated match is checked against, and the lookup is cached either way.
     route = await adsbdb_route_lookup(client, icao_callsign) if icao_callsign else None
     db_origin = _airport_obj(route.get("origin")) if route else None
     db_dest = _airport_obj(route.get("destination")) if route else None
+
+    # The schedule names today's actual city pair, where adsbdb only has a historical mapping for
+    # the flight number. It therefore wins for a pinned flight, and also gives the corridor check
+    # below something to work with when adsbdb has nothing at all.
+    sched_origin = _schedule_airport(schedule.get("fromCode"), schedule.get("fromCity"))
+    sched_dest = _schedule_airport(schedule.get("toCode"), schedule.get("toCity"))
+
+    # The schedule names the airports but carries no coordinates, and `AIRPORTS` only covers
+    # fields near home -- so a long-haul route had no geometry to draw. This keyless worldwide
+    # lookup fills the coordinates in for either end that is still missing them.
+    if (sched_origin and sched_origin["lat"] is None) or (sched_dest and sched_dest["lat"] is None) or not (sched_origin and sched_dest):
+        geo = await flight_sources.route_with_coordinates(
+            client, schedule_callsign or icao_callsign, _note_upstream
+        )
+        if geo:
+            geo_origin, geo_dest = geo
+            sched_origin = _merge_airport(sched_origin, geo_origin)
+            sched_dest = _merge_airport(sched_dest, geo_dest)
+
+    if sched_origin and sched_dest:
+        db_origin, db_dest = sched_origin, sched_dest
 
     icao24 = pin["icao24"]
     # A hex that has stopped returning a state vector may simply be the wrong aircraft: callsigns
@@ -1156,6 +1346,10 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
         resolved = airlabs_icao24 or await resolve_icao24_by_callsign(
             client, icao_callsign, db_origin, db_dest,
         )
+        if not resolved and schedule_callsign and schedule_callsign != icao_callsign:
+            resolved = await resolve_icao24_by_callsign(
+                client, schedule_callsign, db_origin, db_dest,
+            )
         if resolved:
             icao24 = resolved
             async with _track_lock:
@@ -1177,6 +1371,11 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
     origin, dest = await resolve_route(
         client, route, icao_callsign, icao24, p_lat, p_lon, p_track, p_vrate, p_alt, has_airline,
     )
+    # A pinned flight has a schedule naming today's city pair, so an endpoint the live sources
+    # could not work out is filled from it rather than left blank. This is what puts a route on
+    # screen for a flight that has not taken off yet, where there is no position to infer from.
+    origin = origin or sched_origin
+    dest = dest or sched_dest
 
     route_out: dict[str, Any] | None = None
     progress = 0.0
@@ -1342,7 +1541,20 @@ async def flights_status() -> dict[str, Any]:
             # Route history needs the credentialed endpoint; anonymous access cannot reach it.
             "historyAvailable": has_opensky,
         },
-        "airlabs": {"configured": has_airlabs},
+        "airlabs": {
+            "configured": has_airlabs,
+            **flight_sources.budget.snapshot()["airlabs"],
+        },
+        # Keyless fallbacks need no configuration, so what matters is which one is actually
+        # carrying the board right now -- that is the difference between "OpenSky is down" and
+        # "OpenSky is down and it doesn't matter".
+        "fallback": {
+            "positionSource": _active_position_source["name"],
+            "activeRecently": bool(_active_position_source["at"])
+            and (time.time() - _active_position_source["at"]) < UPSTREAM_STALE_S,
+            "feeds": [name for name, *_ in flight_sources.ADSB_FEEDS],
+            "scheduleBudget": flight_sources.budget.snapshot()["flightstats"],
+        },
         "lastErrors": {
             source: {"detail": entry["detail"], "ageSeconds": round(time.time() - entry["at"])}
             for source, entry in _last_upstream_error.items()

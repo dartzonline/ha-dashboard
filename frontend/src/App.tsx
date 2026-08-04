@@ -700,6 +700,14 @@ function App() {
     setFlightsSlide(index)
   }
 
+  /** Jump straight to one Flights slide from elsewhere, e.g. tapping the header's flight banner. */
+  function openFlightsSlide(index: number) {
+    stopRotation()
+    setSidebarOpen(false)
+    setActiveSection('flights')
+    setFlightsSlide(index)
+  }
+
   async function activateNightMode() {
     const confirmed = window.confirm(
       'Activate Night Mode? This will lock every available lock, close an open garage, and turn off approved indoor lights and safe lighting switches.',
@@ -769,7 +777,7 @@ function App() {
             </button>
             <div><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p><h1>{section.label}</h1></div>
           </div>
-          <TrackedAircraftBadge entities={entities} />
+          <TrackedAircraftBadge entities={entities} onOpenFlights={openFlightsSlide} />
           <div className="clock-block">
             <strong>{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
             <ConnectionStatus health={health} entities={entities} onOpen={stopRotation} />

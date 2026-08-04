@@ -61,12 +61,27 @@ function readFlights(payload: unknown): ServiceStatus[] {
   }
   const opensky = isRecord(payload.opensky) ? payload.opensky : {}
   const airlabs = isRecord(payload.airlabs) ? payload.airlabs : {}
+  const fallback = isRecord(payload.fallback) ? payload.fallback : {}
   const errors = isRecord(payload.lastErrors) ? payload.lastErrors : {}
   const statesError = isRecord(errors.opensky_states) ? String(errors.opensky_states.detail ?? '') : ''
   const rateLimited = statesError.includes('429')
 
+  // A keyless community feed carrying the board is a working state, not a degraded one. Announcing
+  // OpenSky's outage while the screen is visibly full of aircraft is what made this panel
+  // untrustworthy, so an active fallback is reported ahead of the outage it covered for.
+  const fallbackSource = typeof fallback.positionSource === 'string' ? fallback.positionSource : null
+  const onFallback = fallback.activeRecently === true && fallbackSource !== null && fallbackSource !== 'opensky'
+
   let positions: ServiceStatus
-  if (!opensky.configured) {
+  if (onFallback) {
+    positions = {
+      id: 'opensky',
+      label: 'Flight positions',
+      state: 'ok',
+      detail: `Live via ${fallbackSource} — no key needed`,
+      hint: opensky.configured ? undefined : 'Set opensky_client_id and opensky_client_secret to add route history',
+    }
+  } else if (!opensky.configured) {
     positions = {
       id: 'opensky',
       label: 'Flight positions',
@@ -84,16 +99,41 @@ function readFlights(payload: unknown): ServiceStatus[] {
     positions = { id: 'opensky', label: 'Flight positions', state: 'ok', detail: 'OpenSky live, with route history' }
   }
 
-  return [
-    positions,
-    {
+  // Schedules no longer depend on a key at all, so this row reports what is actually available and
+  // — when a metered key is in play — how much of today's allowance is left, since silently running
+  // out of quota is what emptied these screens in the first place.
+  const scheduleBudget = isRecord(fallback.scheduleBudget) ? fallback.scheduleBudget : {}
+  const freeSchedules = Number(scheduleBudget.remaining ?? 0) > 0
+  const airlabsRemaining = typeof airlabs.remaining === 'number' ? airlabs.remaining : null
+  const airlabsSpent = airlabs.configured === true && airlabsRemaining === 0
+
+  let schedules: ServiceStatus
+  if (airlabsSpent) {
+    schedules = {
       id: 'airlabs',
       label: 'Flight schedules',
-      state: airlabs.configured ? 'ok' : 'unconfigured',
-      detail: airlabs.configured ? 'AirLabs schedules and delays' : 'Optional — no AirLabs key set',
-      hint: airlabs.configured ? undefined : 'Add airlabs_key for scheduled times and delay status on tracked flights',
-    },
-  ]
+      state: freeSchedules ? 'ok' : 'degraded',
+      detail: freeSchedules ? 'Free source — AirLabs allowance spent for today' : 'No schedule source available right now',
+      hint: 'The AirLabs daily allowance resets at UTC midnight; raise it with AIRLABS_DAILY_BUDGET',
+    }
+  } else if (airlabs.configured) {
+    schedules = {
+      id: 'airlabs',
+      label: 'Flight schedules',
+      state: 'ok',
+      detail: airlabsRemaining !== null ? `Gates and delays · ${airlabsRemaining} AirLabs calls left today` : 'Gates, delays and schedules',
+    }
+  } else {
+    schedules = {
+      id: 'airlabs',
+      label: 'Flight schedules',
+      state: freeSchedules ? 'ok' : 'unconfigured',
+      detail: freeSchedules ? 'Gates and delays from the free source' : 'Optional — no AirLabs key set',
+      hint: 'Add airlabs_key to cross-check scheduled times against a second source',
+    }
+  }
+
+  return [positions, schedules]
 }
 
 async function probe(url: string, init?: RequestInit) {
