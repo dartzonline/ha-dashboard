@@ -17,6 +17,13 @@
   white-space: nowrap;
 }
 
+/* Tapping the banner opens the matching Flights page, so it has to look pressable. Touch-friendly
+   because the wall panel has no cursor to reveal the affordance on hover. */
+.flight-banner.is-linked { cursor: pointer; transition: border-color .15s ease, transform .15s ease; }
+.flight-banner.is-linked:hover { border-color: var(--accent); }
+.flight-banner.is-linked:active { transform: scale(.99); }
+.flight-banner.is-linked:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* A quiet holding state so the header's centre does not collapse when the sky is empty. */
 .flight-banner.is-idle { min-height: 46px; padding: 6px 16px; border-style: dashed; background: var(--surface); opacity: .55; }
 .flight-banner.is-idle .flight-identity strong { font-size: .82rem; }

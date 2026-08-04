@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Info, Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { AirlineLogo } from './AirlineLogo'
 import { ShowcaseAircraft, type ShowcaseAircraftType } from './aircraftSilhouettes'
@@ -384,6 +384,35 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
   )
 }
 
+/**
+ * Runs `callback` now and every `intervalMs`, but only while the page is visible — each poll fans
+ * out to one metered upstream call per pinned flight, so polling a dashboard nobody is looking at
+ * is what exhausts the flight API quota. Becoming visible again fetches immediately so the panel
+ * never shows a full interval of stale data.
+ *
+ * `callback` is passed a `cancelled` probe and must consult it before calling setState, since a
+ * response can land after the effect that started it has been torn down.
+ */
+function usePolledEffect(callback: (cancelled: () => boolean) => void, intervalMs: number) {
+  useEffect(() => {
+    let cancelled = false
+
+    function poll() {
+      if (document.hidden) return
+      callback(() => cancelled)
+    }
+
+    poll()
+    const timer = window.setInterval(poll, intervalMs)
+    document.addEventListener('visibilitychange', poll)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', poll)
+    }
+  }, [callback, intervalMs])
+}
+
 export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps) {
   const [nearby, setNearby] = useState<NearbyResponse | null>(null)
   const [nearbyError, setNearbyError] = useState<string | null>(null)
@@ -415,55 +444,37 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     return candidates.find((value) => value !== null) ?? null
   }, [homeZone, weather])
 
-  useEffect(() => {
+  const loadNearby = useCallback((cancelled: () => boolean) => {
     if (latitude === null || longitude === null) return
-    let cancelled = false
-
-    function loadNearby() {
-      fetch(apiUrl(`flights/nearby?latitude=${latitude}&longitude=${longitude}&limit=15`))
-        .then(async (response) => {
-          if (!response.ok) throw new Error(`Flight radar unavailable (${response.status})`)
-          const payload: NearbyResponse = await response.json()
-          if (cancelled) return
-          setNearby(payload)
-          setNearbyError(null)
-        })
-        .catch((error: unknown) => {
-          if (cancelled) return
-          setNearbyError(error instanceof Error ? error.message : 'Flight radar failed')
-        })
-    }
-
-    loadNearby()
-    const timer = window.setInterval(loadNearby, 15_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
+    fetch(apiUrl(`flights/nearby?latitude=${latitude}&longitude=${longitude}&limit=15`))
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Flight radar unavailable (${response.status})`)
+        const payload: NearbyResponse = await response.json()
+        if (cancelled()) return
+        setNearby(payload)
+        setNearbyError(null)
+      })
+      .catch((error: unknown) => {
+        if (cancelled()) return
+        setNearbyError(error instanceof Error ? error.message : 'Flight radar failed')
+      })
   }, [latitude, longitude])
 
-  useEffect(() => {
-    let cancelled = false
+  usePolledEffect(loadNearby, 60_000)
 
-    function loadTrack() {
-      fetch(apiUrl('flights/track'))
-        .then(async (response) => {
-          if (!response.ok) throw new Error(`Track unavailable (${response.status})`)
-          const payload: TrackResponse = await response.json()
-          if (!cancelled) setTrack(payload)
-        })
-        .catch(() => {
-          // Keep the last known tracked flight on screen; the next poll will retry.
-        })
-    }
-
-    loadTrack()
-    const timer = window.setInterval(loadTrack, 10_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
+  const loadTrack = useCallback((cancelled: () => boolean) => {
+    fetch(apiUrl('flights/track'))
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Track unavailable (${response.status})`)
+        const payload: TrackResponse = await response.json()
+        if (!cancelled()) setTrack(payload)
+      })
+      .catch(() => {
+        // Keep the last known tracked flight on screen; the next poll will retry.
+      })
   }, [])
+
+  usePolledEffect(loadTrack, 30_000)
 
   async function trackFlight(query: string) {
     const trimmed = query.trim()
@@ -483,7 +494,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
         window.setTimeout(() => setTrackNotice(null), 4000)
       }
     } catch {
-      // Network hiccup; the 10s poll picks it back up.
+      // Network hiccup; the 30s poll picks it back up.
     } finally {
       setTrackBusy(false)
     }
@@ -503,7 +514,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
       await fetch(apiUrl('flights/track'), { method: 'DELETE' })
       setTrack(null)
     } catch {
-      // Network hiccup; the 10s poll reconciles state.
+      // Network hiccup; the 30s poll reconciles state.
     } finally {
       setTrackBusy(false)
     }
@@ -518,7 +529,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
         setTrack(payload)
       }
     } catch {
-      // Network hiccup; the 10s poll reconciles state.
+      // Network hiccup; the 30s poll reconciles state.
     } finally {
       setTrackBusy(false)
     }
