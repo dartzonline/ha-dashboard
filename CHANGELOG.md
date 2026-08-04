@@ -3,6 +3,29 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.2.5 - 2026-08-03
+
+Tracking a flight now lasts until the flight actually concludes. Two things were cutting it short: a
+schedule feed reporting the *previous* leg of the same flight number as "landed" retired a flight
+that had only just taken off, and a hex address resolved from a stale scan — callsigns get reused
+day to day — left the pin stuck waiting on an aircraft that was never going to appear. A live
+airborne aircraft now outranks the schedule, a hex that stops reporting is re-resolved, and a gap in
+OpenSky coverage no longer counts against a flight that has been seen flying. A landed flight
+lingers for half an hour instead of ten minutes.
+
+Several flights can be tracked at once — up to six — and the top banner rotates through all of them
+alongside whatever passenger jet is overhead, a dot per slot showing where it is in the cycle. The
+Track page lists everything pinned with its route and status, each row with its own remove button,
+and the old Stop button is now "Clear all". Pinning adds to the board instead of replacing it, and
+the input clears so flights can be added one after another.
+
+The airline logo moved out of the cramped identity row into its own panel on the right of the
+banner, roughly four times the size and on a lighter backing so dark or transparent artwork still
+reads.
+
+Backed by new tests on both sides: pin expiry rules, board capacity and eviction, and per-flight
+un-pinning on the backend; banner rotation, the slot indicator and logo placement on the frontend.
+
 ## 1.2.4 - 2026-08-03
 
 The top-bar aircraft silhouette renders again. It was drawn with a CSS mask, and a mask that cannot

@@ -22,7 +22,7 @@ function mockApi(track: unknown, nearby: unknown) {
 }
 
 function trackPayload(overrides: Record<string, unknown> = {}) {
-  return {
+  const first = {
     query: 'SWA771',
     mode: 'track',
     flight: { callsign: 'SWA771', airline: 'Southwest', airlineCode: 'WN', type: 'B738', kind: 'jet' },
@@ -32,12 +32,33 @@ function trackPayload(overrides: Record<string, unknown> = {}) {
     etaLine: 'in 41 min',
     ...overrides,
   }
+  // The backend flattens the first pinned flight and repeats every one of them in `flights`.
+  return { ...first, flights: [first] }
+}
+
+/** Two pinned flights: the first is also flattened at the top level, as the backend sends it. */
+function twoPinned() {
+  const first = trackPayload().flights[0]
+  const second = {
+    query: 'UAL455',
+    mode: 'await',
+    flight: null,
+    route: { fromCode: 'DEN', fromCity: 'Denver', toCode: 'AUS', toCity: 'Austin' },
+    schedule: { status: 'scheduled' },
+    progress: 0,
+    etaLine: null,
+  }
+  return { ...first, flights: [first, second] }
 }
 
 const EMPTY_SKY = { aircraft: [] }
 
 function silhouette() {
   return document.querySelector('svg.flight-silhouette')
+}
+
+function dots() {
+  return Array.from(document.querySelectorAll('.flight-dots i'))
 }
 
 afterEach(() => {
@@ -132,7 +153,7 @@ describe('TrackedAircraftBadge', () => {
     const tracked = silhouette()!.innerHTML
     cleanup()
 
-    await renderBadge({ query: null, mode: null, flight: null, route: null }, {
+    await renderBadge({ query: null, mode: null, flight: null, route: null, flights: [] }, {
       aircraft: [{ callsign: 'SWA771', airlineCode: 'WN', type: 'B738', kind: 'jet', fromCode: 'BUR', toCode: 'AUS', distanceKm: 15 }],
     })
     await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
@@ -171,8 +192,61 @@ describe('TrackedAircraftBadge', () => {
   })
 
   it('still draws an aircraft when the sky is empty', async () => {
-    await renderBadge({ query: null, mode: null, flight: null, route: null })
+    await renderBadge({ query: null, mode: null, flight: null, route: null, flights: [] })
     await waitFor(() => expect(screen.getByText('Sky clear')).toBeTruthy())
     expect(document.querySelector('svg')!.querySelectorAll('path').length).toBeGreaterThan(0)
+  })
+
+  it('shows the airline logo inside the banner for a tracked flight', async () => {
+    await renderBadge(trackPayload())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+    expect(document.querySelector('.flight-banner .flight-airline .flight-logo')).toBeTruthy()
+  })
+
+  it('renders no dots when there is only one thing to show', async () => {
+    await renderBadge(trackPayload())
+    await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
+    expect(dots()).toHaveLength(0)
+  })
+
+  it('rotates through every pinned flight', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', mockApi(twoPinned(), EMPTY_SKY))
+    await act(async () => {
+      render(<TrackedAircraftBadge entities={ENTITIES} />)
+    })
+
+    expect(screen.getByText('SWA771')).toBeTruthy()
+    expect(screen.queryByText('UAL455')).toBeNull()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(screen.getByText('UAL455')).toBeTruthy()
+
+    // And back round again, so the rotation wraps rather than stopping at the end.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(screen.getByText('SWA771')).toBeTruthy()
+  })
+
+  it('marks the current position with one dot per reading', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', mockApi(twoPinned(), {
+      aircraft: [{ callsign: 'AAL9', airlineCode: 'AA', type: 'B738', kind: 'jet', fromCode: 'DFW', toCode: 'AUS', distanceKm: 8 }],
+    }))
+    await act(async () => {
+      render(<TrackedAircraftBadge entities={ENTITIES} />)
+    })
+
+    // Two pinned flights plus the nearest jet overhead.
+    expect(dots()).toHaveLength(3)
+    expect(dots().map((dot) => dot.className)).toEqual(['is-active', '', ''])
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(dots().map((dot) => dot.className)).toEqual(['', 'is-active', ''])
   })
 })
