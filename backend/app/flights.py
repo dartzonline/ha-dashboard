@@ -101,8 +101,10 @@ STATE_ROW_TTL = 180.0
 UPSTREAM_STALE_S = 120.0
 ROUTE_CACHE_TTL = 3600.0
 AIRCRAFT_CACHE_TTL = 86400.0
-# How long a landed flight stays on the board before it is retired.
-TRACK_LINGER_S = 1800.0
+# How long a landed flight stays on the board before it is retired. Long enough that a flight which
+# landed while nobody was watching is still there to be seen, and that someone meeting an arrival can
+# check the gate and baggage claim after it is down -- half an hour retired them before anyone looked.
+TRACK_LINGER_S = 21600.0
 # A pin that never once produced a live position is dropped after this, so a typo cannot sit on the
 # board forever. The clock only runs while the flight has never been seen.
 TRACK_UNSEEN_S = 21600.0

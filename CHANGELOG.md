@@ -33,6 +33,10 @@ converging on the same airport. The combined view joins the same rotation as one
 Track page — each route in its own colour with the flight number on the path, landed flights greyed
 but still present.
 
+**A landed flight now stays on the board for six hours** instead of thirty minutes. Half an hour
+retired flights before anyone looked at them — the gate and baggage claim of an arrival are wanted
+after it is on the ground, not only while it is in the air.
+
 **The header banner is now a shortcut.** Tapping a pinned flight opens the tracking map; tapping the
 jet overhead opens the radar. The banner and the map both take horizontal swipes to move between
 flights, and the dots are tappable for direct selection. Scenes has been dropped from the unattended

@@ -184,27 +184,28 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
   // modulo above stays correct.
   function onPointerDown(event: React.PointerEvent) {
     swipe.current = { x: event.clientX, y: event.clientY }
+    // Cleared per gesture, not per navigation: a swipe whose click never arrives (it landed on a
+    // dot, or was cancelled) would otherwise leave this set and swallow the next genuine tap.
+    swiped.current = false
   }
   function onPointerUp(event: React.PointerEvent) {
     const start = swipe.current
     swipe.current = null
-    if (!start) return
+    if (!start || readings.length <= 1) return
     const deltaX = event.clientX - start.x
     const deltaY = event.clientY - start.y
     // A short or mostly-vertical drag is a tap or the page's own gesture, and must fall through to
-    // the click handler that opens the Flights page.
+    // the click handler that opens the Flights page. With only one flight there is nothing to swipe
+    // between, so every drag stays a tap rather than becoming a gesture that does nothing.
     if (Math.abs(deltaX) < SWIPE_PX || Math.abs(deltaX) <= Math.abs(deltaY)) return
-    if (readings.length > 1) setStep((current) => current + (deltaX < 0 ? 1 : readings.length - 1))
+    setStep((current) => current + (deltaX < 0 ? 1 : readings.length - 1))
     swiped.current = true
   }
 
   function openFlights(slide: number) {
     // A swipe ends in a click event too, which would otherwise navigate away from the flight the
-    // swipe just brought into view.
-    if (swiped.current) {
-      swiped.current = false
-      return
-    }
+    // swipe just brought into view. `onPointerDown` clears the flag for the next gesture.
+    if (swiped.current) return
     onOpenFlights?.(slide)
   }
   const reading = readings[position] ?? null
