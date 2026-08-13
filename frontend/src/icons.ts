@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Baby, Battery, BedDouble, Bot, BriefcaseBusiness, Car, ChartNoAxesCombined, CircleDot, CloudSun,
   DoorOpen, Droplets, Filter, Gauge, Globe2, Home, Lamp, Lightbulb, Lock, Moon, Plane, Projector, Refrigerator,
-  RotateCw, ScanLine, Shield, Stethoscope, Sparkles, Sprout, Thermometer, Tv, Warehouse, WashingMachine, Waves, Wifi, Wind, Zap,
+  RotateCw, ScanLine, Shield, Stethoscope, Sparkles, Sprout, Thermometer, Tv, Warehouse, WashingMachine, Waves, Wifi, Wind, Wrench, Zap,
 } from 'lucide-react'
 
 /** Keyed by the `icon` string stored in tile config, so tiles can reference an icon by name in JSON. */
@@ -21,6 +21,7 @@ export const sectionIcons: Record<string, LucideIcon> = {
   world: Globe2,
   flights: Plane,
   health: Stethoscope,
+  maintenance: Wrench,
   network: Wifi,
   energy: Zap,
   volvo: Car,
