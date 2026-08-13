@@ -1,0 +1,252 @@
+/* Full-page Roborock view. Mirrors NetworkView's page shell so the sidebar
+   sections all sit at the same rhythm. */
+.roborock-view {
+  margin: 0;
+  padding: 4px 0 8px;
+  background: var(--canvas);
+  width: 100%;
+  min-height: calc(100svh - 150px);
+}
+
+main.is-fixed-view .roborock-view {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.roborock-view > header {
+  padding: 0 2px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.roborock-view > header > div:first-child { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+.roborock-view h2 { margin: 0; color: var(--text); font-size: 1rem; font-weight: 650; }
+.roborock-view h3 { margin: 0; color: var(--text); font-size: .82rem; font-weight: 650; }
+.roborock-view > header > div:first-child > span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 600;
+}
+.roborock-view > header > div:first-child > span.is-active { background: var(--good-soft); color: var(--good); }
+
+.roborock-battery { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.roborock-battery strong { color: var(--text); font-size: .84rem; font-variant-numeric: tabular-nums; }
+
+.roborock-notice { margin: 0 2px 8px; color: var(--warn); font-size: .72rem; }
+
+.roborock-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+/* Buttons, not divs: each card opens its entity's detail sheet, so it has to
+   look and behave pressable like the tiles in every other section. */
+.roborock-cards > button {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  border-left: 3px solid var(--border);
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color .15s ease, transform .15s ease;
+}
+
+.roborock-cards > button.is-linked { cursor: pointer; }
+.roborock-cards > button.is-linked:hover { border-left-color: var(--accent); }
+.roborock-cards > button.is-linked:active { transform: scale(.99); }
+.roborock-cards > button.is-linked:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.roborock-cards > button:disabled { opacity: .6; cursor: default; }
+
+.roborock-cards span {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .64rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.roborock-cards strong { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.roborock-cards small { color: var(--muted); font-size: .68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.roborock-cards .tone-status { border-left-color: var(--accent); }
+.roborock-cards .tone-status span { color: var(--accent); }
+.roborock-cards .tone-active { border-left-color: var(--good); }
+.roborock-cards .tone-active span { color: var(--good); }
+.roborock-cards .tone-battery { border-left-color: var(--good); }
+.roborock-cards .tone-battery span { color: var(--good); }
+.roborock-cards .tone-clean { border-left-color: var(--chart-line); }
+.roborock-cards .tone-clean span { color: var(--accent); }
+.roborock-cards .tone-good { border-left-color: var(--good); }
+.roborock-cards .tone-good span { color: var(--good); }
+/* A fault has to be unmissable across a room, so it tints the whole card. */
+.roborock-cards .tone-bad {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--surface) 74%, var(--danger-soft));
+}
+.roborock-cards .tone-bad span { color: var(--danger); }
+.roborock-cards .tone-bad strong { color: var(--danger); }
+
+.roborock-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+.roborock-controls > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: .72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.roborock-controls > button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); }
+.roborock-controls > button.is-primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-soft); color: var(--accent-strong); }
+.roborock-controls > button:disabled { opacity: .5; cursor: default; }
+.roborock-controls > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.roborock-controls > small { color: var(--muted); font-size: .66rem; }
+
+/* Consumables lead on a wall display, so they take the widest column and never
+   scroll away; the dock list and lifetime figures sit beside them. */
+.roborock-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, .6fr);
+  gap: 8px;
+}
+
+.roborock-lower > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.roborock-panel-head { display: flex; align-items: center; gap: 7px; color: var(--muted); padding-bottom: 6px; }
+.roborock-panel-head > span { margin-left: auto; font-size: .64rem; }
+
+.roborock-consumables ul,
+.roborock-dock ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+.roborock-consumables li.is-empty {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px;
+  font-size: .7rem;
+}
+.roborock-consumables li.is-empty em { color: var(--muted); font-style: normal; font-size: .66rem; }
+
+/* The whole row is the button, so the bar itself is a target rather than just
+   the part name. */
+.roborock-consumables li > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.roborock-consumables li > button:hover { background: var(--surface); }
+.roborock-consumables li > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.roborock-consumables li span { color: var(--text); display: flex; align-items: center; gap: 5px; font-size: .72rem; }
+.roborock-consumables li em { font-style: normal; font-size: .68rem; font-weight: 650; color: var(--muted); }
+.roborock-consumables li small { color: var(--muted); font-size: .64rem; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.roborock-consumables li i {
+  grid-column: 1 / -1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+  display: block;
+}
+.roborock-consumables li i b { display: block; height: 100%; border-radius: 3px; background: var(--good); transition: width .3s ease; }
+
+.roborock-consumables .is-good em { color: var(--good); }
+.roborock-consumables .is-warn em { color: var(--warn); }
+.roborock-consumables .is-warn i b { background: var(--warn); }
+.roborock-consumables .is-bad em { color: var(--danger); }
+.roborock-consumables .is-bad i b { background: var(--danger); }
+/* Nothing left to draw at 0%, so the empty track itself has to read as bad. */
+.roborock-consumables .is-bad i { background: var(--danger-soft); }
+
+.roborock-note { margin: 8px 0 0; color: var(--muted); font-size: .6rem; line-height: 1.35; }
+
+.roborock-dock li > button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: .72rem;
+}
+.roborock-dock li > button:hover:not(:disabled) { background: var(--surface); }
+.roborock-dock li > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.roborock-dock li > button:disabled { opacity: .55; cursor: default; }
+
+.roborock-dock li i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--border); }
+.roborock-dock li span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roborock-dock li em { margin-left: auto; color: var(--muted); font-style: normal; font-size: .68rem; white-space: nowrap; }
+
+.roborock-dock li > button.is-good i { background: var(--good); }
+.roborock-dock li > button.is-good em { color: var(--good); }
+/* A problem row is tinted, not just recoloured: it must survive a glance from
+   across the room at wall-panel brightness. */
+.roborock-dock li > button.is-bad { background: var(--danger-soft); }
+.roborock-dock li > button.is-bad i { background: var(--danger); }
+.roborock-dock li > button.is-bad span,
+.roborock-dock li > button.is-bad em { color: var(--danger); font-weight: 650; }
+
+.roborock-dock dl,
+.roborock-totals dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: .7rem; }
+.roborock-dock dl { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); }
+.roborock-dock dt,
+.roborock-totals dt { color: var(--muted); font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; }
+.roborock-dock dd,
+.roborock-totals dd { margin: 0; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 1100px) {
+  .roborock-lower { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .roborock-totals { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .roborock-lower { grid-template-columns: 1fr; }
+  .roborock-totals { grid-column: auto; }
+  .roborock-view > header { gap: 8px; }
+  .roborock-controls > button { flex: 1 1 44%; justify-content: center; }
+}

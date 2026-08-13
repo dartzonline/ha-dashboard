@@ -38,6 +38,8 @@ const VolvoView = lazy(() => import('./VolvoView').then((module) => ({ default: 
 const FlightsView = lazy(() => import('./FlightsView').then((module) => ({ default: module.FlightsView })))
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
 const NetworkView = lazy(() => import('./NetworkView').then((module) => ({ default: module.NetworkView })))
+const HealthView = lazy(() => import('./HealthView').then((module) => ({ default: module.HealthView })))
+const RoborockView = lazy(() => import('./RoborockView').then((module) => ({ default: module.RoborockView })))
 
 /** The WAN sensor is a plain on/off, so its detail sheet gets the router's throughput story instead. */
 function isNetworkEntity(entityId: string, entity: HAEntity | undefined) {
@@ -849,9 +851,17 @@ function App() {
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing flights</span></div>}>
             <FlightsView entities={entities} slide={flightsSlide} onSelectSlide={selectFlightsSlide} />
           </Suspense>
+        ) : activeSection === 'health' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Checking home health</span></div>}>
+            <HealthView onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
+          </Suspense>
         ) : activeSection === 'network' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing network</span></div>}>
             <NetworkView entities={entities} onService={callService} onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
+          </Suspense>
+        ) : activeSection === 'roborock' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing Roborock</span></div>}>
+            <RoborockView entities={entities} onService={callService} onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
           </Suspense>
         ) : activeSection === 'energy' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing energy usage</span></div>}>
@@ -859,7 +869,7 @@ function App() {
           </Suspense>
         ) : activeSection === 'volvo' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing Volvo</span></div>}>
-            <VolvoView entities={entities} />
+            <VolvoView entities={entities} onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
           </Suspense>
         ) : (
           <section className="overview" aria-label={`${section.label} entities`}>

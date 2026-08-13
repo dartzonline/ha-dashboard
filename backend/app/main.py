@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import connectivity
+from . import connectivity, home_health
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .entity_registry import RegistrySnapshot
@@ -682,6 +682,22 @@ def _drop_restart_bursts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         stamp = str(event["at"])[:19]
         counts[stamp] = counts.get(stamp, 0) + 1
     return [event for event in events if counts[str(event["at"])[:19]] < RESTART_BURST_MIN]
+
+
+@app.get("/api/insights/health", dependencies=[Depends(require_configuration)])
+async def home_health_insights(
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """Everything that wants a human, plus the entity-registry cleanup list.
+
+    Reads only current entity state -- no history -- so it stays cheap enough to
+    poll from a wall panel.
+    """
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return home_health.health_summary(all_states)
 
 
 @app.get("/api/insights/clients", dependencies=[Depends(require_configuration)])

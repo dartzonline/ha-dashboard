@@ -3,6 +3,50 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.7.0 - 2026-08-13
+
+Three new pages, and one of them found real faults on day one.
+
+**Health** — a single page answering "does anything need me?", built from signals Home Assistant
+already publishes but never draws attention to. On this install it immediately surfaced:
+
+- **Automatic backups had been failing for 81 days.** A backup was attempted every day; the last
+  one that *succeeded* was in May. Both sensors read as healthy on their own — the fault only
+  exists in the gap between `last_attempted` and `last_successful`, which nothing was comparing.
+- A sensor battery at 10%, two refrigerator filters at 0% life, an active Roborock dock problem,
+  a door left open, and pending updates including Home Assistant Core itself.
+
+It also detects **stale sensors** — a value that has not moved in far longer than its own cadence.
+A lawn-moisture sensor here had been frozen at `0%` for eight days while its sibling updated
+normally; Home Assistant flags nothing, because `0` is a valid number. Getting this right needed
+two guards: Home Assistant rewrites `last_changed` on hundreds of entities when it restarts, so an
+early version read one restart as "110 sensors froze simultaneously" and buried the four findings
+that mattered. Restart bursts are now ignored — but only for 36 hours, because a sensor that has
+not moved since a restart days ago really has stopped. Batteries and coin-cell voltages are
+excluded entirely: sitting at a flat 100% / 3.0V for months is what a healthy one does.
+
+**Entity registry cleanup** — of 836 entities, 217 are `unavailable`, and most are not broken
+hardware. Re-pairing a device leaves its old entities behind forever, so `pantry_door_door` is dead
+while `kitchen_pantry_door_door` works. Each dead entity is paired with the live one that replaced
+it, which is what makes it safe to delete; an entity with **no** live twin might be genuinely broken
+or merely asleep, so those are counted separately and never recommended for deletion. Name-based
+pairing only applies when the name is unique, so two devices both called something generic can
+never cause an unrelated entity to be listed as safe to remove.
+
+**Roborock** — consumable life (filter, brushes, sensors, dock strainer) as progress bars, dock and
+maintenance status, lifetime totals, and start/pause/dock/locate controls. Dock faults are called
+out rather than buried: this install has a clean-water box needing a refill and a dock reporting
+`water_empty`. Consumable intervals are not exposed by Home Assistant, so the percentages are
+computed against Roborock's published service intervals and the page says so.
+
+**Volvo** — expanded from a handful of tiles to the ~64 signals the integration actually publishes:
+battery and electric range, fuel and range, charging state, odometer and distance-to-service, and a
+closures panel covering every door, the hood, tailgate, sunroof and tank lid. It reported the car
+unlocked while everything was closed, which is exactly the glance the page is for.
+
+Every card on all three pages opens the underlying entity's detail sheet and history, the same as
+tiles elsewhere in the dashboard.
+
 ## 1.6.1 - 2026-08-13
 
 The Network page's cards were read-only, unlike tiles everywhere else in the dashboard — they looked
