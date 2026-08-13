@@ -3,6 +3,40 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.5.0 - 2026-08-13
+
+The network view showed how fast the internet was, but never whether it had actually been up. It
+now tracks outages from the Orbi (CBR750) gateway and reports uptime alongside the speed history.
+
+**Outages are detected from several signals, because no single one sees them all.** The gateway's
+own `wan_status` sensor going `off` is the direct answer. Gaps in the throughput sensor's history
+catch drops the polled sensor slept through — and, importantly, outages where Home Assistant lost
+contact with the router altogether, which no router-reported sensor can witness. External-IP changes
+corroborate a WAN session that dropped and reconnected. The same drop seen by two signals a moment
+apart is merged, so one outage is counted once.
+
+Verified against real history: a 30-second drop on 13 August at 09:44 was found by the WAN sensor
+*and* confirmed by the external IP going `47.221.153.232 → 0.0.0.0 → 47.221.153.232`.
+
+**Every figure says how it was measured, because the honest answer is less precise than it looks.**
+The gateway is polled roughly every 30 seconds (measured: median 30.0s, p99 42s), so a shorter drop
+can pass between two readings and leave no trace anywhere — the panel reports its own resolution
+rather than implying it would have caught a two-second blip. Drops under five seconds are counted
+separately as "blips" so a 0.4-second flicker isn't tallied like a twenty-minute failure. Installing
+Home Assistant's `ping` integration against an external host would lower that floor, since it is
+event-driven rather than polled.
+
+Uptime is measured over the history actually retained, not the window requested. Home Assistant's
+recorder keeps far less than a week; asking for seven days and dividing by seven days — when six of
+them hold no data — reported **14% uptime on a connection that never dropped**. The panel now states
+the observed window ("over 24h observed") so the number can be trusted. Trailing silence is treated
+as the end of retained history rather than an outage in progress, which is what produced that
+phantom six-day outage.
+
+Connectivity sensors belonging to individual devices are deliberately ignored. A `connectivity`
+device_class on a gadget tracks *that gadget's* wifi — a Hatch sound machine briefly dropping off
+the network is not an internet outage, and counting it as one would inflate every figure here.
+
 ## 1.4.0 - 2026-08-04
 
 The flight screens went blank. The AirLabs allowance had run out, and positions came from OpenSky

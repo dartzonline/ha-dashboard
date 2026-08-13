@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from . import connectivity
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .entity_registry import RegistrySnapshot
@@ -528,7 +529,24 @@ async def network_insights(
         if str(entity.get("entity_id", "")).startswith("device_tracker.")
     ]
 
-    requested = speed_ids + tracker_ids
+    # Connectivity signals for outage detection. The WAN binary_sensor is the
+    # direct answer; the external IP corroborates a reconnect that the polled
+    # sensor may have slept through. Device-tracker connectivity sensors are
+    # deliberately excluded -- a `connectivity` device_class on some gadget
+    # tracks *that gadget's* wifi, not the internet, and flapping IoT devices
+    # would otherwise register as internet outages.
+    wan_ids = [
+        entity_id
+        for entity_id in ("binary_sensor.cbr750_gateway_wan_status",)
+        if any(entity.get("entity_id") == entity_id for entity in all_states)
+    ]
+    ip_ids = [
+        entity_id
+        for entity_id in ("sensor.cbr750_gateway_external_ip",)
+        if any(entity.get("entity_id") == entity_id for entity in all_states)
+    ]
+
+    requested = speed_ids + wan_ids + ip_ids + tracker_ids
     series: list[list[dict[str, Any]]] = []
     if requested:
         try:
@@ -609,6 +627,35 @@ async def network_insights(
             "max": round(max(values), 2),
         }
 
+    # Outages, merged across every signal that saw one. Built from the same
+    # history payload already fetched above, so this costs no extra round trip.
+    spans: list[dict[str, Any]] = []
+    for entity_id in wan_ids:
+        spans += connectivity.outages_from_binary(by_entity.get(entity_id, []), now, "wan")
+    for entity_id in speed_ids:
+        spans += connectivity.outages_from_gaps(by_entity.get(entity_id, []), now, "throughput")
+    ip_events = connectivity.ip_changes(by_entity.get("sensor.cbr750_gateway_external_ip", []))
+
+    reference = by_entity.get(speed_ids[0], []) if speed_ids else []
+    observed_start, _ = connectivity.data_coverage(reference, now - window * 3600, now)
+    connectivity_summary = connectivity.summarize(
+        connectivity.merge_spans(spans),
+        window_start=now - window * 3600,
+        now=now,
+        ip_events=ip_events,
+        resolution_seconds=connectivity.poll_interval(reference),
+        observed_start=observed_start,
+    )
+    wan_state = next(
+        (str(entity.get("state")) for entity in all_states if entity.get("entity_id") in wan_ids),
+        None,
+    )
+    connectivity_summary["wanState"] = wan_state
+    connectivity_summary["externalIp"] = next(
+        (str(entity.get("state")) for entity in all_states if entity.get("entity_id") in ip_ids),
+        None,
+    )
+
     return {
         "hours": window,
         "points": points_out,
@@ -619,6 +666,7 @@ async def network_insights(
             "now": sum(1 for entity in all_states if str(entity.get("entity_id", "")).startswith("device_tracker.") and entity.get("state") == "home"),
             "tracked": len(tracker_ids),
         },
+        "connectivity": connectivity_summary,
     }
 
 
