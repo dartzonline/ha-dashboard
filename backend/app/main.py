@@ -670,6 +670,111 @@ async def network_insights(
     }
 
 
+# When Home Assistant restarts, every device_tracker re-reports at the same
+# instant. That is not 40 devices joining the network -- it is one restart, and
+# showing it as activity buries the real joins and leaves entirely.
+RESTART_BURST_MIN = 8
+
+
+def _drop_restart_bursts(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for event in events:
+        stamp = str(event["at"])[:19]
+        counts[stamp] = counts.get(stamp, 0) + 1
+    return [event for event in events if counts[str(event["at"])[:19]] < RESTART_BURST_MIN]
+
+
+@app.get("/api/insights/clients", dependencies=[Depends(require_configuration)])
+async def network_clients(
+    hours: int = 24,
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """What is on the network now, and what joined or left recently.
+
+    The router publishes one `device_tracker` per client carrying its IP, MAC
+    and hostname, so the current list comes straight from entity state. The
+    join/leave timeline needs history, which is a second (larger) request --
+    hence a separate endpoint from /insights/network rather than making that
+    one slower for callers that only want speeds.
+    """
+    window = max(1, min(hours, 168))
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+
+    trackers = [
+        entity for entity in all_states
+        if str(entity.get("entity_id", "")).startswith("device_tracker.")
+    ]
+
+    def describe(entity: dict[str, Any]) -> dict[str, Any]:
+        attributes = entity.get("attributes") or {}
+        return {
+            "entityId": entity.get("entity_id"),
+            "name": attributes.get("friendly_name") or entity.get("entity_id"),
+            "ip": attributes.get("ip"),
+            "mac": attributes.get("mac"),
+            "hostname": attributes.get("host_name"),
+            "home": entity.get("state") == "home",
+            "since": entity.get("last_changed"),
+        }
+
+    described = [describe(entity) for entity in trackers]
+    # Most recently changed first: a device that just joined is the one someone
+    # is most likely looking for.
+    described.sort(key=lambda item: str(item["since"] or ""), reverse=True)
+
+    events: list[dict[str, Any]] = []
+    tracker_ids = [str(entity["entity_id"]) for entity in trackers]
+    if tracker_ids:
+        try:
+            series = await client.history_many(tracker_ids, window)
+        except httpx.HTTPError as error:
+            raise upstream_error(error) from error
+        names = {item["entityId"]: item["name"] for item in described}
+        for rows in series:
+            if not rows:
+                continue
+            entity_id = str(rows[0].get("entity_id", ""))
+            previous: str | None = None
+            for row in rows:
+                parsed = connectivity.parse_point(row)
+                if not parsed:
+                    continue
+                moment, state = parsed
+                # Only transitions are interesting; the first row just carries
+                # whatever state the device already held when the window opened.
+                if previous is not None and state != previous and state in ("home", "not_home"):
+                    events.append({
+                        "at": datetime.fromtimestamp(moment, timezone.utc).isoformat().replace("+00:00", "Z"),
+                        "name": names.get(entity_id, entity_id),
+                        "joined": state == "home",
+                    })
+                previous = state
+        events.sort(key=lambda item: str(item["at"]), reverse=True)
+        events = _drop_restart_bursts(events)
+
+    firmware = next(
+        (entity for entity in all_states if entity.get("entity_id") == "update.cbr750_firmware"),
+        None,
+    )
+    firmware_attributes = (firmware or {}).get("attributes") or {}
+
+    return {
+        "hours": window,
+        "onlineCount": sum(1 for item in described if item["home"]),
+        "trackedCount": len(described),
+        "clients": [item for item in described if item["home"]],
+        "events": events[:40],
+        "router": {
+            "firmwareInstalled": firmware_attributes.get("installed_version"),
+            "firmwareLatest": firmware_attributes.get("latest_version"),
+            "updateAvailable": (firmware or {}).get("state") == "on",
+        },
+    }
+
+
 @app.get("/api/history/{entity_id}", dependencies=[Depends(require_configuration)])
 async def history(
     entity_id: str,

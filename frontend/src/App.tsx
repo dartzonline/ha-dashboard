@@ -37,6 +37,7 @@ const EnergyView = lazy(() => import('./EnergyView').then((module) => ({ default
 const VolvoView = lazy(() => import('./VolvoView').then((module) => ({ default: module.VolvoView })))
 const FlightsView = lazy(() => import('./FlightsView').then((module) => ({ default: module.FlightsView })))
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const NetworkView = lazy(() => import('./NetworkView').then((module) => ({ default: module.NetworkView })))
 
 /** The WAN sensor is a plain on/off, so its detail sheet gets the router's throughput story instead. */
 function isNetworkEntity(entityId: string, entity: HAEntity | undefined) {
@@ -847,6 +848,10 @@ function App() {
         ) : activeSection === 'flights' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing flights</span></div>}>
             <FlightsView entities={entities} slide={flightsSlide} onSelectSlide={selectFlightsSlide} />
+          </Suspense>
+        ) : activeSection === 'network' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing network</span></div>}>
+            <NetworkView entities={entities} onService={callService} />
           </Suspense>
         ) : activeSection === 'energy' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing energy usage</span></div>}>

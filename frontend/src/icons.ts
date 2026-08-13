@@ -20,6 +20,7 @@ export const sectionIcons: Record<string, LucideIcon> = {
   home: Home,
   world: Globe2,
   flights: Plane,
+  network: Wifi,
   energy: Zap,
   volvo: Car,
   weather: CloudSun,

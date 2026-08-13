@@ -105,6 +105,18 @@ class TestIpChanges:
         rows = [row(0, "1.2.3.4"), row(100, "1.2.3.4")]
         assert connectivity.ip_changes(rows) == []
 
+    def test_the_placeholder_address_during_a_reconnect_is_ignored(self):
+        """The router reports 0.0.0.0 while reconnecting. Counting it turns one
+        ISP reconnect into two changes and logs an address that never worked."""
+        rows = [row(0, "1.2.3.4"), row(50, "0.0.0.0"), row(100, "1.2.3.4")]
+        assert connectivity.ip_changes(rows) == []
+
+    def test_a_genuine_new_address_after_a_reconnect_is_still_seen(self):
+        rows = [row(0, "1.2.3.4"), row(50, "0.0.0.0"), row(100, "9.9.9.9")]
+        changes = connectivity.ip_changes(rows)
+        assert len(changes) == 1
+        assert (changes[0]["from"], changes[0]["to"]) == ("1.2.3.4", "9.9.9.9")
+
 
 class TestMergeSpans:
     def test_the_same_outage_seen_by_two_sensors_is_counted_once(self):

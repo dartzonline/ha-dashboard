@@ -19,7 +19,7 @@ interface Summary {
   max: number | null
 }
 
-interface OutageEvent {
+export interface OutageEvent {
   start: string
   end: string
   seconds: number
@@ -28,7 +28,7 @@ interface OutageEvent {
   sources: string[]
 }
 
-interface Connectivity {
+export interface Connectivity {
   uptimePercent: number
   downSeconds: number
   outageCount: number
@@ -43,7 +43,7 @@ interface Connectivity {
   externalIp: string | null
 }
 
-interface NetworkPayload {
+export interface NetworkPayload {
   hours: number
   points: NetworkPoint[]
   download: Summary
@@ -63,12 +63,12 @@ function formatHour(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString([], { hour: 'numeric' })
 }
 
-function mbps(value: number | null | undefined) {
+export function mbps(value: number | null | undefined) {
   return value === null || value === undefined ? '--' : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} Mbps`
 }
 
 /** Compact duration: outages run from sub-second blips to hours. */
-function duration(seconds: number) {
+export function duration(seconds: number) {
   if (seconds < 1) return `${Math.round(seconds * 1000)} ms`
   if (seconds < 60) return `${Math.round(seconds)}s`
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`
@@ -91,7 +91,7 @@ function dayOf(iso: string) {
  * keeps far less history than the chart above may request. Stating the observed
  * window and resolution is what keeps "100% uptime" from overclaiming.
  */
-function ConnectivityPanel({ data }: { data: Connectivity }) {
+export function ConnectivityPanel({ data }: { data: Connectivity }) {
   const windowStart = Date.now() - data.observedHours * 3600 * 1000
   const windowMs = Math.max(1, data.observedHours * 3600 * 1000)
 
