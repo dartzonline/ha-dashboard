@@ -45,6 +45,61 @@
 .network-summary .tone-devices { border-left-color: var(--good); }
 .network-summary .tone-devices span { color: var(--good); }
 
+/* Uptime block: the figures, then a proportional timeline of the observed
+   window so a cluster of drops reads as a pattern rather than a list. */
+.network-uptime {
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border-left: 3px solid var(--good);
+}
+
+.network-uptime.tone-degraded { border-left-color: var(--warn); }
+.network-uptime.tone-down { border-left-color: var(--bad, #e5484d); }
+
+.network-uptime-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.network-uptime-head > span {
+  display: flex; align-items: center; gap: 5px;
+  color: var(--good); font-size: .64rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.network-uptime.tone-degraded .network-uptime-head > span { color: var(--warn); }
+.network-uptime.tone-down .network-uptime-head > span { color: var(--bad, #e5484d); }
+.network-uptime-head > small { color: var(--muted); font-size: .62rem; white-space: nowrap; }
+
+.network-uptime-figures { display: flex; flex-wrap: wrap; gap: 16px; margin: 6px 0 8px; }
+.network-uptime-figures > div { display: grid; gap: 1px; }
+.network-uptime-figures strong { font-size: 1rem; line-height: 1.1; }
+.network-uptime-figures small { color: var(--muted); font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; }
+
+/* Marks are absolutely positioned by time, so a 30-second drop in a 24-hour
+   window stays findable instead of collapsing to nothing. */
+.network-uptime-track {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--good) 22%, transparent);
+  overflow: hidden;
+}
+.network-uptime-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  background: var(--warn);
+}
+.network-uptime-track i.is-blip { background: color-mix(in srgb, var(--warn) 65%, transparent); }
+.network-uptime-track i.is-ongoing { background: var(--bad, #e5484d); }
+
+.network-uptime-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }
+.network-uptime-list li { display: flex; align-items: baseline; gap: 8px; font-size: .68rem; }
+.network-uptime-list span { color: var(--text); min-width: 92px; }
+.network-uptime-list em { color: var(--warn); font-style: normal; font-weight: 650; }
+.network-uptime-list small { color: var(--muted); font-size: .62rem; margin-left: auto; }
+
+.network-uptime-clean { margin: 8px 0 0; color: var(--muted); font-size: .66rem; }
+
 .network-chart { height: 230px; border-top: 1px solid var(--border); padding-top: 6px; }
 .network-chart-empty { height: 100%; display: grid; place-items: center; color: var(--muted); font-size: .74rem; }
 
