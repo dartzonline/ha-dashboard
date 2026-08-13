@@ -3,6 +3,22 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.6.1 - 2026-08-13
+
+The Network page's cards were read-only, unlike tiles everywhere else in the dashboard — they looked
+tappable but did nothing. Each one now opens the same entity detail sheet the rest of the app uses,
+because each was already fronting a real Home Assistant entity:
+
+- **Download** and **Upload** open their gateway throughput sensors, with the 24-hour history chart
+  and now/average/low/high figures.
+- **Devices** opens the WAN sensor, whose sheet carries the full network history view.
+- **External IP** opens the gateway's IP sensor.
+- **Every row in the connected-devices list** opens that client's own `device_tracker`, so you can
+  see when a specific phone or laptop has been on the network.
+
+A card whose entity is missing is disabled rather than silently inert, so an unavailable sensor looks
+different from a broken button.
+
 ## 1.6.0 - 2026-08-13
 
 **Network is now its own page in the sidebar.** The uptime and outage panel added in 1.5.0 was

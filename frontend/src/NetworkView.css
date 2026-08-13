@@ -69,15 +69,28 @@ main.is-fixed-view .network-view {
   margin-bottom: 10px;
 }
 
-.network-view-cards > div {
+/* Buttons, not divs: each card opens its entity's detail sheet, so it has to
+   look and behave pressable like the tiles in every other section. */
+.network-view-cards > button {
   min-width: 0;
   padding: 9px 10px;
+  border: 0;
   border-radius: 8px;
   background: var(--surface);
   border-left: 3px solid var(--border);
   display: grid;
   gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color .15s ease, transform .15s ease;
 }
+
+.network-view-cards > button.is-linked { cursor: pointer; }
+.network-view-cards > button.is-linked:hover { border-left-color: var(--accent); }
+.network-view-cards > button.is-linked:active { transform: scale(.99); }
+.network-view-cards > button.is-linked:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.network-view-cards > button:disabled { opacity: .6; cursor: default; }
 
 .network-view-cards span {
   color: var(--muted);
@@ -165,6 +178,27 @@ main.is-fixed-view .network-view {
 .network-activity li { display: flex; align-items: baseline; gap: 8px; font-size: .7rem; }
 .network-clients li.is-empty,
 .network-activity li.is-empty { color: var(--muted); font-size: .68rem; }
+
+/* The row itself is the button, so the whole width is a target rather than
+   just the device name. */
+.network-clients li > button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.network-clients li > button:hover { background: var(--surface); }
+.network-clients li > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .network-clients span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .network-clients code { color: var(--accent); font-size: .66rem; font-variant-numeric: tabular-nums; margin-left: auto; }
