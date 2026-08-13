@@ -39,6 +39,7 @@ const FlightsView = lazy(() => import('./FlightsView').then((module) => ({ defau
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
 const NetworkView = lazy(() => import('./NetworkView').then((module) => ({ default: module.NetworkView })))
 const HealthView = lazy(() => import('./HealthView').then((module) => ({ default: module.HealthView })))
+const MaintenanceView = lazy(() => import('./MaintenanceView').then((module) => ({ default: module.MaintenanceView })))
 const RoborockView = lazy(() => import('./RoborockView').then((module) => ({ default: module.RoborockView })))
 
 /** The WAN sensor is a plain on/off, so its detail sheet gets the router's throughput story instead. */
@@ -854,6 +855,10 @@ function App() {
         ) : activeSection === 'health' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Checking home health</span></div>}>
             <HealthView onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
+          </Suspense>
+        ) : activeSection === 'maintenance' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Checking maintenance</span></div>}>
+            <MaintenanceView onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
           </Suspense>
         ) : activeSection === 'network' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing network</span></div>}>

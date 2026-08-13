@@ -3,6 +3,43 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.8.0 - 2026-08-13
+
+A **Maintenance** page for the things that wear out rather than break — the quiet signals nobody
+notices until a filter has been at 0% for a month.
+
+**Consumables**, ranked worst-first as bars. Devices report these in incompatible units: the vacuum
+counts down *hours remaining*, the fridge and air purifier report *percent of life left*. Both are
+normalised so one panel can rank them against each other. The hour-based percentages are computed
+against the manufacturer's service intervals — the vacuum never reports a percentage — and the page
+says so rather than passing a derived figure off as a device reading.
+
+This immediately surfaced the fridge's fresh-air and water filters at **0%**, and the vacuum's dust
+sensor **31 hours past** its service interval. A negative remainder is reported as overdue rather
+than clamped to zero, which would have read as merely "empty".
+
+**Water softener salt** trusts the depth sensor over the tank's own percentage, because on this
+install the percentage collapsed from 60% to 0% while the depth reading barely moved (43.5cm →
+42.1cm). Trusting it would demand a refill that isn't needed, so the page reports ~32% from depth
+and says plainly that the percentage sensor looks miscalibrated instead of hiding the disagreement.
+The depth scale is inverted — more centimetres means less salt, since the sensor looks down at it.
+
+**Garage door** shows position, obstruction, limit switches, and the number that actually matters:
+opening and closing travel time (12.9s / 10.9s). A door that gradually takes longer to travel has a
+spring or roller problem developing. Home Assistant records the value but nothing watches it for
+drift, so it is surfaced with a link to its history.
+
+**Appliance wear** gives cycle counts and month-over-month energy. A rise is tinted, a fall is not:
+an appliance drawing more power without being used more often usually means a failing door seal.
+
+**Device faults** are pulled to the top of the page. Integrations publish a fan-out of `fault_*`
+sensors that are almost always `off` and therefore invisible; when one trips it should be the
+loudest thing on screen. One is live here — the Roborock dock's clean-water box.
+
+Also fixed while building this: the dust-sensor consumable had a service interval defined but
+matched none of the name hints used to find wear items, so the one genuinely overdue thing on this
+install was silently dropped before it could be ranked. Caught by a test, not by eye.
+
 ## 1.7.0 - 2026-08-13
 
 Three new pages, and one of them found real faults on day one.

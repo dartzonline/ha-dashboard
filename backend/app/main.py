@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import connectivity, home_health
+from . import connectivity, home_health, maintenance
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .entity_registry import RegistrySnapshot
@@ -698,6 +698,18 @@ async def home_health_insights(
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
     return home_health.health_summary(all_states)
+
+
+@app.get("/api/insights/maintenance", dependencies=[Depends(require_configuration)])
+async def maintenance_insights(
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """Consumable wear, reservoir levels, mechanical drift and device faults."""
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return maintenance.maintenance_summary(all_states)
 
 
 @app.get("/api/insights/clients", dependencies=[Depends(require_configuration)])
