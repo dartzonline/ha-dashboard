@@ -851,7 +851,7 @@ function App() {
           </Suspense>
         ) : activeSection === 'network' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing network</span></div>}>
-            <NetworkView entities={entities} onService={callService} />
+            <NetworkView entities={entities} onService={callService} onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
           </Suspense>
         ) : activeSection === 'energy' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing energy usage</span></div>}>

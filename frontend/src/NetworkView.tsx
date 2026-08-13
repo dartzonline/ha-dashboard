@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   Activity, ArrowDownToLine, ArrowUpFromLine, Globe, MonitorSmartphone, RotateCw, Router, Wifi, WifiOff,
 } from 'lucide-react'
@@ -7,8 +8,8 @@ import {
 } from 'recharts'
 import { apiUrl } from './api'
 import { ConnectivityPanel, duration, mbps } from './NetworkDetail'
-import type { NetworkPayload } from './NetworkDetail'
-import type { HAEntity } from './types'
+import type { Connectivity, NetworkPayload } from './NetworkDetail'
+import type { HAEntity, TileConfig } from './types'
 import './NetworkView.css'
 
 /** How long the router takes to come back, roughly, so the button can explain itself. */
@@ -17,6 +18,8 @@ const RESTART_WARNING = 'Restart the router? Every device loses its connection f
 interface NetworkViewProps {
   entities: Map<string, HAEntity>
   onService: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>
+  /** Opens the shared entity detail sheet, same as tiles in every other section. */
+  onExpand: (tile: TileConfig) => void
 }
 
 interface Client {
@@ -41,6 +44,79 @@ interface ClientsPayload {
     updateAvailable: boolean
   }
 }
+
+interface CardContext {
+  payload: NetworkPayload | null
+  connectivity: Connectivity | undefined
+  clients: ClientsPayload | null
+  online: boolean
+}
+
+/**
+ * The summary cards, each backed by the Home Assistant entity it summarises so
+ * tapping one opens that entity's detail sheet and history chart. Declared as
+ * data rather than repeated markup because all four differ only in their glyph,
+ * label and which figure they pull out.
+ */
+const CARDS: {
+  entityId: string
+  label: string
+  icon: string
+  tone: string
+  glyph: ReactNode
+  mono?: boolean
+  render: (context: CardContext) => { value: string; detail: string }
+}[] = [
+  {
+    entityId: 'sensor.cbr750_gateway_download_speed',
+    label: 'Download',
+    icon: 'gauge',
+    tone: 'tone-down',
+    glyph: <ArrowDownToLine size={14} />,
+    render: ({ payload }) => ({
+      value: mbps(payload?.download.average),
+      detail: `Peak ${mbps(payload?.download.max)}`,
+    }),
+  },
+  {
+    entityId: 'sensor.cbr750_gateway_upload_speed',
+    label: 'Upload',
+    icon: 'gauge',
+    tone: 'tone-up',
+    glyph: <ArrowUpFromLine size={14} />,
+    render: ({ payload }) => ({
+      value: mbps(payload?.upload.average),
+      detail: `Peak ${mbps(payload?.upload.max)}`,
+    }),
+  },
+  {
+    // No "clients online" entity exists, so this card fronts the WAN sensor --
+    // the one entity whose detail sheet shows the whole network history view.
+    entityId: 'binary_sensor.cbr750_gateway_wan_status',
+    label: 'Devices',
+    icon: 'wifi',
+    tone: 'tone-devices',
+    glyph: <MonitorSmartphone size={14} />,
+    render: ({ payload, clients }) => ({
+      value: payload ? String(payload.devices.now) : '--',
+      detail: clients ? `${clients.trackedCount} known` : payload ? `${payload.devices.tracked} tracked` : 'Counting clients',
+    }),
+  },
+  {
+    entityId: 'sensor.cbr750_gateway_external_ip',
+    label: 'External IP',
+    icon: 'globe',
+    tone: 'tone-ip',
+    glyph: <Globe size={14} />,
+    mono: true,
+    render: ({ connectivity }) => ({
+      value: connectivity?.externalIp ?? '--',
+      detail: connectivity && connectivity.ipChanges.length > 0
+        ? `${connectivity.ipChanges.length} change${connectivity.ipChanges.length === 1 ? '' : 's'} in window`
+        : 'Stable in window',
+    }),
+  },
+]
 
 /** Sorts IPs numerically so 192.168.1.9 precedes 192.168.1.10. */
 function ipOrder(ip: string | null) {
@@ -73,7 +149,7 @@ const RANGES = [
   { label: '7d', hours: 168 },
 ]
 
-export function NetworkView({ entities, onService }: NetworkViewProps) {
+export function NetworkView({ entities, onService, onExpand }: NetworkViewProps) {
   const [hours, setHours] = useState(24)
   const [payload, setPayload] = useState<NetworkPayload | null>(null)
   const [clients, setClients] = useState<ClientsPayload | null>(null)
@@ -176,31 +252,28 @@ export function NetworkView({ entities, onService }: NetworkViewProps) {
 
       {notice && <p className="network-notice" role="status">{notice}</p>}
 
+      {/* Each card fronts a real Home Assistant entity, so tapping one opens the
+          same detail sheet (with its own history chart) that tiles elsewhere in
+          the dashboard do -- rather than being a dead read-only figure. */}
       <div className="network-view-cards">
-        <div className="tone-down">
-          <span><ArrowDownToLine size={14} /> Download</span>
-          <strong>{mbps(payload?.download.average)}</strong>
-          <small>Peak {mbps(payload?.download.max)}</small>
-        </div>
-        <div className="tone-up">
-          <span><ArrowUpFromLine size={14} /> Upload</span>
-          <strong>{mbps(payload?.upload.average)}</strong>
-          <small>Peak {mbps(payload?.upload.max)}</small>
-        </div>
-        <div className="tone-devices">
-          <span><MonitorSmartphone size={14} /> Devices</span>
-          <strong>{payload ? payload.devices.now : '--'}</strong>
-          <small>{payload ? `${payload.devices.tracked} tracked` : 'Counting clients'}</small>
-        </div>
-        <div className="tone-ip">
-          <span><Globe size={14} /> External IP</span>
-          <strong className="network-ip">{connectivity?.externalIp ?? '--'}</strong>
-          <small>
-            {connectivity && connectivity.ipChanges.length > 0
-              ? `${connectivity.ipChanges.length} change${connectivity.ipChanges.length === 1 ? '' : 's'} in window`
-              : 'Stable in window'}
-          </small>
-        </div>
+        {CARDS.map((card) => {
+          const entity = entities.get(card.entityId)
+          const body = card.render({ payload, connectivity, clients, online })
+          return (
+            <button
+              key={card.entityId}
+              type="button"
+              className={`${card.tone} ${entity ? 'is-linked' : ''}`.trim()}
+              onClick={entity ? () => onExpand({ entityId: card.entityId, label: card.label, kind: 'sensor', icon: card.icon }) : undefined}
+              disabled={!entity}
+              title={entity ? `Open ${card.label} history` : `${card.label} is unavailable`}
+            >
+              <span>{card.glyph} {card.label}</span>
+              <strong className={card.mono ? 'network-ip' : undefined}>{body.value}</strong>
+              <small>{body.detail}</small>
+            </button>
+          )
+        })}
       </div>
 
       {connectivity && <ConnectivityPanel data={connectivity} />}
@@ -250,9 +323,17 @@ export function NetworkView({ entities, onService }: NetworkViewProps) {
               .sort((left, right) => ipOrder(left.ip) - ipOrder(right.ip))
               .map((device) => (
                 <li key={device.entityId}>
-                  <span title={device.hostname ?? undefined}>{device.name}</span>
-                  <code>{device.ip ?? '—'}</code>
-                  <small title={device.mac ?? undefined}>{device.since ? relative(device.since) : ''}</small>
+                  {/* Each row is a real device_tracker, so it opens the same
+                      detail sheet as any other entity in the dashboard. */}
+                  <button
+                    type="button"
+                    onClick={() => onExpand({ entityId: device.entityId, label: device.name, kind: 'sensor', icon: 'wifi' })}
+                    title={`${device.hostname ?? device.name}${device.mac ? ` · ${device.mac}` : ''}`}
+                  >
+                    <span>{device.name}</span>
+                    <code>{device.ip ?? '—'}</code>
+                    <small>{device.since ? relative(device.since) : ''}</small>
+                  </button>
                 </li>
               ))}
             {clients && clients.clients.length === 0 && <li className="is-empty">No devices reported</li>}
