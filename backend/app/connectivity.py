@@ -160,7 +160,10 @@ def ip_changes(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     previous: str | None = None
     for moment, state in points:
         value = state.strip()
-        if not value or value.lower() in DOWN_STATES:
+        # `0.0.0.0` is what the router reports mid-reconnect, not an address it
+        # was ever reachable on. Treating it as one turns a single ISP reconnect
+        # into two "IP changes" and shows a meaningless address in the log.
+        if not value or value.lower() in DOWN_STATES or value in ("0.0.0.0", "::"):
             continue
         if previous is not None and value != previous:
             changes.append({"at": moment, "from": previous, "to": value})

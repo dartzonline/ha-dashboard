@@ -3,6 +3,34 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.6.0 - 2026-08-13
+
+**Network is now its own page in the sidebar.** The uptime and outage panel added in 1.5.0 was
+buried three interactions deep — Home, then the Internet tile, then scrolling inside the sheet — and
+was effectively impossible to find. It now has a full-size page alongside Flights and Energy, with
+the tile sheet left intact for anyone who liked it there.
+
+The page adds what the empty space below the chart was asking for:
+
+- **Connected devices** — every client the router reports, with IP, hostname and how long it has been
+  connected, filterable by name/IP/MAC and sorted numerically by address so `.9` precedes `.10`.
+- **Recent activity** — devices joining and leaving, from `device_tracker` history. Home Assistant
+  re-reports every tracker at once when it restarts, which looked like forty devices joining
+  simultaneously and buried the real comings and goings; those bursts are now filtered out.
+- **Router card** — firmware version with an update flag, external IP and its recent changes, WAN
+  state, and device counts.
+- **A restart button** for the router, behind a confirmation, since a reboot knocks every device off
+  for a minute or two.
+- **Selectable window** (6h / 24h / 3d / 7d) for all of the above.
+
+**Per-device bandwidth is deliberately absent.** The Netgear integration exposes only two throughput
+sensors, both gateway-wide totals, so there is no per-client traffic data to show — the page says so
+rather than presenting an invented number.
+
+Also fixed: the router reports `0.0.0.0` while reconnecting, which was being counted as a real
+address. One ISP reconnect therefore logged two "IP changes" and displayed an address the connection
+was never reachable on. A genuine address change after a reconnect is still reported.
+
 ## 1.5.0 - 2026-08-13
 
 The network view showed how fast the internet was, but never whether it had actually been up. It

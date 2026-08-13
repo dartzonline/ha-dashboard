@@ -1,0 +1,210 @@
+/* Full-page network view. Mirrors EnergyView's page shell so the sidebar
+   sections all sit at the same rhythm. */
+.network-view {
+  margin: 0;
+  padding: 4px 0 8px;
+  background: var(--canvas);
+  width: 100%;
+  min-height: calc(100svh - 150px);
+}
+
+main.is-fixed-view .network-view {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.network-view > header {
+  padding: 0 2px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.network-view > header > div:first-child { display: flex; align-items: center; gap: 8px; color: var(--good); }
+.network-view h2 { margin: 0; color: var(--text); font-size: 1rem; font-weight: 650; }
+.network-view h3 { margin: 0; color: var(--text); font-size: .82rem; font-weight: 650; }
+
+.network-view-actions { display: flex; align-items: center; gap: 8px; }
+
+.network-range { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--surface-raised); }
+.network-range button {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: .7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.network-range button.is-active { background: var(--surface); color: var(--text); }
+
+.network-restart {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: .7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.network-restart:hover:not(:disabled) { border-color: var(--warn); color: var(--warn); }
+.network-restart:disabled { opacity: .55; cursor: default; }
+
+.network-notice { margin: 0 2px 8px; color: var(--muted); font-size: .72rem; }
+
+.network-view-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.network-view-cards > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border-left: 3px solid var(--border);
+  display: grid;
+  gap: 2px;
+}
+
+.network-view-cards span {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: .64rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.network-view-cards strong { font-size: 1rem; white-space: nowrap; }
+.network-view-cards small { color: var(--muted); font-size: .68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* An IPv4 address overflows the card at body size on a narrow tile. */
+.network-view-cards .network-ip { font-size: .84rem; font-variant-numeric: tabular-nums; }
+
+.network-view-cards .tone-down { border-left-color: var(--chart-line); }
+.network-view-cards .tone-down span { color: var(--accent); }
+.network-view-cards .tone-up { border-left-color: var(--warn); }
+.network-view-cards .tone-up span { color: var(--warn); }
+.network-view-cards .tone-devices { border-left-color: var(--good); }
+.network-view-cards .tone-devices span { color: var(--good); }
+.network-view-cards .tone-ip { border-left-color: var(--accent); }
+.network-view-cards .tone-ip span { color: var(--accent); }
+
+/* The full log only appears when the summary panel's short list would hide
+   interruptions, so it scrolls rather than pushing the chart off screen. */
+.network-outage-log {
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+.network-outage-log ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; max-height: 132px; overflow-y: auto; scrollbar-width: none; }
+.network-outage-log li { display: flex; align-items: baseline; gap: 8px; font-size: .7rem; }
+.network-outage-log span { color: var(--text); min-width: 130px; }
+.network-outage-log em { color: var(--warn); font-style: normal; font-weight: 650; }
+.network-outage-log small { color: var(--muted); font-size: .62rem; margin-left: auto; }
+
+/* Devices / activity / router sit side by side on a wall display and stack on
+   a phone. Each panel scrolls internally so one long list never pushes the
+   chart below the fold. */
+.network-lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, .9fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.network-lower > div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.network-panel-head { display: flex; align-items: center; gap: 7px; color: var(--muted); padding-bottom: 6px; }
+.network-panel-head > span { margin-left: auto; font-size: .64rem; }
+
+.network-filter {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: .7rem;
+}
+.network-filter::placeholder { color: var(--muted); }
+
+.network-clients ul,
+.network-activity ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 188px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.network-clients li,
+.network-activity li { display: flex; align-items: baseline; gap: 8px; font-size: .7rem; }
+.network-clients li.is-empty,
+.network-activity li.is-empty { color: var(--muted); font-size: .68rem; }
+
+.network-clients span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-clients code { color: var(--accent); font-size: .66rem; font-variant-numeric: tabular-nums; margin-left: auto; }
+.network-clients small { color: var(--muted); font-size: .6rem; min-width: 52px; text-align: right; }
+
+.network-activity i { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+.network-activity i.is-join { background: var(--good); }
+.network-activity i.is-leave { background: var(--muted); }
+.network-activity span { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-activity em { color: var(--muted); font-style: normal; font-size: .64rem; }
+.network-activity small { color: var(--muted); font-size: .6rem; margin-left: auto; }
+
+.network-router dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: .7rem; }
+.network-router dt { color: var(--muted); font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; }
+.network-router dd { margin: 0; color: var(--text); text-align: right; overflow: hidden; text-overflow: ellipsis; }
+.network-router dd b { color: var(--good); font-weight: 600; font-size: .62rem; }
+.network-router dd b.is-update { color: var(--warn); }
+.network-router .network-ip { font-variant-numeric: tabular-nums; }
+
+.network-ip-log { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); }
+.network-ip-log > span { color: var(--muted); font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; }
+.network-ip-log ul { list-style: none; margin: 3px 0 0; padding: 0; display: grid; gap: 2px; }
+.network-ip-log li { display: flex; justify-content: space-between; gap: 8px; font-size: .66rem; }
+.network-ip-log code { color: var(--accent); font-variant-numeric: tabular-nums; }
+.network-ip-log small { color: var(--muted); font-size: .6rem; }
+
+.network-router-note { margin: 8px 0 0; color: var(--muted); font-size: .6rem; line-height: 1.35; }
+
+@media (max-width: 900px) {
+  .network-lower { grid-template-columns: 1fr; }
+  .network-clients ul, .network-activity ul { max-height: 152px; }
+}
+
+.network-view-chart { flex: 1; min-height: 240px; display: flex; flex-direction: column; }
+.network-view-chart-head { display: flex; align-items: center; gap: 7px; padding-bottom: 6px; color: var(--muted); }
+.network-view-chart-head > span { margin-left: auto; font-size: .66rem; }
+.network-view-chart > :last-child { flex: 1; min-height: 0; }
+.network-view-empty { display: grid; place-items: center; color: var(--muted); font-size: .74rem; }
+
+@media (max-width: 680px) {
+  .network-view-chart { min-height: 210px; }
+  .network-view > header { gap: 8px; }
+}
