@@ -28,6 +28,11 @@ export const dashboardSections: DashboardSection[] = [
     ],
   },
   {
+    id: 'health',
+    label: 'Health',
+    tiles: [],
+  },
+  {
     id: 'world',
     label: 'World time',
     tiles: [],
@@ -121,14 +126,7 @@ export const dashboardSections: DashboardSection[] = [
   {
     id: 'roborock',
     label: 'Roborock',
-    tiles: [
-      { entityId: 'vacuum.roborock_qrevo_maxv', label: 'Qrevo MaxV', kind: 'vacuum', icon: 'bot' },
-      { entityId: 'sensor.roborock_qrevo_maxv_filter_time_left', label: 'Filter remaining', kind: 'sensor', icon: 'filter' },
-      { entityId: 'sensor.roborock_qrevo_maxv_main_brush_time_left', label: 'Main brush', kind: 'sensor', icon: 'rotate-cw' },
-      { entityId: 'sensor.roborock_qrevo_maxv_side_brush_time_left', label: 'Side brush', kind: 'sensor', icon: 'rotate-cw' },
-      { entityId: 'switch.roborock_qrevo_maxv_do_not_disturb', label: 'Do not disturb', kind: 'toggle', icon: 'moon' },
-      { entityId: 'switch.roborock_qrevo_maxv_dock_child_lock', label: 'Dock child lock', kind: 'toggle', icon: 'lock' },
-    ],
+    tiles: [],
   },
   {
     id: 'scenes',

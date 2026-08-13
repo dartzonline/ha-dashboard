@@ -4,33 +4,174 @@
 .volvo-header h3 { margin: 0; color: var(--text); font-size: .86rem; font-weight: 650; }
 .volvo-header > span { color: var(--muted); font-size: .65rem; }
 
-.volvo-hero-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
-.volvo-hero-card { min-width: 0; padding: 10px 11px; border-radius: 9px; background: var(--surface); display: flex; align-items: center; gap: 10px; }
-.volvo-hero-card > div { min-width: 0; display: grid; }
-.volvo-hero-card span { color: var(--muted); font-size: .62rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
-.volvo-hero-card strong { font-size: 1.15rem; font-weight: 750; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.volvo-hero-card.tone-battery svg { color: var(--good); }
-.volvo-hero-card.tone-range svg { color: var(--accent); }
-.volvo-hero-card.tone-odometer svg { color: var(--warn); }
-.volvo-hero-card.tone-lock svg { color: var(--muted); }
-.volvo-hero-card.tone-lock.is-locked svg { color: var(--good); }
-.volvo-hero-card.tone-lock.is-unlocked svg { color: var(--danger); }
+.volvo-banner { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; padding: 6px 10px; border-radius: 8px; font-size: .7rem; font-weight: 600; }
+.volvo-banner svg { flex: 0 0 auto; }
+.volvo-banner.is-clear { color: var(--good); background: var(--good-soft); }
+.volvo-banner.is-attention { color: var(--warn); background: var(--warn-soft); }
+.volvo-banner.is-attention span { text-transform: capitalize; }
+.volvo-banner.is-asleep { color: var(--muted); background: var(--surface); font-weight: 500; }
+
+.volvo-hero-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; margin-bottom: 10px; }
+
+/* Buttons, not divs: each card opens its entity's detail sheet, so it has to look
+   and behave pressable like the tiles in every other section. */
+.volvo-hero-card {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 0;
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.volvo-hero-card.is-linked { cursor: pointer; }
+.volvo-hero-card.is-linked:hover { border-left-color: var(--accent); }
+.volvo-hero-card.is-linked:active { transform: scale(.99); }
+.volvo-hero-card.is-linked:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.volvo-hero-card:disabled { opacity: .6; cursor: default; }
+
+.volvo-hero-card > span { color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .62rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.volvo-hero-card strong { font-size: 1.05rem; font-weight: 750; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.volvo-hero-card small { color: var(--muted); font-size: .64rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.volvo-hero-card.tone-battery { border-left-color: var(--good); }
+.volvo-hero-card.tone-battery > span { color: var(--good); }
+.volvo-hero-card.tone-range { border-left-color: var(--accent); }
+.volvo-hero-card.tone-range > span { color: var(--accent); }
+.volvo-hero-card.tone-fuel { border-left-color: var(--warn); }
+.volvo-hero-card.tone-fuel > span { color: var(--warn); }
+.volvo-hero-card.tone-charging { border-left-color: var(--border); }
+.volvo-hero-card.tone-charging.is-charging { border-left-color: var(--good); }
+.volvo-hero-card.tone-charging.is-charging > span { color: var(--good); }
+.volvo-hero-card.tone-odometer { border-left-color: var(--muted); }
+.volvo-hero-card.tone-lock.is-locked { border-left-color: var(--good); }
+.volvo-hero-card.tone-lock.is-locked > span { color: var(--good); }
+.volvo-hero-card.tone-lock.is-unlocked { border-left-color: var(--danger); background: color-mix(in srgb, var(--surface) 82%, var(--danger-soft)); }
+.volvo-hero-card.tone-lock.is-unlocked > span,
+.volvo-hero-card.tone-lock.is-unlocked strong { color: var(--danger); }
+
+.volvo-panel-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 9px; }
+@media (min-width: 900px) { .volvo-panel-row { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); } }
+
+.volvo-panel { min-width: 0; padding: 9px 10px; border-radius: 8px; background: var(--surface); }
+.volvo-panel-head { display: flex; align-items: center; gap: 7px; padding-bottom: 7px; color: var(--muted); }
+.volvo-panel-head h4 { margin: 0; color: var(--text); font-size: .78rem; font-weight: 650; }
+.volvo-panel-head > span { margin-left: auto; font-size: .64rem; }
+.volvo-panel-head > span.is-attention { color: var(--warn); font-weight: 650; }
+
+.volvo-closure-group + .volvo-closure-group { margin-top: 6px; }
+.volvo-closure-group h5,
+.volvo-chip-block h5,
+.volvo-trip-column h5 { margin: 0 0 4px; display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: .58rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.volvo-closure-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 4px; }
+
+/* Anything open or unlocked is the point of this panel, so it gets colour and
+   weight while a closed cell stays deliberately quiet. */
+.volvo-cell,
+.volvo-tyre {
+  min-width: 0;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  display: grid;
+  gap: 1px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.volvo-cell:disabled,
+.volvo-tyre:disabled { cursor: default; opacity: .65; }
+.volvo-cell:focus-visible,
+.volvo-tyre:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.volvo-cell em,
+.volvo-tyre em { color: var(--muted); font-style: normal; font-size: .58rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.volvo-cell b,
+.volvo-tyre b { font-size: .7rem; font-weight: 700; }
+
+.volvo-cell.is-closed b { color: var(--good); font-weight: 600; }
+.volvo-cell.is-open { border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--surface-raised) 76%, var(--danger-soft)); }
+.volvo-cell.is-open b, .volvo-cell.is-open em { color: var(--danger); }
+.volvo-cell.is-unknown b { color: var(--muted); }
+.volvo-cell.is-wide { grid-column: span 2; }
+
+.volvo-tyre-plan { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.volvo-tyre.is-ok b { color: var(--good); font-weight: 600; }
+.volvo-tyre.is-problem { border-color: color-mix(in srgb, var(--warn) 58%, transparent); background: color-mix(in srgb, var(--surface-raised) 74%, var(--warn-soft)); }
+.volvo-tyre.is-problem b, .volvo-tyre.is-problem em { color: var(--warn); }
+.volvo-tyre.is-unknown b { color: var(--muted); }
+
+.volvo-note { margin: 7px 0 0; color: var(--muted); font-size: .6rem; line-height: 1.4; }
+.volvo-note strong { color: var(--muted); font-weight: 700; }
+
+.volvo-trip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.volvo-trip-column { min-width: 0; display: grid; gap: 3px; align-content: start; }
+.volvo-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 4px; }
+
+.volvo-stat {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.volvo-stat:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-raised) 80%, var(--accent-soft)); }
+.volvo-stat:disabled { cursor: default; opacity: .6; }
+.volvo-stat:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.volvo-stat em { color: var(--muted); font-style: normal; font-size: .6rem; white-space: nowrap; }
+.volvo-stat b { font: 700 .72rem var(--mono); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.volvo-stat b.is-blank { color: var(--muted); font-weight: 500; font-size: .62rem; }
+.volvo-stat-grid .volvo-stat { flex-direction: column; align-items: flex-start; gap: 1px; }
+
+.volvo-chip-block { margin-top: 8px; }
+.volvo-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.volvo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font: inherit;
+  font-size: .62rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: capitalize;
+}
+.volvo-chip:disabled { cursor: default; opacity: .65; }
+.volvo-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.volvo-chip.is-ok { color: var(--good); background: var(--good-soft); }
+.volvo-chip.is-problem { color: var(--warn); background: var(--warn-soft); }
+.volvo-chip.is-unknown { color: var(--muted); }
+.volvo-chip i { font-style: normal; font-weight: 750; }
 
 .volvo-metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); grid-auto-rows: 1fr; gap: 6px; margin-bottom: 10px; }
 /* `1fr` rows keep the grid even without a fixed height, which used to clip the second line of
    labels like "Trip automatic average fuel consumption" straight through the middle. */
-.volvo-metric-card { min-width: 0; min-height: 58px; padding: 8px 10px; border-radius: 7px; background: var(--surface); display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.volvo-metric-card { min-width: 0; min-height: 58px; padding: 8px 10px; border: 0; border-radius: 7px; background: var(--surface); display: flex; flex-direction: column; justify-content: center; gap: 3px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.volvo-metric-card:hover { background: color-mix(in srgb, var(--surface) 84%, var(--accent-soft)); }
+.volvo-metric-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .volvo-metric-card span { color: var(--muted); font-size: .56rem; line-height: 1.3; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 .volvo-metric-card strong { font: 750 .82rem/1.35 var(--mono); letter-spacing: -.02em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-.volvo-status-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.volvo-status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--surface); color: var(--muted); font-size: .68rem; font-weight: 600; }
-.volvo-status-chip.is-settled { color: var(--good); background: var(--good-soft); }
-.volvo-status-chip.is-attention { color: var(--warn); background: var(--warn-soft); }
-.volvo-status-chip em { margin-left: 2px; font-style: normal; font-weight: 750; }
-
 .volvo-chart-row { flex: 1 1 auto; min-height: 200px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
-@media (min-width: 1000px) { .volvo-chart-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+@media (min-width: 1000px) { .volvo-chart-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 .volvo-chart { min-height: 196px; border-top: 1px solid var(--border); padding-top: 6px; display: flex; flex-direction: column; }
 .volvo-chart header { display: flex; align-items: baseline; gap: 7px; margin-bottom: 4px; color: var(--muted); }
@@ -47,5 +188,6 @@
 @media (max-width: 680px) {
   .volvo-view { margin-inline: -4px; padding-inline: 8px; }
   .volvo-chart { min-height: 184px; }
-  .volvo-hero-card strong { font-size: 1rem; }
+  .volvo-hero-card strong { font-size: .95rem; }
+  .volvo-trip-grid { grid-template-columns: 1fr; }
 }
