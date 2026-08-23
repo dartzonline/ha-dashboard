@@ -243,6 +243,87 @@ async def feed_lookup(
 
 
 # ---------------------------------------------------------------------------
+# Historical track (keyless fallback)
+# ---------------------------------------------------------------------------
+
+# tar1090's own hosting: traces are sharded into subdirectories by the last two hex characters of
+# the ICAO24 address. Of the three community feeds, only adsb.lol's answers this host from here
+# without a 403 -- adsb.fi and airplanes.live front theirs behind something that blocks it.
+ADSB_LOL_TRACE_URL = "https://globe.adsb.lol/data/traces/{suffix}/trace_full_{icao24}.json"
+
+
+def _is_ground(altitude: Any) -> bool:
+    return isinstance(altitude, str) and altitude.strip().lower() == "ground"
+
+
+def trace_leg_points(trace: list[Any], callsign: str) -> list[tuple[float, float]]:
+    """The current flight leg's (lat, lon) samples out of one aircraft's full-day trace.
+
+    Field layout is tar1090's documented trace format (planeObject.js:updateTraceData): index 1/2
+    are lat/lon, index 3 is altitude (a number, or the literal string "ground"), and index 8 is a
+    sparse metadata dict present only where something changed -- present or not, its 'flight' value
+    holds until the next one, the same way the tar1090 client itself treats it. A full trace covers
+    everything that aircraft did over its lookback window, potentially several flights under
+    several callsigns (an aircraft that flew SWA881 before being reassigned to SWA1626, say), so
+    the ground-on-departure instant this leg started from is not a safe cut point -- the trace
+    frequently starts already airborne, mid a *previous* leg, with no ground sample in it at all.
+    Matching the callsign instead finds exactly the run of points transmitted under this flight
+    number, which is the leg actually wanted regardless of how the trace's lookback window falls.
+    """
+    target = callsign.strip().upper()
+    current: str | None = None
+    first_match_index: int | None = None
+    for index, row in enumerate(trace):
+        meta = row[8] if isinstance(row, list) and len(row) > 8 else None
+        if isinstance(meta, dict) and isinstance(meta.get("flight"), str) and meta["flight"].strip():
+            current = meta["flight"].strip().upper()
+        if current == target and first_match_index is None:
+            first_match_index = index
+
+    if first_match_index is None:
+        return []
+
+    points: list[tuple[float, float]] = []
+    for row in trace[first_match_index:]:
+        if not isinstance(row, list) or len(row) < 3:
+            continue
+        lat, lon, altitude = row[1], row[2], row[3]
+        if lat is None or lon is None or _is_ground(altitude):
+            continue
+        points.append((lat, lon))
+    return points
+
+
+async def trace_points(
+    client: httpx.AsyncClient, icao24: str, callsign: str, on_error: Any
+) -> list[tuple[float, float]]:
+    """This aircraft's actual flown positions since it started transmitting `callsign`.
+
+    A fallback for `flights.flown_path()`, which prefers OpenSky's purpose-built (and already
+    flight-scoped) `/tracks/all` -- this is what stands in when that is unreachable, since none of
+    the point/callsign/hex feeds above carry history, only a live snapshot.
+    """
+    key = icao24.strip().lower()
+    if len(key) < 2 or not callsign:
+        return []
+    url = ADSB_LOL_TRACE_URL.format(suffix=key[-2:], icao24=key)
+    await throttle(url)
+    try:
+        response = await client.get(url, timeout=15, follow_redirects=True, headers={"Accept": "application/json"})
+        if response.status_code != 200:
+            return []
+        payload = response.json()
+    except (httpx.HTTPError, ValueError) as error:
+        on_error("adsb:trace", str(error))
+        return []
+
+    trace = payload.get("trace") if isinstance(payload, dict) else None
+    if not isinstance(trace, list) or not trace:
+        return []
+    return trace_leg_points(trace, callsign)
+
+
+# ---------------------------------------------------------------------------
 # Worldwide route lookup (keyless)
 # ---------------------------------------------------------------------------
 

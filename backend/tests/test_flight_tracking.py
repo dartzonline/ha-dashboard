@@ -326,6 +326,174 @@ class TestAllStatesCache:
         assert flights.upstream_failing("opensky_states") is True
 
 
+class TestWorldwideAirportFallback:
+    """Coordinates for an airport outside the small home-region `AIRPORTS` table.
+
+    The reported bug: a pinned flight's progress bar stayed at 0% for its entire duration whenever
+    the destination was outside `AIRPORTS` (which only covers the deployment's home region) and
+    the historical adsbdb/adsb.lol route guess for that callsign named a different city pair (as
+    it routinely does -- airlines reuse flight numbers) and so was rejected. `_build_pin_context`
+    needs both endpoints' coordinates to compute a fraction along the route at all; with the
+    destination coordinate-less, that computation never had anything to divide by. This table is
+    the fix: real coordinates for any airport at all, so a schedule feed's IATA code always
+    resolves to *something* the progress and route maths can use.
+    """
+
+    @pytest.fixture(autouse=True)
+    def worldwide_fixture(self, monkeypatch):
+        # A small, deterministic stand-in for the real ~8700-airport file -- these tests assert
+        # the fallback wiring, not the bundled data itself.
+        monkeypatch.setattr(flights, "WORLDWIDE_AIRPORTS", {
+            "KMAF": ["MAF", "Midland", "US", 31.9425, -102.202],
+            "VOHS": [None, "Hyderabad", "IN", 17.2313, 78.4299],  # a real field with no IATA code
+        })
+        monkeypatch.setattr(flights, "WORLDWIDE_AIRPORTS_BY_IATA", {
+            "MAF": ("KMAF", ["MAF", "Midland", "US", 31.9425, -102.202]),
+        })
+
+    def test_resolve_airport_falls_back_to_the_worldwide_table(self):
+        assert flights.resolve_airport("KMAF") == {"code": "MAF", "city": "Midland", "lat": 31.9425, "lon": -102.202}
+
+    def test_resolve_airport_still_prefers_the_local_table_when_both_know_it(self):
+        # AUS is in the real local AIRPORTS table; the worldwide fixture above doesn't even have it,
+        # so this also proves the local table is consulted first rather than skipped.
+        result = flights.resolve_airport("KAUS")
+        assert result["code"] == "AUS"
+
+    def test_resolve_airport_without_an_iata_code_still_gets_coordinates(self):
+        # The worldwide table's own code is None for VOHS; the ICAO-derived label fills in for it.
+        assert flights.resolve_airport("VOHS") == {"code": "VOHS", "city": "Hyderabad", "lat": 17.2313, "lon": 78.4299}
+
+    def test_an_airport_in_neither_table_still_returns_a_bare_label(self):
+        assert flights.resolve_airport("KZZZ") == {"code": "ZZZ", "city": None, "lat": None, "lon": None}
+
+    def test_schedule_airport_falls_back_to_the_worldwide_table_by_iata(self):
+        assert flights._schedule_airport("MAF", None) == {"code": "MAF", "city": "Midland", "lat": 31.9425, "lon": -102.202}
+
+    def test_schedule_airport_keeps_the_schedules_own_city_name_when_it_has_one(self):
+        # The schedule feed's own city name is worth keeping even when the coordinate has to come
+        # from elsewhere -- it is what the person pinning the flight actually typed the code for.
+        result = flights._schedule_airport("MAF", "Midland-Odessa")
+        assert result["city"] == "Midland-Odessa"
+        assert result["lat"] == 31.9425
+
+    def test_schedule_airport_with_an_unresolvable_code_is_still_a_labelled_stub(self):
+        assert flights._schedule_airport("ZZZ", "Nowhere") == {"code": "ZZZ", "city": "Nowhere", "lat": None, "lon": None}
+
+
+class TestThinPoints:
+    """The flown-path polyline is capped for the wire; the shape has to survive the cut."""
+
+    def test_short_lists_pass_through_untouched(self):
+        points = [(1.0, 2.0), (3.0, 4.0)]
+        assert flights._thin_points(points, 150) == [{"lat": 1.0, "lon": 2.0}, {"lat": 3.0, "lon": 4.0}]
+
+    def test_a_long_list_is_capped_at_the_limit(self):
+        points = [(float(i), float(i)) for i in range(500)]
+        result = flights._thin_points(points, 100)
+        assert len(result) <= 100
+
+    def test_the_first_and_last_points_survive_the_cut(self):
+        points = [(float(i), float(i)) for i in range(500)]
+        result = flights._thin_points(points, 50)
+        assert result[0] == {"lat": 0.0, "lon": 0.0}
+        assert result[-1] == {"lat": 499.0, "lon": 499.0}
+
+    def test_an_empty_list_stays_empty(self):
+        assert flights._thin_points([], 150) == []
+
+
+class TestOpenskyTrackPoints:
+    def test_airborne_points_are_kept_in_order(self, monkeypatch):
+        path = [[1000, 30.0, -97.0, 35000, 90, False], [1010, 30.1, -97.1, 35000, 90, False]]
+        client = _fake_get_client({"path": path})
+        monkeypatch.setattr(flights, "_opensky_headers", _no_headers)
+        assert _run(flights._opensky_track_points(client, "a5d965")) == [(30.0, -97.0), (30.1, -97.1)]
+
+    def test_grounded_taxi_points_are_dropped(self, monkeypatch):
+        path = [[1000, 30.0, -97.0, 0, 0, True], [1010, 30.1, -97.1, 35000, 90, False]]
+        client = _fake_get_client({"path": path})
+        monkeypatch.setattr(flights, "_opensky_headers", _no_headers)
+        assert _run(flights._opensky_track_points(client, "a5d965")) == [(30.1, -97.1)]
+
+    def test_a_missing_path_is_reported_as_no_points(self, monkeypatch):
+        client = _fake_get_client({})
+        monkeypatch.setattr(flights, "_opensky_headers", _no_headers)
+        assert _run(flights._opensky_track_points(client, "a5d965")) == []
+
+    def test_a_failure_is_reported_and_yields_nothing(self, monkeypatch):
+        async def failing_get(*args, **kwargs):
+            raise httpx.ConnectError("boom")
+
+        monkeypatch.setattr(flights, "_opensky_headers", _no_headers)
+        flights._last_upstream_error.pop("opensky_tracks", None)
+        assert _run(flights._opensky_track_points(types.SimpleNamespace(get=failing_get), "a5d965")) == []
+        assert flights.upstream_failing("opensky_tracks") is True
+
+
+class TestFlownPath:
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        flights._flown_path_cache.clear()
+        yield
+        flights._flown_path_cache.clear()
+
+    def test_prefers_opensky_and_never_touches_the_fallback_feed_when_it_answers(self, monkeypatch):
+        monkeypatch.setattr(flights, "_opensky_track_points", _stub(lambda client, icao24: [(30.0, -97.0)]))
+        fallback_calls = []
+
+        async def fallback(*args, **kwargs):
+            fallback_calls.append(1)
+            return []
+
+        monkeypatch.setattr(flights.flight_sources, "trace_points", fallback)
+        result = _run(flights.flown_path(object(), "a5d965", "SWA1626"))
+        assert result == [{"lat": 30.0, "lon": -97.0}]
+        assert fallback_calls == []
+
+    def test_falls_back_to_the_keyless_trace_when_opensky_has_nothing(self, monkeypatch):
+        monkeypatch.setattr(flights, "_opensky_track_points", _stub(lambda client, icao24: []))
+
+        async def fallback(client, icao24, callsign, on_error):
+            assert (icao24, callsign) == ("a5d965", "SWA1626")
+            return [(31.0, -100.9)]
+
+        monkeypatch.setattr(flights.flight_sources, "trace_points", fallback)
+        result = _run(flights.flown_path(object(), "a5d965", "SWA1626"))
+        assert result == [{"lat": 31.0, "lon": -100.9}]
+
+    def test_a_cached_result_is_served_without_calling_either_source_again(self, monkeypatch):
+        calls = []
+
+        async def counted(*args, **kwargs):
+            calls.append(1)
+            return [(30.0, -97.0)]
+
+        monkeypatch.setattr(flights, "_opensky_track_points", counted)
+        _run(flights.flown_path(object(), "a5d965", "SWA1626"))
+        _run(flights.flown_path(object(), "a5d965", "SWA1626"))
+        assert len(calls) == 1
+
+    def test_no_known_aircraft_is_an_empty_path_with_no_network_calls(self, monkeypatch):
+        called = []
+        monkeypatch.setattr(flights, "_opensky_track_points", _stub(lambda client, icao24: called.append(1)))
+        assert _run(flights.flown_path(object(), None, "SWA1626")) == []
+        assert called == []
+
+
+def _stub(fn):
+    async def call(client, icao24):
+        return fn(client, icao24)
+    return call
+
+
+def _fake_get_client(payload):
+    async def get(*args, **kwargs):
+        return _FakeResponse(payload)
+
+    return types.SimpleNamespace(get=get)
+
+
 async def _no_headers(_client):
     return {}
 

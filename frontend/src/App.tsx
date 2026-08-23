@@ -858,7 +858,7 @@ function App() {
           </Suspense>
         ) : activeSection === 'maintenance' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Checking maintenance</span></div>}>
-            <MaintenanceView onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} />
+            <MaintenanceView onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} onService={callService} />
           </Suspense>
         ) : activeSection === 'network' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing network</span></div>}>

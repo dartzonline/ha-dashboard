@@ -65,3 +65,72 @@ export function unwrap(points: Point[], reference: number): Point[] {
   })
 }
 
+export interface FlightLineInput {
+  origin: Point
+  destination: Point
+  /** Real historical positions since departure, earliest first. Empty/absent when unavailable. */
+  flownPoints?: Point[] | null
+  /** The aircraft's live reported position, when it has one. */
+  livePosition?: Point | null
+  /** 0..1 fallback for where to place the aircraft with no history and no live position at all. */
+  progress?: number
+  samples?: number
+}
+
+export interface FlightLine {
+  /** The idealised origin -> destination great circle, unaffected by any deviation flown. */
+  plan: Point[]
+  /** Where the aircraft has actually been, ending at its current (or best-known) position. */
+  flown: Point[]
+  /** A fresh great circle from the current position onward -- the plan *from here*, which is not
+      the same line as the back half of `plan` once the flight has deviated from it at all. */
+  remaining: Point[]
+  /** The aircraft's drawn position, or null when nothing is known yet. */
+  current: Point | null
+  /** True when `current` is a real reported position rather than a `progress`-based estimate. */
+  isLive: boolean
+}
+
+/**
+ * Chooses what to draw for one flight's progress along its route, in plain lat/lon -- callers
+ * project and unwrap the pieces afterward, same as they already do for a plain great circle.
+ *
+ * Real flown history is preferred whenever there is any, because it is what actually happened:
+ * ATC vectoring, weather deviation and holding patterns all show up in it and none of them show up
+ * in a straight interpolation. A live position with no history yet still gets an honest curve to
+ * wherever it actually is, rather than a point borrowed from the unrelated origin-destination arc.
+ * Only with neither is a `progress` fraction along the idealised plan used, and only as a last
+ * resort -- it is the one case here that is a guess rather than a fact.
+ */
+export function buildFlightLine({
+  origin, destination, flownPoints, livePosition, progress = 0, samples,
+}: FlightLineInput): FlightLine {
+  const plan = greatCircle(origin, destination, samples)
+
+  let flown: Point[]
+  let current: Point | null
+  let isLive: boolean
+
+  if (flownPoints && flownPoints.length > 0) {
+    flown = livePosition ? [...flownPoints, livePosition] : flownPoints.slice()
+    current = flown[flown.length - 1]
+    isLive = true
+  } else if (livePosition) {
+    flown = greatCircle(origin, livePosition, samples)
+    current = livePosition
+    isLive = true
+  } else if (progress > 0) {
+    const index = Math.round(Math.min(1, Math.max(0, progress)) * (plan.length - 1))
+    flown = plan.slice(0, index + 1)
+    current = plan[index]
+    isLive = false
+  } else {
+    flown = []
+    current = null
+    isLive = false
+  }
+
+  const remaining = current ? greatCircle(current, destination, samples) : plan
+  return { plan, flown, remaining, current, isLive }
+}
+

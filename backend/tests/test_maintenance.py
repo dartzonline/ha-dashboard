@@ -97,6 +97,88 @@ def garage(door_state: str = "closed", **overrides) -> list[dict]:
     return states
 
 
+def update(entity_id: str, state: str = "on", **attributes) -> dict:
+    """One `update.*` entity, matching Home Assistant's own `update` component shape."""
+    return row(entity_id, state, **attributes)
+
+
+class TestSoftwareUpdates:
+    def test_an_available_update_is_reported(self):
+        states = [update(
+            "update.home_assistant_core_update",
+            title="Home Assistant Core",
+            installed_version="2026.7.0",
+            latest_version="2026.8.0",
+            release_summary="Bug fixes.",
+            release_url="https://www.home-assistant.io/latest-release-notes/",
+            supported_features=1,
+        )]
+        item = maintenance.software_updates(states)[0]
+        assert item["entityId"] == "update.home_assistant_core_update"
+        assert item["name"] == "Home Assistant Core"
+        assert item["installedVersion"] == "2026.7.0"
+        assert item["latestVersion"] == "2026.8.0"
+        assert item["releaseSummary"] == "Bug fixes."
+        assert item["releaseUrl"] == "https://www.home-assistant.io/latest-release-notes/"
+        assert item["canInstall"] is True
+
+    def test_an_up_to_date_entity_reports_no_update(self):
+        # Home Assistant itself sets state to "off" once installed == latest, or once the
+        # available version matches one the user already skipped -- either way, off means nothing
+        # to surface, and this module trusts that rather than re-deriving it.
+        states = [update("update.esphome_garage_firmware", state="off", installed_version="2026.8.0", latest_version="2026.8.0")]
+        assert maintenance.software_updates(states) == []
+
+    def test_an_unavailable_update_entity_reports_nothing(self):
+        states = [update("update.hacs_frontend", state="unavailable")]
+        assert maintenance.software_updates(states) == []
+
+    def test_an_entity_without_the_install_feature_bit_cannot_be_installed_from_here(self):
+        # Some integrations publish an update entity purely informationally -- installing happens
+        # some other way (an app store, a manual firmware flash) -- and offering an Install button
+        # that would just fail at Home Assistant is worse than not offering one.
+        states = [update("update.nas_firmware", supported_features=0)]
+        assert maintenance.software_updates(states)[0]["canInstall"] is False
+
+    def test_a_missing_supported_features_attribute_is_not_installable(self):
+        states = [update("update.mystery_device")]
+        assert maintenance.software_updates(states)[0]["canInstall"] is False
+
+    def test_an_install_already_in_progress_is_reported_with_its_percentage(self):
+        states = [update("update.home_assistant_supervisor_update", in_progress=True, update_percentage=42, supported_features=1 + 4)]
+        item = maintenance.software_updates(states)[0]
+        assert item["inProgress"] is True
+        assert item["progressPercent"] == 42
+
+    def test_not_in_progress_has_no_percentage_to_show(self):
+        states = [update("update.home_assistant_core_update", supported_features=1)]
+        item = maintenance.software_updates(states)[0]
+        assert item["inProgress"] is False
+        assert item["progressPercent"] is None
+
+    def test_the_entity_id_stands_in_for_a_missing_title_or_friendly_name(self):
+        states = [update("update.mystery_device")]
+        assert maintenance.software_updates(states)[0]["name"] == "update.mystery_device"
+
+    def test_a_friendly_name_stands_in_when_there_is_no_title(self):
+        states = [update("update.mystery_device", name="Mystery Device Update")]
+        assert maintenance.software_updates(states)[0]["name"] == "Mystery Device Update"
+
+    def test_other_domains_are_ignored(self):
+        states = [row("sensor.update_available", "on")]
+        assert maintenance.software_updates(states) == []
+
+    def test_updates_are_listed_alphabetically(self):
+        states = [
+            update("update.zzz_device", title="Zzz Device"),
+            update("update.aaa_device", title="Aaa Device"),
+        ]
+        assert [item["name"] for item in maintenance.software_updates(states)] == ["Aaa Device", "Zzz Device"]
+
+    def test_no_update_entities_at_all_is_survived(self):
+        assert maintenance.software_updates([row("light.kitchen", "on")]) == []
+
+
 class TestConsumablesUnits:
     def test_a_percentage_is_already_a_fraction_of_life(self):
         states = [percent("sensor.refrigerator_water_filter", 40, name="Water filter")]
@@ -576,11 +658,12 @@ class TestMaintenanceSummary:
             row("sensor.washer_energy_last_month", 1000, unit="Wh"),
             *salt(depth=43.5, reported=0),
             *garage(),
+            update("update.home_assistant_core_update", title="Home Assistant Core", supported_features=1),
         ]
 
-    def test_the_shape_is_the_five_panels_plus_counts(self):
+    def test_the_shape_is_the_six_panels_plus_counts(self):
         summary = maintenance.maintenance_summary(self._install())
-        assert set(summary) == {"consumables", "salt", "garage", "faults", "appliances", "counts"}
+        assert set(summary) == {"consumables", "salt", "garage", "faults", "appliances", "updates", "counts"}
         assert set(summary["counts"]) == {"critical", "warning", "ok"}
 
     def test_counts_match_the_consumables_listed(self):
@@ -594,6 +677,7 @@ class TestMaintenanceSummary:
         assert summary["garage"]["openingSeconds"] == 12.9
         assert [item["entityId"] for item in summary["faults"]] == ["binary_sensor.dishwasher_problem"]
         assert [item["device"] for item in summary["appliances"]] == ["washer"]
+        assert [item["entityId"] for item in summary["updates"]] == ["update.home_assistant_core_update"]
 
     def test_the_generator_is_consumed_once_and_reused(self):
         """Every panel walks the same payload, so a generator would leave all but
@@ -604,6 +688,7 @@ class TestMaintenanceSummary:
         assert summary["garage"] is not None
         assert summary["faults"]
         assert summary["appliances"]
+        assert summary["updates"]
 
     def test_an_install_with_none_of_these_devices_is_survived(self):
         summary = maintenance.maintenance_summary([row("light.kitchen", "on")])
@@ -612,6 +697,7 @@ class TestMaintenanceSummary:
         assert summary["garage"] is None
         assert summary["faults"] == []
         assert summary["appliances"] == []
+        assert summary["updates"] == []
         assert summary["counts"] == {"critical": 0, "warning": 0, "ok": 0}
 
     def test_an_empty_payload_is_survived(self):

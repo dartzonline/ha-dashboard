@@ -193,4 +193,31 @@ describe('AllRoutesMap', () => {
     const departure = Number(outbound[0].getAttribute('cx'))
     expect(departure).toBeCloseTo(arrival, 1)
   })
+
+  it('marks an aircraft drawn from real flown history as live even with no live position given', () => {
+    stubSize()
+    render(<AllRoutesMap routes={[route('SWA771', LAX, AUS, { flownPath: [LAX, { lat: 32.0, lon: -108.0 }] })]} />)
+
+    expect(document.querySelector('.all-route-aircraft.is-live')).toBeTruthy()
+    expect(document.querySelector('.all-route-aircraft.is-estimated')).toBeNull()
+  })
+
+  it('places the aircraft at the end of the real flown history, not a progress-based guess', () => {
+    stubSize()
+    const realPosition = { lat: 32.0, lon: -108.0 }
+    const withHistory = route('SWA771', LAX, AUS, { flownPath: [LAX, realPosition], progress: 0.9 })
+    const withoutHistory = route('AAL69', LAX, AUS, { progress: 0.9 })
+    render(<AllRoutesMap routes={[withHistory, withoutHistory]} />)
+
+    const aircraft = Array.from(document.querySelectorAll('.all-route-aircraft'))
+    expect(aircraft).toHaveLength(2)
+    // Both flights are placed by different means (real history vs. a 90%-along guess) starting
+    // from the same origin/destination pair, so if the history were being ignored they would land
+    // on the same pixel; they must not.
+    const [historyX, guessX] = aircraft.map((node) => {
+      const transform = node.getAttribute('transform') ?? ''
+      return Number(transform.match(/translate\(([-\d.]+)/)?.[1])
+    })
+    expect(historyX).not.toBeCloseTo(guessX, 0)
+  })
 })

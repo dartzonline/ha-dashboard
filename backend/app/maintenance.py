@@ -26,6 +26,12 @@ from typing import Any, Iterable
 
 DEAD_STATES = {"unavailable", "unknown"}
 
+# homeassistant.components.update.const.UpdateEntityFeature.INSTALL -- the bit an update entity
+# sets when `update.install` actually works for it. A handful of integrations publish an update
+# entity that is read-only (informational only, installed some other way), and offering an
+# Install button that would just fail is worse than not offering one.
+UPDATE_INSTALL_FEATURE = 1
+
 # Roborock publishes hours remaining rather than a percentage, so a full service
 # interval is needed to express it as a fraction. These are the manufacturer's
 # published intervals -- the device does not report them, so the UI says the
@@ -315,6 +321,44 @@ def appliance_usage(states: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return results
 
 
+def software_updates(states: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pending updates Home Assistant's own `update.*` entities already know about.
+
+    Home Assistant Core/Supervisor/OS always publish one of these when running as an add-on, and
+    any integration can add its own -- ESPHome device firmware, HACS-installed components, and so
+    on. Nothing here is guessed or version-compared by this app: `state == "on"` is the entity's
+    own conclusion that a newer version exists, arrived at (and kept current) by Home Assistant
+    itself, including not re-nagging about a version the user already skipped -- HA reports that
+    case as `"off"` too, so there is nothing left for this function to second-guess.
+    """
+    updates: list[dict[str, Any]] = []
+    for entity in states:
+        entity_id = str(entity.get("entity_id", ""))
+        if not entity_id.startswith("update.") or entity.get("state") != "on":
+            continue
+        attributes = entity.get("attributes") or {}
+        features = attributes.get("supported_features")
+        in_progress = attributes.get("in_progress")
+        percent = attributes.get("update_percentage")
+        updates.append({
+            "entityId": entity_id,
+            # `title` is the device/integration's own name for itself (e.g. "Home Assistant Core");
+            # friendly_name on these entities is often just "<title> Update" and reads redundantly
+            # once it is already under an "Updates available" heading.
+            "name": str(attributes.get("title") or _name(entity)),
+            "installedVersion": attributes.get("installed_version"),
+            "latestVersion": attributes.get("latest_version"),
+            "releaseSummary": attributes.get("release_summary"),
+            "releaseUrl": attributes.get("release_url"),
+            "canInstall": isinstance(features, int) and bool(features & UPDATE_INSTALL_FEATURE),
+            "inProgress": bool(in_progress),
+            "progressPercent": percent if isinstance(percent, (int, float)) else None,
+        })
+
+    updates.sort(key=lambda item: str(item["name"]))
+    return updates
+
+
 def maintenance_summary(states: Iterable[dict[str, Any]]) -> dict[str, Any]:
     states = list(states)
     items = consumables(states)
@@ -324,6 +368,7 @@ def maintenance_summary(states: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "garage": garage_status(states),
         "faults": device_faults(states),
         "appliances": appliance_usage(states),
+        "updates": software_updates(states),
         "counts": {
             "critical": sum(1 for item in items if item["severity"] == "critical"),
             "warning": sum(1 for item in items if item["severity"] == "warning"),

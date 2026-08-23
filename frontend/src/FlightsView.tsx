@@ -68,6 +68,8 @@ interface TrackEntry {
   schedule: TrackSchedule
   progress: number
   etaLine: string | null
+  /** Real historical positions since departure, earliest first -- the actual flown track. */
+  flownPath?: { lat: number; lon: number }[]
   /** Why a pinned flight has no live position yet — set by the backend only while awaiting. */
   awaitReason?: string | null
 }
@@ -760,6 +762,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                       from: { code: entry.route?.fromCode ?? null, lat: entry.route?.fromLat ?? null, lon: entry.route?.fromLon ?? null },
                       to: { code: entry.route?.toCode ?? null, lat: entry.route?.toLat ?? null, lon: entry.route?.toLon ?? null },
                       position: entry.flight ? { lat: entry.flight.lat, lon: entry.flight.lon, trackDeg: entry.flight.trackDeg } : null,
+                      flownPath: entry.flownPath,
                       progress: entry.progress,
                       isLanded: entry.mode === 'landed',
                     }))}
@@ -779,6 +782,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                       lon: screen.entry.route?.toLon ?? null,
                     }}
                     position={screen.entry.flight ? { lat: screen.entry.flight.lat, lon: screen.entry.flight.lon, trackDeg: screen.entry.flight.trackDeg } : null}
+                    flownPath={screen.entry.flownPath}
                     progress={screen.entry.progress}
                     callsign={screen.entry.flight?.callsign ?? screen.entry.query}
                     caption={screen.entry.mode === 'await' ? 'Route · awaiting position' : screen.entry.etaLine ?? shortModeLabel(screen.entry.mode)}
