@@ -100,6 +100,31 @@ describe('Track page', () => {
     expect(document.querySelector('.route-aircraft')).toBeNull()
   })
 
+  it('draws the real flown track once the backend has one, not just the great-circle plan', async () => {
+    // clientWidth/clientHeight read 0 under jsdom, which stops the map's fit maths from ever
+    // drawing anything; this is what makes the geometry (rather than just its container) observable.
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 640 })
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 360 })
+    try {
+      mockTrack([flight('SWA1626', {
+        route: { fromCode: 'HOU', fromCity: 'Houston', fromLat: 29.6454, fromLon: -95.2789, toCode: 'MAF', toCity: 'Midland', toLat: 31.9425, toLon: -102.202 },
+        flownPath: [{ lat: 29.613, lon: -95.2635 }, { lat: 30.5, lon: -99.0 }, { lat: 31.4, lon: -100.58 }],
+      })])
+      render(<FlightsView entities={NO_ENTITIES} slide={1} onSelectSlide={() => {}} />)
+
+      await waitFor(() => expect(document.querySelector('path.route-flown')).toBeTruthy())
+      const plan = document.querySelector('path.route-plan')?.getAttribute('d')
+      const flown = document.querySelector('path.route-flown')?.getAttribute('d')
+      expect(plan).toBeTruthy()
+      expect(flown).toBeTruthy()
+      expect(flown).not.toBe(plan)
+      expect(document.querySelector('.route-aircraft.is-live')).toBeTruthy()
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight')
+    }
+  })
+
   it('falls back to the showcase when a tracked flight has no plottable route', async () => {
     // Route resolved by code only — one endpoint unknown, so there is nothing to draw a line between.
     mockTrack([flight('SWA771', { route: { fromCode: 'LAX', fromCity: 'Los Angeles', fromLat: 33.94, fromLon: -118.41, toCode: null, toCity: null, toLat: null, toLon: null } })])

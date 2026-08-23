@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  AlertTriangle, CheckCircle2, Filter, Gauge, Warehouse, Waves, WashingMachine,
+  AlertTriangle, CheckCircle2, Download, ExternalLink, Filter, Gauge, Warehouse, Waves, WashingMachine,
 } from 'lucide-react'
 import { apiUrl } from './api'
 import type { TileConfig } from './types'
@@ -50,17 +50,31 @@ interface Appliance {
   status: string | null
 }
 
+interface SoftwareUpdate {
+  entityId: string
+  name: string
+  installedVersion: string | null
+  latestVersion: string | null
+  releaseSummary: string | null
+  releaseUrl: string | null
+  canInstall: boolean
+  inProgress: boolean
+  progressPercent: number | null
+}
+
 interface MaintenancePayload {
   consumables: Consumable[]
   salt: Salt | null
   garage: Garage | null
   faults: { entityId: string; name: string }[]
   appliances: Appliance[]
+  updates: SoftwareUpdate[]
   counts: { critical: number; warning: number; ok: number }
 }
 
 interface MaintenanceViewProps {
   onExpand: (tile: TileConfig) => void
+  onService: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>
 }
 
 function kwh(wh: number | undefined) {
@@ -77,9 +91,11 @@ function shortName(name: string) {
     .replace(/\s*Life$/i, '')
 }
 
-export function MaintenanceView({ onExpand }: MaintenanceViewProps) {
+export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
   const [payload, setPayload] = useState<MaintenancePayload | null>(null)
   const [failed, setFailed] = useState(false)
+  const [installing, setInstalling] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback((signal?: AbortSignal) => {
     fetch(apiUrl('insights/maintenance'), { signal })
@@ -94,16 +110,36 @@ export function MaintenanceView({ onExpand }: MaintenanceViewProps) {
   useEffect(() => {
     const abort = new AbortController()
     load(abort.signal)
-    // Wear changes over weeks; there is nothing to gain from polling hard.
-    const timer = window.setInterval(() => load(), 300_000)
+    // Wear changes over weeks and is worth polling slowly; an update in progress needs to be seen
+    // moving, so the interval is short enough to show that without hammering the backend at rest.
+    const timer = window.setInterval(() => load(), payload?.updates.some((item) => item.inProgress) ? 10_000 : 300_000)
     return () => { abort.abort(); window.clearInterval(timer) }
-  }, [load])
+  }, [load, payload?.updates])
 
   const counts = payload?.counts
-  const clear = counts !== undefined && counts.critical === 0 && counts.warning === 0
+  const clear = counts !== undefined && counts.critical === 0 && counts.warning === 0 && (payload?.updates.length ?? 0) === 0
 
   const open = (entityId: string, label: string, icon: string) =>
     onExpand({ entityId, label, kind: 'sensor', icon })
+
+  async function install(item: SoftwareUpdate) {
+    // Installing Home Assistant's own core/supervisor is briefly disruptive -- the add-on this
+    // dashboard runs as can restart along with it -- so it gets the same explicit confirmation
+    // pattern as any other action here that cannot simply be undone by tapping again.
+    const disruptive = item.entityId.startsWith('update.home_assistant_')
+    if (disruptive && !window.confirm(`Install ${item.name} ${item.latestVersion ?? ''}? This may briefly restart Home Assistant.`)) return
+
+    setInstalling(item.entityId)
+    setNotice(null)
+    try {
+      await onService('update', 'install', { entity_id: item.entityId })
+      load()
+    } catch {
+      setNotice(`Could not start the ${item.name} update.`)
+    } finally {
+      setInstalling(null)
+    }
+  }
 
   return (
     <section className="maint-view" aria-label="Maintenance">
@@ -114,10 +150,53 @@ export function MaintenanceView({ onExpand }: MaintenanceViewProps) {
         </div>
         <span>
           {failed ? 'Maintenance data unavailable'
-            : counts ? `${counts.critical} due now · ${counts.warning} soon · ${counts.ok} healthy`
+            : counts
+              ? `${counts.critical} due now · ${counts.warning} soon · ${counts.ok} healthy`
+                + (payload && payload.updates.length > 0 ? ` · ${payload.updates.length} update${payload.updates.length === 1 ? '' : 's'} available` : '')
             : 'Checking…'}
         </span>
       </header>
+
+      {notice && <p className="maint-notice" role="status">{notice}</p>}
+
+      {payload && payload.updates.length > 0 && (
+        <ul className="maint-updates">
+          {payload.updates.map((item) => (
+            <li key={item.entityId}>
+              <div className="maint-update-body">
+                <Download size={14} />
+                <div className="maint-update-copy">
+                  <strong>{item.name}</strong>
+                  <span>
+                    {item.installedVersion ?? '?'} → {item.latestVersion ?? '?'}
+                    {item.releaseUrl && (
+                      <a href={item.releaseUrl} target="_blank" rel="noreferrer" title="Open release notes">
+                        <ExternalLink size={11} />
+                      </a>
+                    )}
+                  </span>
+                  {item.releaseSummary && <small>{item.releaseSummary}</small>}
+                </div>
+              </div>
+              {item.canInstall ? (
+                <button
+                  type="button"
+                  className="maint-update-install"
+                  onClick={() => void install(item)}
+                  disabled={installing !== null || item.inProgress}
+                  title={`Install ${item.name} ${item.latestVersion ?? ''}`}
+                >
+                  {item.inProgress
+                    ? (item.progressPercent !== null ? `Installing… ${Math.round(item.progressPercent)}%` : 'Installing…')
+                    : installing === item.entityId ? 'Starting…' : 'Install'}
+                </button>
+              ) : (
+                <span className="maint-update-manual">Update manually</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       {payload && payload.faults.length > 0 && (
         <ul className="maint-faults">

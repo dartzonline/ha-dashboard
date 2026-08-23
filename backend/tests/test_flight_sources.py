@@ -524,6 +524,97 @@ class TestFeedFallbackChain:
         assert len(errors) == len(flight_sources.ADSB_FEEDS)
 
 
+class TestTraceLegPoints:
+    """Segmenting one aircraft's full-day trace down to just the currently-pinned flight leg.
+
+    The real bug this covers: the first cut at this used the aircraft's last "on the ground" trace
+    sample as the boundary, which looked right on the one flight tested by hand and was wrong in
+    general -- a trace frequently starts already airborne mid a *previous* leg, with no ground
+    sample anywhere in it, so that boundary either grabbed nothing or grabbed an earlier flight's
+    points too. Matching the callsign metadata instead (sparse, but present and correct) fixes it.
+    """
+
+    def row(self, lat, lon, altitude=35000, flight=None):
+        meta = {"flight": flight} if flight else None
+        return [0, lat, lon, altitude, 400, 90, 0, 0, meta]
+
+    def test_only_the_points_transmitted_under_this_callsign_are_kept(self):
+        trace = [
+            self.row(25.0, -105.0, flight="SWA881"),
+            self.row(25.5, -104.5),  # carries SWA881 forward -- no marker on every sample
+            self.row(31.0, -100.9, flight="SWA1626"),
+            self.row(31.5, -100.8),
+        ]
+        points = flight_sources.trace_leg_points(trace, "SWA1626")
+        assert points == [(31.0, -100.9), (31.5, -100.8)]
+
+    def test_a_trace_with_no_ground_sample_at_all_still_segments_correctly(self):
+        """The scenario the ground-flag approach could not handle: nothing in this trace ever
+        touched down, because it starts mid a previous leg the trace's lookback window clipped."""
+        trace = [self.row(25.0, -105.0, altitude=39000, flight="SWA881"), self.row(31.0, -100.9, flight="SWA1626")]
+        assert flight_sources.trace_leg_points(trace, "SWA1626") == [(31.0, -100.9)]
+
+    def test_grounded_points_within_the_matched_leg_are_dropped(self):
+        trace = [
+            self.row(29.6, -95.3, altitude="ground", flight="SWA1626"),
+            self.row(29.65, -95.28, altitude="ground"),
+            self.row(30.0, -96.0),
+        ]
+        assert flight_sources.trace_leg_points(trace, "SWA1626") == [(30.0, -96.0)]
+
+    def test_a_callsign_never_seen_in_the_trace_yields_nothing(self):
+        trace = [self.row(25.0, -105.0, flight="SWA881")]
+        assert flight_sources.trace_leg_points(trace, "SWA1626") == []
+
+    def test_matching_is_case_and_padding_insensitive(self):
+        trace = [self.row(31.0, -100.9, flight="swa1626 ")]
+        assert flight_sources.trace_leg_points(trace, " SWA1626") == [(31.0, -100.9)]
+
+    def test_rows_with_missing_coordinates_are_skipped_without_raising(self):
+        trace = [self.row(31.0, -100.9, flight="SWA1626"), [0, None, -100.8, 35000, 400, 90, 0, 0, None]]
+        assert flight_sources.trace_leg_points(trace, "SWA1626") == [(31.0, -100.9)]
+
+
+class TestTracePoints:
+    def test_the_url_is_sharded_by_the_last_two_hex_characters(self, recorded_sleeps):
+        client, urls = _fake_client({"trace": [[0, 31.0, -100.9, 35000, 400, 90, 0, 0, {"flight": "SWA1626"}]]})
+        _run(flight_sources.trace_points(client, "A5D965", "SWA1626", _record_errors([])))
+        assert urls == ["https://globe.adsb.lol/data/traces/65/trace_full_a5d965.json"]
+
+    def test_a_non_200_response_is_treated_as_no_trace_available(self, recorded_sleeps):
+        async def get(url, **kwargs):
+            return _FakeResponse(status_code=404)
+
+        result = _run(
+            flight_sources.trace_points(types.SimpleNamespace(get=get), "a5d965", "SWA1626", _record_errors([]))
+        )
+        assert result == []
+
+    def test_a_network_failure_is_reported_and_yields_nothing(self, recorded_sleeps):
+        errors = []
+
+        async def get(url, **kwargs):
+            raise httpx.ConnectError("boom")
+
+        result = _run(
+            flight_sources.trace_points(
+                types.SimpleNamespace(get=get), "a5d965", "SWA1626", _record_errors(errors)
+            )
+        )
+        assert result == []
+        assert errors == [("adsb:trace", "boom")]
+
+    def test_a_hex_too_short_to_shard_never_reaches_the_network(self, recorded_sleeps):
+        client, urls = _fake_client({"trace": []})
+        _run(flight_sources.trace_points(client, "a", "SWA1626", _record_errors([])))
+        assert urls == []
+
+    def test_no_callsign_never_reaches_the_network(self, recorded_sleeps):
+        client, urls = _fake_client({"trace": []})
+        _run(flight_sources.trace_points(client, "a5d965", "", _record_errors([])))
+        assert urls == []
+
+
 class TestScheduleFromFlightStats:
     """The last resort: an undocumented blob inside a public page, so failure must be quiet."""
 
@@ -564,10 +655,11 @@ class TestScheduleFromFlightStats:
 
 
 class _FakeResponse:
-    def __init__(self, payload=None, text="", raises=None):
+    def __init__(self, payload=None, text="", raises=None, status_code=200):
         self._payload = payload
         self._raises = raises
         self.text = text
+        self.status_code = status_code
 
     def raise_for_status(self):
         return None

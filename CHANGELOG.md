@@ -3,6 +3,48 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.9.0 - 2026-08-23
+
+**A pinned flight's progress bar and route map now actually move.** The bug: a flight's progress
+fraction needs both airports' coordinates to compute at all, and the local `AIRPORTS` table only
+ever covered a handful of fields near home — any destination outside it (Midland, for a Houston
+departure; anywhere at all, for most flights) had no coordinates, so the progress bar sat at 0% for
+the entire flight regardless of how far it had actually gone. A bundled worldwide airport dataset
+(8,700+ fields, generated from OurAirports' public-domain data by `backend/scripts/build_airports_data.py`)
+now fills that gap for any airport code a schedule feed hands back. Verified live: a Houston→Midland
+flight that was stuck at 0% moved to 92%, then 96%, as it actually approached; a Miami→San Francisco
+flight climbed from 42.95% to 43.25% across two ordinary ten-second polls.
+
+**The route map now draws where the aircraft actually flew, not a straight guess.** It previously
+interpolated a point along the ideal origin-destination great circle and called that "flown" — a
+made-up position, not a fact. It now fetches the aircraft's real historical track (OpenSky's
+`/tracks/all`, keyless and already scoped to one flight leg; adsb.lol's per-aircraft trace history as
+a fallback, correctly segmented to the current flight by matching the callsign the aircraft actually
+transmitted rather than by an aircraft's last "on the ground" sample — traces routinely start already
+airborne mid an earlier leg, which the first version of this got wrong). The map now draws three
+distinct lines: the idealised great-circle route (faint, always the full origin-to-destination
+plan), the real flown track since departure (solid, bold), and a freshly-recomputed great circle from
+wherever the aircraft actually is now to the destination — correct even after a real deviation, unlike
+re-using the back half of the original plan. The same fix applies to the multi-flight overview map.
+
+**Flight-number resolution is more robust.** A flight sold by one airline and flown by a regional
+affiliate under a different callsign (AA3456 flying as ENY3456) is now found by matching the flight
+number and checking the candidate is actually airborne on the pinned flight's own corridor, heading
+toward its destination — refused rather than guessed at if it fails either check. A genuine codeshare
+(a flight number sold by one airline, flown under a completely different number by the operating one)
+still cannot be followed live without a schedule key, and the board says so rather than leaving
+"Awaiting" unexplained.
+
+A **Maintenance** page addition: pending software/firmware updates, read from Home Assistant's own
+`update.*` entities — Home Assistant Core, Supervisor, OS, and anything an integration publishes one
+for (ESPHome device firmware, HACS components). Nothing here is guessed or version-compared by this
+app; `state == "on"` is Home Assistant's own conclusion that a newer version exists, including
+correctly not re-nagging about a version already skipped. Each pending update is its own tile with an
+Install button that calls `update.install` directly — installing Home Assistant's own core or
+supervisor asks for confirmation first, since that can briefly restart the add-on this dashboard runs
+as. An update already in progress shows its live percentage instead of a button, and the page polls
+every 10 seconds while one is running rather than its usual 5 minutes.
+
 ## 1.8.0 - 2026-08-13
 
 A **Maintenance** page for the things that wear out rather than break — the quiet signals nobody

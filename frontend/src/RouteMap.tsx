@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { greatCircle, project, unwrap } from './routeGeometry'
+import { buildFlightLine, project, unwrap } from './routeGeometry'
 import type { Point } from './routeGeometry'
 import './RouteMap.css'
 
@@ -15,7 +15,11 @@ export interface RouteMapProps {
   to: RoutePoint
   /** Live aircraft position, when the flight is actually reporting one. */
   position?: { lat: number; lon: number; trackDeg?: number | null } | null
-  /** 0..1 along the route; the fallback for where to draw the aircraft with no live position. */
+  /** Real historical positions since departure, earliest first -- the actual flown track, not an
+      interpolation. Absent or empty falls back to a plain estimate (see routeGeometry.buildFlightLine). */
+  flownPath?: Point[] | null
+  /** 0..1 along the route; the last-resort fallback for where to draw the aircraft with neither a
+      live position nor any flown history yet. */
   progress?: number
   callsign?: string | null
   /** Small caption in the map's corner, e.g. "En route · 620 kt". */
@@ -70,18 +74,33 @@ function isPlaced(point: RoutePoint): point is RoutePoint & { lat: number; lon: 
 }
 
 /**
- * A tracked flight drawn where it actually is: the great-circle route on a real basemap, with the
- * origin and destination marked and the aircraft on the part of the line it has already flown.
+ * A tracked flight drawn where it actually is: the great-circle route on a real basemap, the real
+ * flown track since departure, and the aircraft at the end of it.
  */
-export function RouteMap({ from, to, position, progress = 0, callsign, caption }: RouteMapProps) {
+export function RouteMap({ from, to, position, flownPath, progress = 0, callsign, caption }: RouteMapProps) {
   const [ref, size] = useElementSize<HTMLDivElement>()
 
   const geometry = useMemo(() => {
     if (!isPlaced(from) || !isPlaced(to) || size.width < 40 || size.height < 40) return null
 
-    const arc = unwrap(greatCircle({ lat: from.lat, lon: from.lon }, { lat: to.lat, lon: to.lon }), from.lon)
-    const plane = position ? unwrap([{ lat: position.lat, lon: position.lon }], arc[0].lon)[0] : null
-    const world = plane ? [...arc, plane] : arc
+    const origin = { lat: from.lat, lon: from.lon }
+    const destination = { lat: to.lat, lon: to.lon }
+    const line = buildFlightLine({
+      origin,
+      destination,
+      flownPoints: flownPath,
+      livePosition: position ? { lat: position.lat, lon: position.lon } : null,
+      progress,
+    })
+
+    // Each piece is unwrapped against where the previous one left off, so the whole drawn line
+    // stays one continuous ribbon across the date line rather than three independently-seamed ones.
+    const plan = unwrap(line.plan, origin.lon)
+    const flown = unwrap(line.flown, origin.lon)
+    const remaining = unwrap(line.remaining, flown.length > 0 ? flown[flown.length - 1].lon : origin.lon)
+    const current = flown.length > 0 ? flown[flown.length - 1] : null
+
+    const world = [...plan, ...flown, ...remaining]
 
     // Largest zoom at which the whole route still fits the viewport with room for its labels.
     let zoom = MIN_ZOOM
@@ -121,44 +140,29 @@ export function RouteMap({ from, to, position, progress = 0, callsign, caption }
       }
     }
 
-    // Where along the drawn arc the aircraft sits, so the flown and remaining halves split there
-    // rather than at a fraction that ignores the live position.
-    let splitIndex = Math.round(Math.max(0, Math.min(1, progress)) * (arc.length - 1))
-    if (plane) {
-      let best = Number.POSITIVE_INFINITY
-      arc.forEach((point, index) => {
-        const distance = (point.lat - plane.lat) ** 2 + (point.lon - plane.lon) ** 2
-        if (distance < best) {
-          best = distance
-          splitIndex = index
-        }
-      })
-    }
-
     const path = (points: Point[]) => points.map((point, index) => {
       const screen = toScreen(point)
       return `${index === 0 ? 'M' : 'L'}${screen.x.toFixed(1)} ${screen.y.toFixed(1)}`
     }).join(' ')
 
-    // With no live position and no progress there is nothing to place: drawing the glyph on the
-    // origin anyway would claim the aircraft is sitting there, which is not something we know.
-    const marker = plane ?? (progress > 0 ? arc[splitIndex] : null)
-    const heading = position?.trackDeg ?? bearingBetween(
-      arc[Math.max(0, splitIndex - 1)],
-      arc[Math.min(arc.length - 1, splitIndex + 1)],
-    )
+    // The last two points of whatever was actually drawn -- real track when there is one -- read
+    // the heading better than the idealised plan would once a flight has deviated from it at all.
+    const heading = position?.trackDeg ?? (flown.length >= 2
+      ? bearingBetween(flown[flown.length - 2], flown[flown.length - 1])
+      : bearingBetween(plan[0], plan[plan.length - 1]))
 
     return {
       tiles,
-      flown: path([...arc.slice(0, splitIndex + 1), ...(plane ? [plane] : [])]),
-      remaining: path([...(plane ? [plane] : []), ...arc.slice(splitIndex)]),
-      start: toScreen(arc[0]),
-      end: toScreen(arc[arc.length - 1]),
-      aircraft: marker ? toScreen(marker) : null,
+      plan: path(plan),
+      flown: path(flown),
+      remaining: path(remaining),
+      start: toScreen(plan[0]),
+      end: toScreen(plan[plan.length - 1]),
+      aircraft: current ? toScreen(current) : null,
       heading,
-      isLive: Boolean(plane),
+      isLive: line.isLive,
     }
-  }, [from, to, position, progress, size.width, size.height])
+  }, [from, to, position, flownPath, progress, size.width, size.height])
 
   const unplaced = !isPlaced(from) || !isPlaced(to)
 
@@ -179,7 +183,13 @@ export function RouteMap({ from, to, position, progress = 0, callsign, caption }
           role="img"
           aria-label={`Route from ${from.code ?? 'origin'} to ${to.code ?? 'destination'}${callsign ? ` for ${callsign}` : ''}`}
         >
+          {/* The great circle route: the idealised origin-to-destination path, drawn full length
+              regardless of anything flown, so a real deviation from it is visible as a deviation. */}
+          <path className="route-plan" d={geometry.plan} />
+          {/* The plan again, but from wherever the flight actually is now: the great circle it
+              would fly the rest of the way if it flew a great circle from here. */}
           <path className="route-remaining" d={geometry.remaining} />
+          {/* The real flown track since departure, ADS-B position report by ADS-B position report. */}
           <path className="route-flown" d={geometry.flown} />
 
           <g className="route-end route-end-origin" transform={`translate(${geometry.start.x} ${geometry.start.y})`}>

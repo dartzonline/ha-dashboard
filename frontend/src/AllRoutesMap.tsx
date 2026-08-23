@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { greatCircle, project, unwrap } from './routeGeometry'
+import { buildFlightLine, project, unwrap } from './routeGeometry'
 import type { Point } from './routeGeometry'
 import './AllRoutesMap.css'
 
@@ -9,6 +9,8 @@ export interface MapRoute {
   from: { code: string | null; lat: number | null; lon: number | null }
   to: { code: string | null; lat: number | null; lon: number | null }
   position?: { lat: number; lon: number; trackDeg?: number | null } | null
+  /** Real historical positions since departure, earliest first -- the actual flown track. */
+  flownPath?: Point[] | null
   progress?: number
   isLanded?: boolean
 }
@@ -49,15 +51,23 @@ function isPlaced(point: { lat: number | null; lon: number | null }): point is {
 }
 
 /**
- * Shifts an already-unwrapped arc by whole turns so it sits nearest `reference`.
+ * Re-seats an already-unwrapped line by whole turns so it sits nearest `reference`.
  *
- * Each arc is unwrapped against its own origin to stay continuous across the date line, which can
- * leave two arcs a full turn apart in projected space — a Singapore route and a Barcelona route
- * would then be drawn on opposite sides of a world that has to hold both. Re-seating each arc
- * against one shared reference puts them all in the same copy of the world.
+ * Each route is unwrapped against its own origin to stay continuous across the date line, which
+ * can leave two routes a full turn apart in projected space — a Singapore route and a Barcelona
+ * route would then be drawn on opposite sides of a world that has to hold both. Re-seating each
+ * route against one shared reference puts them all in the same copy of the world.
+ *
+ * Split into two steps so one route's plan/flown/remaining lines -- three separately-unwrapped
+ * chains that are only mutually consistent with each other, not yet with any other route -- can
+ * all be shifted by the *same* turn count rather than each drifting to its own nearest turn and
+ * coming apart from one another.
  */
-function align(points: Point[], reference: number): Point[] {
-  const turns = Math.round((reference - points[0].lon) / 360)
+function turnsToAlign(lon: number, reference: number): number {
+  return Math.round((reference - lon) / 360)
+}
+
+function shiftLongitude(points: Point[], turns: number): Point[] {
   return turns === 0 ? points : points.map((point) => ({ lat: point.lat, lon: point.lon + turns * 360 }))
 }
 
@@ -81,19 +91,37 @@ export function AllRoutesMap({ routes }: { routes: MapRoute[] }) {
 
     const reference = drawable[0].from.lon as number
     const arcs = drawable.map((route) => {
-      const raw = greatCircle(
-        { lat: route.from.lat as number, lon: route.from.lon as number },
-        { lat: route.to.lat as number, lon: route.to.lon as number },
-        ARC_SAMPLES,
-      )
-      const arc = align(unwrap(raw, route.from.lon as number), reference)
-      const plane = route.position
-        ? align(unwrap([{ lat: route.position.lat, lon: route.position.lon }], arc[0].lon), reference)[0]
-        : null
-      return { route, arc, plane }
+      const origin = { lat: route.from.lat as number, lon: route.from.lon as number }
+      const destination = { lat: route.to.lat as number, lon: route.to.lon as number }
+      const line = buildFlightLine({
+        origin,
+        destination,
+        flownPoints: route.flownPath,
+        livePosition: route.position ? { lat: route.position.lat, lon: route.position.lon } : null,
+        progress: route.progress,
+        samples: ARC_SAMPLES,
+      })
+
+      // unwrap() chains each of these off wherever the previous one ended, so they stay one
+      // continuous ribbon; the single turnsToAlign()/shiftLongitude() pair afterward re-seats all
+      // three together against the other routes' shared reference, rather than each drifting to
+      // its own nearest turn and coming apart from one another.
+      const plan = unwrap(line.plan, origin.lon)
+      const flown = unwrap(line.flown, origin.lon)
+      const remaining = unwrap(line.remaining, flown.length > 0 ? flown[flown.length - 1].lon : origin.lon)
+      const turns = turnsToAlign(plan[0].lon, reference)
+
+      return {
+        route,
+        plan: shiftLongitude(plan, turns),
+        flown: shiftLongitude(flown, turns),
+        remaining: shiftLongitude(remaining, turns),
+        current: flown.length > 0 ? shiftLongitude([flown[flown.length - 1]], turns)[0] : null,
+        isLive: line.isLive,
+      }
     })
 
-    const world = arcs.flatMap(({ arc, plane }) => (plane ? [...arc, plane] : arc))
+    const world = arcs.flatMap(({ plan, flown, remaining }) => [...plan, ...flown, ...remaining])
 
     let zoom = MIN_ZOOM
     for (let candidate = MAX_ZOOM; candidate >= MIN_ZOOM; candidate -= 1) {
@@ -131,43 +159,31 @@ export function AllRoutesMap({ routes }: { routes: MapRoute[] }) {
       }
     }
 
-    const lines = arcs.map(({ route, arc, plane }, order) => {
-      let splitIndex = Math.round(Math.max(0, Math.min(1, route.progress ?? 0)) * (arc.length - 1))
-      if (plane) {
-        let best = Number.POSITIVE_INFINITY
-        arc.forEach((point, index) => {
-          const distance = (point.lat - plane.lat) ** 2 + (point.lon - plane.lon) ** 2
-          if (distance < best) {
-            best = distance
-            splitIndex = index
-          }
-        })
-      }
-
+    const lines = arcs.map(({ route, plan, flown, remaining, current, isLive }, order) => {
       const path = (points: Point[]) => points.map((point, index) => {
         const screen = toScreen(point)
         return `${index === 0 ? 'M' : 'L'}${screen.x.toFixed(1)} ${screen.y.toFixed(1)}`
       }).join(' ')
 
-      const marker = plane ?? ((route.progress ?? 0) > 0 ? arc[splitIndex] : null)
       // The label rides the aircraft when there is one, so the number sits on the part of the path
-      // that is actually moving; the arc's midpoint is the fallback for a flight not yet flying.
-      const anchor = marker ?? arc[Math.floor(arc.length / 2)]
+      // that is actually moving; the plan's midpoint is the fallback for a flight not yet flying.
+      const anchor = current ?? plan[Math.floor(plan.length / 2)]
 
       return {
         key: route.key,
         callsign: route.callsign,
         order,
         isLanded: Boolean(route.isLanded),
-        flown: path([...arc.slice(0, splitIndex + 1), ...(plane ? [plane] : [])]),
-        remaining: path([...(plane ? [plane] : []), ...arc.slice(splitIndex)]),
-        start: toScreen(arc[0]),
-        end: toScreen(arc[arc.length - 1]),
+        plan: path(plan),
+        flown: path(flown),
+        remaining: path(remaining),
+        start: toScreen(plan[0]),
+        end: toScreen(plan[plan.length - 1]),
         fromCode: route.from.code,
         toCode: route.to.code,
-        aircraft: marker ? toScreen(marker) : null,
+        aircraft: current ? toScreen(current) : null,
         label: toScreen(anchor),
-        isLive: Boolean(plane),
+        isLive,
       }
     })
 
