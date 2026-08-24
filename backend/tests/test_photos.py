@@ -35,6 +35,22 @@ def make_image(width=64, height=48, mode="RGB", fmt="JPEG", colour=(200, 80, 40)
     return buffer.getvalue()
 
 
+def gradient_jpeg(width: int, height: int, quality: int) -> bytes:
+    """A photograph-like image: smooth gradients, which is what real photos mostly are.
+
+    A flat colour would compress to almost nothing at any size and quality, making size assertions
+    pass without proving anything.
+    """
+    image = Image.new("RGB", (width, height))
+    image.putdata([
+        ((x * 255) // width, (y * 255) // height, ((x + y) * 255) // (width + height))
+        for y in range(height) for x in range(width)
+    ])
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=quality)
+    return buffer.getvalue()
+
+
 TINY_GIF = make_image(fmt="GIF", mode="P")
 SMALL_JPEG = make_image()
 
@@ -145,6 +161,29 @@ class TestProcessImage:
 
         display, _, _ = photos.process_image(raw)
         assert len(display) < len(raw)
+
+    def test_an_already_compressed_photo_is_not_stored_larger_than_it_arrived(self):
+        """The failure this guards: a photo that arrives already heavily compressed costs *more* to
+        re-encode at the default quality than it did to store originally, so "compress on the way
+        in" would quietly inflate the library. Quality steps down until it fits the incoming size.
+
+        This is deliberately a realistic photograph (smooth gradients) rather than dense noise --
+        noise saved below any quality worth keeping cannot be beaten without going below the
+        source's own quality, and `QUALITY_LADDER` explains why that case is left alone.
+        """
+        raw = gradient_jpeg(1200, 900, quality=30)
+        display, _, _ = photos.process_image(raw)
+        assert len(display) <= len(raw)
+
+    def test_the_quality_ladder_only_steps_down_as_far_as_it_needs_to(self):
+        """A generously-sized upload must not be squeezed harder than the default just because the
+        ladder exists -- it only engages when the first attempt overshoots the incoming size."""
+        roomy = gradient_jpeg(1200, 900, quality=95)
+        display, _, _ = photos.process_image(roomy)
+        expected_at_default = len(photos._encode_at(
+            Image.open(io.BytesIO(roomy)).convert("RGB"), photos.DISPLAY_QUALITY,
+        ))
+        assert len(display) == expected_at_default
 
     def test_a_thumbnail_is_produced_and_is_smaller_than_the_display_copy(self):
         display, thumbnail, _ = photos.process_image(make_image(width=4000, height=3000))

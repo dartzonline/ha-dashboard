@@ -1,0 +1,60 @@
+/* A photo behind a quiet page. Every rule here exists to keep the dashboard readable on top of an
+   image whose brightness and colour are unknown -- a beach shot and a night shot have to end up at
+   roughly the same perceived darkness, or tile text stops being legible on one of them. */
+.photo-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.photo-backdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  animation: photo-backdrop-in 1.2s ease-out;
+}
+
+/* The scrim, not the image opacity, does most of the darkening: laying a near-opaque dark layer
+   over a full-strength photo keeps the highlights and colour that make it recognisable, where
+   simply fading the image toward the canvas colour turns it into flat grey mush. */
+.photo-backdrop-scrim { position: absolute; inset: 0; }
+
+@keyframes photo-backdrop-in {
+  from { opacity: 0; transform: scale(1.04); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- dim: the quietest. Blurred and heavily darkened -- reads as texture, not as a picture. ---- */
+.style-dim img { filter: blur(3px) saturate(.85) brightness(.55); transform: scale(1.03); }
+.style-dim .photo-backdrop-scrim { background: color-mix(in srgb, var(--canvas) 78%, transparent); }
+
+/* ---- cinematic: the photo stays sharp and recognisable, with a heavy vignette and a stronger
+   scrim toward the top-left where the header and the first tiles sit. ---- */
+.style-cinematic img { filter: saturate(.9) brightness(.62); }
+.style-cinematic .photo-backdrop-scrim {
+  background:
+    linear-gradient(105deg,
+      color-mix(in srgb, var(--canvas) 92%, transparent) 0%,
+      color-mix(in srgb, var(--canvas) 78%, transparent) 45%,
+      color-mix(in srgb, var(--canvas) 62%, transparent) 100%),
+    radial-gradient(120% 90% at 70% 40%, transparent 30%, color-mix(in srgb, var(--canvas) 70%, transparent) 100%);
+}
+
+/* ---- duotone: desaturated and pulled toward the dashboard's own accent, so it reads as a designed
+   surface rather than as somebody's holiday photo behind the thermostat. ---- */
+.style-duotone img { filter: grayscale(1) contrast(1.1) brightness(.5); }
+.style-duotone .photo-backdrop-scrim {
+  background:
+    linear-gradient(140deg,
+      color-mix(in srgb, var(--accent) 26%, transparent) 0%,
+      transparent 55%),
+    color-mix(in srgb, var(--canvas) 74%, transparent);
+}
+
+/* The photo is decoration; it must never animate under someone who asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .photo-backdrop img { animation: none; }
+}

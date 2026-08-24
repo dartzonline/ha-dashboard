@@ -181,21 +181,52 @@ def reorder_photos(ordered_ids: list[str]) -> list[dict[str, Any]]:
     return list_photos()
 
 
-def _encode(image: Image.Image, box: tuple[int, int], quality: int) -> tuple[bytes, int, int]:
+# Tried in order when the first encode comes out bigger than the file that was uploaded. An image
+# that arrived already heavily compressed can cost *more* to re-encode at the default quality than
+# it did to store originally, which would make "compress on the way in" quietly inflate a library.
+#
+# This gets the common case right rather than promising the impossible: a normal photograph that
+# arrived over-compressed lands within budget one or two rungs down. A pathological one (dense
+# high-frequency noise, saved at a quality below anything worth keeping) cannot be beaten without
+# going below the source's own quality, so the floor wins and the file grows slightly -- which is
+# the right trade against visibly degrading every real photo to cover that case.
+QUALITY_LADDER = (88, 80, 72, 65)
+
+
+def _encode_at(image: Image.Image, quality: int) -> bytes:
+    buffer = io.BytesIO()
+    # optimize + progressive are free at display time and meaningfully smaller on disk; no EXIF is
+    # passed through, so the GPS coordinates a phone attaches never reach the panel.
+    image.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
+    return buffer.getvalue()
+
+
+def _encode(image: Image.Image, box: tuple[int, int], quality: int, budget: int | None = None) -> tuple[bytes, int, int]:
     """Fit `image` inside `box` and encode it as JPEG. Returns (bytes, width, height).
 
     Only ever shrinks: `ImageOps.contain` scales in both directions, so it is guarded here rather
     than called unconditionally. Enlarging a photo that is already smaller than the panel would add
     bytes and blur to a picture without adding any detail to it.
+
+    `budget` is the size this must not exceed -- the original upload's size. When the first attempt
+    misses it, quality steps down until it fits or the ladder runs out, and the smallest attempt
+    wins. Re-encoding still happens either way, because it is what bakes in the rotation and drops
+    the metadata; this only decides how hard it compresses while doing so.
     """
     fitted = image
     if image.width > box[0] or image.height > box[1]:
         fitted = ImageOps.contain(image, box, Image.LANCZOS)
-    buffer = io.BytesIO()
-    # optimize + progressive are free at display time and meaningfully smaller on disk; no EXIF is
-    # passed through, so the GPS coordinates a phone attaches never reach the panel.
-    fitted.save(buffer, format="JPEG", quality=quality, optimize=True, progressive=True)
-    return buffer.getvalue(), fitted.width, fitted.height
+
+    best = _encode_at(fitted, quality)
+    if budget is not None and len(best) > budget:
+        for lower in (step for step in QUALITY_LADDER if step < quality):
+            candidate = _encode_at(fitted, lower)
+            if len(candidate) < len(best):
+                best = candidate
+            if len(best) <= budget:
+                break
+
+    return best, fitted.width, fitted.height
 
 
 def process_image(data: bytes) -> tuple[bytes, bytes, dict[str, Any]]:
@@ -221,7 +252,11 @@ def process_image(data: bytes) -> tuple[bytes, bytes, dict[str, Any]]:
                 upright = upright.convert("RGB")
 
             original_width, original_height = upright.size
-            display, width, height = _encode(upright, (DISPLAY_MAX_WIDTH, DISPLAY_MAX_HEIGHT), DISPLAY_QUALITY)
+            display, width, height = _encode(
+                upright, (DISPLAY_MAX_WIDTH, DISPLAY_MAX_HEIGHT), DISPLAY_QUALITY, budget=len(data),
+            )
+            # No budget on the thumbnail: it is a fraction of the size of anything it comes from,
+            # so it can never be the thing that inflates a library.
             thumbnail, _, _ = _encode(upright, (THUMBNAIL_MAX, THUMBNAIL_MAX), THUMBNAIL_QUALITY)
     except (UnidentifiedImageError, OSError, ValueError) as error:
         raise ValueError("That file could not be read as an image") from error
