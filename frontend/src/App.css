@@ -28,7 +28,9 @@
 .state-alert.critical { --tone: var(--danger); --tone-ink: var(--danger-ink); --tone-bg: var(--danger-soft); }
 .state-alert.success { --tone: var(--good); --tone-ink: var(--good-ink); --tone-bg: var(--good-soft); }
 .state-alert.info { --tone: var(--accent); --tone-ink: var(--accent-ink); --tone-bg: var(--accent-soft); }
-.sidebar { position: sticky; top: 0; height: 100svh; padding: 18px 12px; border-right: 1px solid var(--border); background: var(--rail); display: flex; flex-direction: column; }
+/* z-index, because the photo backdrop inside main is a fixed element that would otherwise paint
+   over the sidebar: both are positioned, and main comes later in the DOM. */
+.sidebar { position: sticky; z-index: 2; top: 0; height: 100svh; padding: 18px 12px; border-right: 1px solid var(--border); background: var(--rail); display: flex; flex-direction: column; }
 .command-center.immersive-mode { grid-template-columns: 0 minmax(0, 1fr); }
 .command-center.immersive-mode .sidebar { display: none; }
 .brand { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 10px; color: var(--rail-active); font-weight: 700; font-size: .95rem; }
@@ -39,7 +41,9 @@ nav button:hover, nav button.active { background: rgba(255, 255, 255, .06); colo
 nav button.active { font-weight: 800; }
 .settings-button { margin-top: auto; }
 .settings-button:hover { background: rgba(255, 255, 255, .06); color: var(--rail-active); }
-main { width: min(100%, 1440px); min-width: 0; margin: 0 auto; padding: 24px clamp(22px, 4vw, 58px) 56px; }
+main { position: relative; width: min(100%, 1440px); min-width: 0; margin: 0 auto; padding: 24px clamp(22px, 4vw, 58px) 56px; }
+/* Everything in main sits above the photo backdrop, which is z-index 0 inside this same context. */
+main > *:not(.photo-backdrop) { position: relative; z-index: 1; }
 main.is-fixed-view { width: 100%; max-width: none; padding: 0; }
 main.is-fixed-view .topbar { position: absolute; top: 0; left: 0; right: 0; padding: 12px clamp(16px, 4vw, 32px); background: linear-gradient(to bottom, rgba(8, 8, 10, .95), transparent); z-index: 10; border: 0; }
 main.is-fixed-view .moments-strip { display: none; }

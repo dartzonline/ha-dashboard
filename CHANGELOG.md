@@ -3,6 +3,36 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.11.0 - 2026-08-23
+
+**Photos now appear behind the dashboard**, on the five pages quiet enough to carry one: Climate,
+Security, Appliances, Lights and Scenes. These are the plain tile-grid pages — a handful of cards on
+an otherwise empty canvas, so there is real space for a picture to be seen in. Everything else is
+deliberately left alone: Insights, Energy, Network, Health, Maintenance and Volvo are wall-to-wall
+charts; World, Flights and Weather are full-bleed maps and atmospheres that already fill the screen
+with their own imagery; Home carries the moments strip and utility rail on top of its tiles; and the
+Photos library page would have a backdrop competing with the thumbnails it exists to show.
+
+One picture per page, and a different one on each — the nth page in the list takes the nth photo in
+the library, so a page keeps its own picture rather than every page showing the same one. The
+assignment is stable, so a page does not flicker through pictures as the panel rotates, and it
+re-reads the library only every fifteen minutes.
+
+The treatment is **cinematic**: the photo stays sharp and recognisable, darkened to 62% with a
+diagonal scrim that is heaviest at the top-left where the header and the first tiles sit, plus a
+vignette. The darkening is done by a scrim over a full-strength photo rather than by fading the
+photo itself, which would turn it into flat grey mush and lose the colour that makes it worth
+showing. Two alternative treatments are built and one word apart in `PhotoBackdrop.tsx` — `dim`
+(blurred and much darker, reads as texture rather than a picture) and `duotone` (greyscale, tinted
+toward the dashboard accent). The backdrop is decoration only: `aria-hidden`, no pointer events, and
+it disappears entirely when the library is empty, so a panel with no photos looks exactly as before.
+
+Also fixed, found while testing this with real photographs: processing could make a file **bigger**.
+An image that arrives already heavily compressed costs more to re-encode at the default quality than
+it did to store originally — five real sample photos all grew by 15–25%. Quality now steps down a
+ladder until the stored copy fits within the size that arrived, which turned those same five into
+8–12% *savings*.
+
 ## 1.10.0 - 2026-08-23
 
 **A Photos page**, for building a personal picture library on the panel. Add pictures from the

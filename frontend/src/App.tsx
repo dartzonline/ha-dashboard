@@ -19,6 +19,7 @@ import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
+import { PhotoBackdrop, usePhotoLibrary } from './PhotoBackdrop'
 import { PresenceRow } from './PresenceRow'
 import { SecurityPanel } from './SecurityPanel'
 import { Sparkline } from './Sparkline'
@@ -545,6 +546,7 @@ function EntityDetails({ config, entity, onService, onClose }: { config: TileCon
 
 function App() {
   const [activeSection, setActiveSection] = useState('home')
+  const photoIds = usePhotoLibrary()
   const [now, setNow] = useState(new Date())
   const [expandedTile, setExpandedTile] = useState<TileConfig | null>(null)
   const [alerts, setAlerts] = useState<StateAlert[]>([])
@@ -789,6 +791,8 @@ function App() {
       <main className={`${activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''}${activeSection === 'insights' ? 'is-tall-view' : ''}`.trim()} onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onPointerDownCapture={(event) => {
         if (!(event.target as Element).closest('.rotation-status')) stopRotation()
       }}>
+        {/* Behind everything in main, on the few pages quiet enough to carry one. */}
+        <PhotoBackdrop sectionId={activeSection} photoIds={photoIds} />
         <header className="topbar">
           <div className="page-title">
             <button
