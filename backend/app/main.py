@@ -21,6 +21,7 @@ from .event_bridge import EventBridge
 from .flights import close_http_client, get_http_client
 from .flights import router as flights_router
 from .ha_client import HomeAssistantClient
+from .photos import router as photos_router
 
 settings = load_settings()
 bridge = EventBridge(settings)
@@ -70,6 +71,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(flights_router)
+app.include_router(photos_router)
 
 
 def get_client() -> HomeAssistantClient:

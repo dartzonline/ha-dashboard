@@ -66,7 +66,12 @@ main.is-tall-view .moments-strip, main.is-tall-view .utility-stack { display: no
 .date, .section-heading span { margin: 0; color: var(--muted); font-size: .74rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 h1 { margin: 4px 0 0; font-size: 1.75rem; line-height: 1.1; font-weight: 700; }
 .clock-block { justify-self: end; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
-.clock-block > strong { min-width: 0; color: var(--text); font-size: 2.15rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+/* A real <button>, not styled text: it opens World time, the same way the flight banner already
+   opens Flights. Reset once here; every other .clock-time rule only ever adjusts size/weight. */
+.clock-time { border: 0; background: transparent; font: inherit; color: inherit; padding: 0; cursor: pointer; border-radius: 6px; }
+.clock-time:hover, .clock-time:focus-visible { color: var(--accent); }
+.clock-time:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.clock-block > .clock-time { min-width: 0; color: var(--text); font-size: 2.15rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .clock-block span { min-width: 84px; height: 30px; padding: 0 10px; border-radius: 15px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .7rem; font-weight: 800; text-transform: uppercase; }
 .rotation-status { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--surface); display: flex; align-items: center; gap: 6px; font: inherit; cursor: pointer; }
 /* The label swings between "20s", "2/5" and "Paused", and the header's centre column is measured
@@ -177,7 +182,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   nav button, .settings-button { min-height: 51px; padding: 0 12px; gap: 12px; }
   main { padding: 14px 28px 24px; }
   .topbar { min-height: 76px; }
-  .clock-block > strong { min-width: 148px; font-size: 2.45rem; }
+  .clock-block > .clock-time { min-width: 148px; font-size: 2.45rem; }
   .overview { padding-top: 18px; }
   .section-heading { margin-bottom: 12px; }
   .entity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
@@ -205,7 +210,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .date { font-size: .63rem; }
   h1 { font-size: 1.3rem; }
   .clock-block { gap: 7px; }
-  .clock-block strong { font-size: .95rem; }
+  .clock-block .clock-time { font-size: .95rem; }
   .clock-block span { min-width: 24px; width: 24px; height: 24px; padding: 0; font-size: 0; }
   .rotation-status { width: 28px; height: 28px; padding: 0; justify-content: center; }
   .rotation-status span { display: none; }
@@ -256,7 +261,7 @@ main { max-width: 1600px; padding: 20px clamp(18px, 3vw, 44px) 48px; }
 .topbar { min-height: 74px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .date, .section-heading span { color: var(--muted); font-size: .66rem; font-weight: 600; letter-spacing: .1em; }
 h1 { font-size: 1.62rem; font-weight: 700; letter-spacing: -.025em; }
-.clock-block > strong { font: 750 1.9rem var(--mono); letter-spacing: -.06em; }
+.clock-block > .clock-time { font: 750 1.9rem var(--mono); letter-spacing: -.06em; }
 .clock-block span, .rotation-status { border-radius: 8px; }
 .rotation-status { border-color: var(--border); background: var(--surface); }
 .rotation-status.is-running { box-shadow: none; }
@@ -393,7 +398,7 @@ main.is-fixed-view { overflow: hidden; }
   .night-mode-moment { min-height: 60px; }
   .moment-copy strong { font-size: .8rem; }
   .moment-copy small { font-size: .68rem; }
-  .clock-block > strong { font-size: 2.1rem; }
+  .clock-block > .clock-time { font-size: 2.1rem; }
   .tile-heading h3 { font-size: .88rem; }
   .tile-heading p { font-size: .8rem; }
   .entity-tile { min-height: 138px; }
@@ -537,7 +542,7 @@ nav button.active {
     min-height: 54px;
   }
 
-  .clock-block > strong {
+  .clock-block > .clock-time {
     font-size: 1.85rem;
   }
 
@@ -655,7 +660,7 @@ nav button.active { background: color-mix(in srgb, var(--accent) 15%, transparen
 
   /* Header: the clock is the single largest thing on the panel. */
   h1 { font-size: 1.7rem; }
-  .clock-block > strong { min-width: 0; font-size: 2.3rem; }
+  .clock-block > .clock-time { min-width: 0; font-size: 2.3rem; }
   .clock-block span { height: 34px; font-size: .74rem; }
   .rotation-status { height: 34px; }
   .rotation-status span { font-size: .72rem; }

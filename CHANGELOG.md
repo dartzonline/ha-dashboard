@@ -3,6 +3,35 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.10.0 - 2026-08-23
+
+**A Photos page**, for building a personal picture library on the panel. Add pictures from the
+device you are holding (file picker or drag-and-drop, several at once) or by pasting a web address.
+Where these pictures get *displayed* is still an open question and deliberately not decided here —
+this release is the library and the management screen only, so the display choice can be made
+without rebuilding any of it. The page is excluded from the unattended page rotation, since a screen
+full of upload and delete controls is not something to leave a wall panel sitting on.
+
+**Every picture is processed on the way in** rather than stored as-uploaded. A phone photo is around
+4000px and several megabytes; the panel is 1080p-class and will never show more than a fraction of
+that. On add, each image is rotated upright per its EXIF orientation (a phone stores a portrait shot
+as landscape plus a "rotate me" tag, which an `<img>` ignores and shows sideways), scaled to fit the
+panel without ever being enlarged, re-encoded at a visually-lossless quality, and stripped of its
+metadata — which is also where the GPS coordinates live, and those have no business being served to
+a wall display. A real 3.7 MB, 4032×3024 phone photo comes out at 852 KB and 2048×1536: **78%
+smaller**, with nothing visible lost at arm's length.
+
+**A thumbnail is generated alongside** (~40 KB), so the manage screen shows the whole library at
+once without pulling down full-size images to draw small tiles. Each one has its own remove button
+and arrows to change the running order, and the tile says what the picture cost before and after
+processing.
+
+**Tapping the clock** in the top-right now opens World time, matching how the flight banner already
+opens Flights — a live value in the header goes to the page it summarises. Two utility-rail cells
+were pointed at more useful destinations while in there: Network now opens the Network page rather
+than the generic Insights connectivity slide (that page did not exist when the cell was written),
+and the tablet battery cell opens Health, which is where battery entities are actually listed.
+
 ## 1.9.0 - 2026-08-23
 
 **A pinned flight's progress bar and route map now actually move.** The bug: a flight's progress
