@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   Baby, Battery, BedDouble, Bot, BriefcaseBusiness, Car, ChartNoAxesCombined, CircleDot, CloudSun,
-  DoorOpen, Droplets, Filter, Gauge, Globe2, Home, Lamp, Lightbulb, Lock, Moon, Plane, Projector, Refrigerator,
+  DoorOpen, Droplets, Filter, Gauge, Globe2, Home, Image, Lamp, Lightbulb, Lock, Moon, Plane, Projector, Refrigerator,
   RotateCw, ScanLine, Shield, Stethoscope, Sparkles, Sprout, Thermometer, Tv, Warehouse, WashingMachine, Waves, Wifi, Wind, Wrench, Zap,
 } from 'lucide-react'
 
@@ -32,4 +32,5 @@ export const sectionIcons: Record<string, LucideIcon> = {
   appliances: WashingMachine,
   roborock: Bot,
   scenes: Sparkles,
+  photos: Image,
 }

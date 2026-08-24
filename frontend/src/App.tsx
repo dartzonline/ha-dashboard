@@ -40,6 +40,7 @@ const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ d
 const NetworkView = lazy(() => import('./NetworkView').then((module) => ({ default: module.NetworkView })))
 const HealthView = lazy(() => import('./HealthView').then((module) => ({ default: module.HealthView })))
 const MaintenanceView = lazy(() => import('./MaintenanceView').then((module) => ({ default: module.MaintenanceView })))
+const PhotosView = lazy(() => import('./PhotosView').then((module) => ({ default: module.PhotosView })))
 const RoborockView = lazy(() => import('./RoborockView').then((module) => ({ default: module.RoborockView })))
 
 /** The WAN sensor is a plain on/off, so its detail sheet gets the router's throughput story instead. */
@@ -126,8 +127,10 @@ interface StateAlert {
 /** How long an interaction holds the current page before rotation picks itself back up. */
 const AUTO_RESUME_MS = 90_000
 
-/** Sections the unattended rotation passes over. They stay reachable from the sidebar and by swipe. */
-const ROTATION_EXCLUDED_SECTIONS = new Set(['scenes'])
+/** Sections the unattended rotation passes over. They stay reachable from the sidebar and by swipe.
+ *  `photos` is the photo *library manager* -- upload buttons and delete controls are not something
+ *  to rotate an unattended wall panel onto; displaying the pictures themselves is separate. */
+const ROTATION_EXCLUDED_SECTIONS = new Set(['scenes', 'photos'])
 
 const discreteDomains = new Set(['light', 'switch', 'lock', 'cover', 'media_player', 'vacuum'])
 const alertingBinaryClasses = new Set(['door', 'garage_door', 'window', 'opening', 'moisture', 'smoke', 'gas', 'problem', 'safety'])
@@ -250,8 +253,12 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
     },
     { id: 'security', target: 'security', icon: Shield, title: securityIssues > 0 ? `${securityIssues} security alert${securityIssues === 1 ? '' : 's'}` : securityKnown ? 'Secure' : 'Security', detail: securityDetail, tone: securityIssues > 0 ? 'danger' : securityKnown ? 'good' : 'muted', inspect: true },
     { id: 'weather', target: 'weather', icon: CloudSun, title: outside ? `${displayState(outside)} · ${condition}` : condition, detail: weatherDetail || 'Waiting for weather', tone: 'weather' },
-    { id: 'network', target: 'insights', icon: Wifi, title: networkOnline ? 'WAN online' : networkEntity ? 'WAN offline' : 'Network', detail: downloadEntity ? `${displayState(downloadEntity)} down` : 'Checking connection', tone: networkOnline ? 'good' : networkEntity ? 'danger' : 'muted' },
-    { id: 'tablet', target: batteryEntity ? 'home' : 'roborock', icon: batteryEntity ? Battery : Bot, title: finalUtilityTitle, detail: finalUtilityDetail, tone: 'accent' },
+    // Its own Network page exists now; this used to point at the generic Insights connectivity
+    // slide because it was written before that page did.
+    { id: 'network', target: 'network', icon: Wifi, title: networkOnline ? 'WAN online' : networkEntity ? 'WAN offline' : 'Network', detail: downloadEntity ? `${displayState(downloadEntity)} down` : 'Checking connection', tone: networkOnline ? 'good' : networkEntity ? 'danger' : 'muted' },
+    // Battery reading -> Health, which is where every battery-class entity (this one included) is
+    // actually listed; 'home' has nothing tablet-specific to land on.
+    { id: 'tablet', target: batteryEntity ? 'health' : 'roborock', icon: batteryEntity ? Battery : Bot, title: finalUtilityTitle, detail: finalUtilityDetail, tone: 'accent' },
   ]
 
   return (
@@ -797,7 +804,17 @@ function App() {
           </div>
           <TrackedAircraftBadge entities={entities} onOpenFlights={openFlightsSlide} />
           <div className="clock-block">
-            <strong>{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong>
+            {/* Mirrors the flight banner: a live value in the header that opens the page it
+                summarises. The clock is the local time; World time is every other one. */}
+            <button
+              type="button"
+              className="clock-time"
+              onClick={() => selectSection('world')}
+              title="Open World time"
+              aria-label={`${now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} — open World time`}
+            >
+              {now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </button>
             <ConnectionStatus health={health} entities={entities} onOpen={stopRotation} />
             {/* Tucked into the far corner so the header's centre belongs to the flight. */}
             <div className="topbar-utilities">
@@ -859,6 +876,10 @@ function App() {
         ) : activeSection === 'maintenance' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Checking maintenance</span></div>}>
             <MaintenanceView onExpand={(tile) => { stopRotation(); setExpandedTile(tile) }} onService={callService} />
+          </Suspense>
+        ) : activeSection === 'photos' ? (
+          <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Loading photos</span></div>}>
+            <PhotosView />
           </Suspense>
         ) : activeSection === 'network' ? (
           <Suspense fallback={<div className="view-loading"><ChartNoAxesCombined size={24} /><span>Preparing network</span></div>}>
