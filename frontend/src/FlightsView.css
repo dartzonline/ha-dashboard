@@ -1,68 +1,73 @@
 /* Flights fills the available viewport height and never scrolls: radar + list, or the tracker card.
    The topbar floats over this view, so the panel starts below it rather than under it. */
-.flights-view { position: relative; height: 100svh; width: 100%; min-height: 0; padding: 66px clamp(12px, 2vw, 24px) 10px; margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; overflow: hidden; }
-
-main.is-fixed-view .flights-view {
+.flights-view {
+  position: relative;
+  flex: 1 1 auto;
   height: 100svh;
   width: 100%;
+  min-height: 0;
   margin: 0;
+  padding: 66px clamp(12px, 2vw, 24px) 10px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  overflow: hidden;
 }
 
 /* Floating quick-add: a FAB on the Radar page that expands in place into a flight-number field,
-   so tracking a flight doesn't require switching to the Track page first. */
-.flights-quick-add { position: absolute; right: 14px; bottom: 46px; z-index: 5; }
+   so tracking a flight doesn't require switching to the Track page first. It sits above the pager
+   row, which is why its offset tracks the pager's height. */
+.flights-quick-add { position: absolute; right: 18px; bottom: 70px; z-index: 5; }
 .quick-add-fab {
-  width: 46px; height: 46px; padding: 0; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
-  border-radius: 50%; color: var(--accent-ink); background: var(--accent);
-  display: grid; place-items: center; cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .42);
-  transition: transform .16s ease, box-shadow .16s ease;
+  width: 52px; height: 52px; padding: 0;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  color: var(--accent-ink); background-color: var(--accent);
+  display: grid; place-items: center;
 }
-.quick-add-fab:hover, .quick-add-fab:active { transform: scale(1.06); }
+.quick-add-fab:hover { background-color: var(--accent-strong); }
 .quick-add-form {
-  display: flex; align-items: center; gap: 6px; height: 46px; width: min(78vw, 300px);
-  padding: 0 8px 0 14px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 26px;
-  color: var(--muted); background: color-mix(in srgb, var(--surface) 92%, var(--canvas));
-  backdrop-filter: blur(10px); box-shadow: 0 10px 26px rgba(0, 0, 0, .42);
-  animation: quick-add-expand .18s ease-out;
+  display: flex; align-items: center; gap: 6px; height: 56px; width: min(78vw, 340px);
+  padding: 0 6px 0 16px;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  background-color: var(--glass-bg-strong);
+  color: var(--muted);
+  animation: quick-add-expand .18s var(--ease);
 }
 .quick-add-form input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--text); font: 750 .82rem var(--mono); letter-spacing: .03em; }
 .quick-add-form input::placeholder { color: var(--muted); font-weight: 500; }
 .quick-add-form input:focus { outline: none; }
-.quick-add-confirm, .quick-add-close { flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+.quick-add-confirm, .quick-add-close { flex: 0 0 auto; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; }
 .quick-add-confirm { color: var(--accent-ink); background: var(--accent); }
-.quick-add-confirm:disabled { opacity: .4; cursor: default; }
 .quick-add-close { color: var(--muted); background: var(--surface-raised); }
 @keyframes quick-add-expand { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
-@media (max-width: 1040px) { .flights-quick-add { right: 10px; bottom: 44px; } }
+@media (max-width: 1040px) { .flights-quick-add { right: 12px; } }
 
+/* The one pane on the page: radar and list, or the tracker. */
 .flights-panel-shell {
+  flex: 1 1 auto;
   min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: none;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 
-.flights-panel { height: 100%; min-height: 0; padding: 10px; }
+.flights-panel { height: 100%; min-height: 0; padding: 14px 16px; }
 
 /* ---------- Radar slide ---------- */
 /* One explicit full-height row: without it the columns sized to their content and the scope's
    height: 100% had nothing to resolve against, which shrank the radar to a coin. */
-.radar-panel { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(0, 1.18fr); grid-template-rows: minmax(0, 1fr); gap: 12px; }
+.radar-panel { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(0, 1.18fr); grid-template-rows: minmax(0, 1fr); gap: 14px; }
 
 /* No align-content here: centring collapsed the 1fr row to content height, which left the
    scope's height: 100% resolving against nothing and shrank the radar to a coin. */
 .radar-column { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; gap: 8px; }
 
-.radar-scope { position: relative; height: 100%; max-height: 460px; width: auto; max-width: 100%; aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 50%; overflow: hidden; }
+.radar-scope { position: relative; height: 100%; max-height: 460px; width: auto; max-width: 100%; aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 50%; overflow: hidden; box-shadow: var(--glass-edge), 0 0 0 1px var(--glass-border); }
 
 .radar-map { position: absolute; inset: 0; display: grid; }
 .radar-map img { width: 100%; height: 100%; object-fit: cover; display: block; filter: brightness(2.2) contrast(1.2) saturate(.5); }
 /* The tile stays neutral now — the accent is spent on the aircraft, not on tinting the basemap. */
 .radar-map::before { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 10%, transparent); mix-blend-mode: color; }
-.radar-map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, transparent 58%, rgba(8, 8, 10, .5) 100%); }
+.radar-map::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle, transparent 58%, color-mix(in srgb, var(--canvas) 50%, transparent) 100%); }
 
 .radar-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
@@ -70,21 +75,24 @@ main.is-fixed-view .flights-view {
 
 .radar-tick { stroke: color-mix(in srgb, var(--text) 34%, transparent); stroke-width: 1.2; }
 
-.radar-compass-label { fill: var(--text); font-family: var(--sans); font-size: 9px; font-weight: 800; letter-spacing: .04em; paint-order: stroke; stroke: rgba(8, 8, 10, .8); stroke-width: 3px; stroke-linejoin: round; }
+/* SVG text in a 220-unit viewBox, so this size is in viewBox units and scales with the scope; rem
+   keeps it following the root type scale like every other label on the page. */
+.radar-compass-label { fill: var(--text); font-family: var(--sans); font-size: .42rem; font-weight: 800; letter-spacing: .04em; paint-order: stroke; stroke: color-mix(in srgb, var(--canvas) 80%, transparent); stroke-width: 3px; stroke-linejoin: round; }
 
 .radar-home-glow { fill: color-mix(in srgb, var(--accent) 24%, transparent); }
 
 .radar-home { fill: var(--accent-strong); }
 
-.radar-blip { cursor: pointer; transition: transform .3s ease; }
+/* Flight phase is a category, not a verdict, so the blips take series hues rather than the
+   good/warn status tints; the list's phase chip carries the same hue beside the word. */
+.radar-blip { cursor: pointer; }
 .radar-blip-halo { fill: transparent; }
-.radar-blip-glyph { stroke: rgba(8, 8, 10, .6); stroke-width: .6; transition: filter .16s ease; }
-.radar-blip.tone-climb .radar-blip-glyph { fill: var(--good); }
-.radar-blip.tone-descend .radar-blip-glyph { fill: var(--warn); }
-.radar-blip.tone-cruise .radar-blip-glyph { fill: var(--accent); }
+.radar-blip-glyph { stroke: color-mix(in srgb, var(--canvas) 60%, transparent); stroke-width: .6; }
+.radar-blip.tone-climb .radar-blip-glyph { fill: var(--chart-3); }
+.radar-blip.tone-descend .radar-blip-glyph { fill: var(--chart-4); }
+.radar-blip.tone-cruise .radar-blip-glyph { fill: var(--chart-1); }
 .radar-blip.tone-ground .radar-blip-glyph { fill: var(--muted); }
 .radar-blip.is-active .radar-blip-halo { fill: color-mix(in srgb, var(--accent-strong) 26%, transparent); }
-.radar-blip.is-active .radar-blip-glyph { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .6)); }
 .radar-blip:focus-visible { outline: none; }
 .radar-blip:focus-visible .radar-blip-halo { fill: color-mix(in srgb, var(--accent-strong) 30%, transparent); }
 
@@ -104,96 +112,106 @@ main.is-fixed-view .flights-view {
 
 @keyframes radar-sweep-spin { to { transform: rotate(360deg); } }
 
-.radar-meta { margin: 0; color: var(--muted); font-size: .68rem; text-align: center; }
+.radar-meta { margin: 0; color: var(--muted); font-size: .74rem; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 
-.flights-list-column { min-height: 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: 6px; }
+.flights-list-column { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
 
-.flights-list-heading { display: flex; align-items: center; gap: 9px; }
-.flights-list-heading > span { flex: 0 0 30px; height: 30px; border-radius: 9px; color: var(--accent-strong); background: var(--accent-soft); display: grid; place-items: center; }
-.flights-list-heading strong { font-size: .86rem; font-weight: 650; letter-spacing: -.01em; }
-.flights-list-heading p { margin: 1px 0 0; color: var(--muted); font-size: .62rem; }
+.flights-list-heading { display: flex; align-items: center; gap: 10px; }
+.flights-list-heading > span { flex: 0 0 30px; height: 30px; border-radius: var(--r-sm); color: var(--muted); background: var(--surface-raised); display: grid; place-items: center; }
+.flights-list-heading strong { font-size: .8rem; font-weight: 700; letter-spacing: -.01em; }
+.flights-list-heading p { margin: 1px 0 0; color: var(--muted); font-size: .72rem; font-weight: 550; }
 
-.flights-list-notice { margin: 0; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--good) 40%, var(--border)); border-radius: 8px; color: var(--good); background: var(--good-soft); font-size: .64rem; }
+.flights-list-notice { margin: 0; padding: 6px 12px; border: 1px solid color-mix(in srgb, var(--good) 40%, var(--border)); border-radius: var(--r-sm); color: var(--good); background: var(--good-soft); font-size: .72rem; font-weight: 600; }
 
-.flights-list { min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 6px; }
+.flights-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; }
 
-.flights-list-empty { margin: 12px 0; color: var(--muted); font-size: .72rem; text-align: center; }
-
+/* Rows are hairline-divided rather than each wearing its own pane: fifteen blurred panes would be
+   the most expensive thing on the page for the least information. */
 .flight-row {
   min-width: 0;
-  min-height: 54px;
-  padding: 7px 9px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
   color: inherit;
-  background: var(--surface);
+  background: transparent;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: transform .16s ease, border-color .16s ease, background .16s ease;
 }
-.flight-row:hover { transform: translateX(2px); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--surface-raised); }
-.flight-row.is-highlighted { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--surface) 72%, var(--accent-soft)); }
-.flight-row:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+.flight-row:last-child { border-bottom: 0; }
+.flight-row:hover { background: var(--surface); }
+.flight-row.is-highlighted { border-radius: var(--r-sm); background: var(--accent-soft); }
+.flight-row:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -2px; border-radius: var(--r-sm); }
 
-.airline-logo { width: 28px; height: 28px; border-radius: 50%; object-fit: contain; background: var(--surface-raised); }
-.airline-logo-fallback { display: grid; place-items: center; color: var(--muted); font-size: .6rem; font-weight: 800; }
+.airline-logo { width: 30px; height: 30px; border-radius: 50%; object-fit: contain; background: var(--surface-raised); }
+.airline-logo-fallback { display: grid; place-items: center; color: var(--muted); font-size: .66rem; font-weight: 800; }
 
 .flight-row-main { min-width: 0; display: grid; gap: 1px; }
-.flight-row-main strong { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flight-row-main span { color: var(--muted); font-size: .62rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flight-row-main .flight-route { color: var(--text); font: 700 .64rem var(--mono); }
+.flight-row-main strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-row-main span { color: var(--muted); font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-row-main .flight-route { color: var(--text); font: 700 .7rem var(--mono); }
 
 .flight-row-metrics { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: right; }
-.flight-row-metrics span { color: var(--muted); font: 700 .62rem var(--mono); white-space: nowrap; }
+.flight-row-metrics span { color: var(--muted); font: 700 .7rem var(--mono); white-space: nowrap; }
 
-.phase-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 7px; background: var(--surface-raised); font-size: .62rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
-.phase-chip i { width: 8px; height: 8px; border-radius: 3px; }
-.phase-chip.tone-climb { color: var(--good); }
-.phase-chip.tone-climb i { background: var(--good); }
-.phase-chip.tone-descend { color: var(--warn); }
-.phase-chip.tone-descend i { background: var(--warn); }
-.phase-chip.tone-cruise { color: var(--accent); }
-.phase-chip.tone-cruise i { background: var(--accent); }
-.phase-chip.tone-ground { color: var(--muted); }
+/* The word carries the phase; the swatch carries the same hue as the blip on the radar. */
+.phase-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill); color: var(--muted); background: var(--surface-raised); font-size: .68rem; font-weight: 650; white-space: nowrap; }
+.phase-chip i { width: 8px; height: 8px; border-radius: 50%; }
+.phase-chip.tone-climb i { background: var(--chart-3); }
+.phase-chip.tone-descend i { background: var(--chart-4); }
+.phase-chip.tone-cruise i { background: var(--chart-1); }
 .phase-chip.tone-ground i { background: var(--muted); }
 
 /* ---------- Track a Flight slide ---------- */
-/* Two equal halves: an airframe display on top, the tracker console below, so an untracked
-   page still fills the wall panel instead of stacking a lone form against the top edge. */
-/* The board gets slightly the larger share: the map reads fine at this height, while a full flight
-   card has six rows of content to fit. */
-.track-panel { display: grid; grid-template-rows: minmax(0, .92fr) minmax(0, 1.08fr); gap: 10px; }
-/* Column flow rather than fixed grid rows: the pin list and cap hint are conditional, and the
+/* Two halves: an airframe display or route map on top, the tracker console below, so an untracked
+   page still fills the wall panel instead of stacking a lone form against the top edge. The board
+   gets slightly the larger share: the map reads fine at this height, while a full flight card has
+   six rows of content to fit. */
+.track-panel { display: grid; grid-template-rows: minmax(0, .92fr) minmax(0, 1.08fr); gap: var(--gap); }
+/* Column flow rather than fixed grid rows: the cap hint and error are conditional, and the
    board/empty state still needs to absorb whatever height is left over. */
-.track-console { min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.track-console { min-height: 0; display: flex; flex-direction: column; gap: var(--gap); }
 .track-console > .track-board, .track-console > .track-empty { flex: 1 1 auto; min-height: 0; }
+/* The empty board shares the half with the form, so it cannot claim the default state height. */
+.track-console > .track-empty.is-default { min-height: 0; }
 
 /* Top half when something is actually being tracked: the route on a map, in place of the
-   idle airframe showcase. */
-.track-stage { position: relative; min-height: 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
-.track-stage-dots { position: absolute; left: 50%; bottom: 9px; z-index: 5; display: flex; gap: 5px; transform: translateX(-50%); }
+   idle airframe showcase. No backdrop blur: the map covers every pixel of it. */
+.track-stage { position: relative; min-height: 0; border: 1px solid var(--glass-border); border-radius: var(--r-lg); overflow: hidden; box-shadow: var(--glass-edge), var(--glass-shadow); }
+.track-stage .route-map, .track-stage .all-routes-map { border-radius: 0; }
+.track-stage-dots { position: absolute; left: 50%; bottom: 2px; z-index: 5; display: flex; transform: translateX(-50%); }
 /* Tappable as well as indicative: on a wall panel these are the only way to pick a specific map
-   without waiting out the rotation. The transparent box-shadow enlarges the hit area past the
-   3px bar a finger can see. */
+   without waiting out the rotation. The button is a full finger's width; the bar is drawn inside. */
 .track-stage-dots button {
-  width: 16px;
-  height: 3px;
+  position: relative;
+  width: 36px;
+  min-height: var(--tap);
+  height: var(--tap);
   padding: 0;
   border: 0;
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--muted) 50%, transparent);
-  box-shadow: 0 0 0 5px transparent;
-  cursor: pointer;
+  background: transparent;
 }
-.track-stage-dots button.is-active { background: var(--accent); }
+.track-stage-dots button::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+  transform: translate(-50%, -50%);
+}
+.track-stage-dots button.is-active::before { background: var(--accent); }
 /* The combined map is a different kind of screen rather than another flight, so its dot differs. */
-.track-stage-dots button.is-all { width: 9px; background: color-mix(in srgb, var(--fg) 45%, transparent); }
-.track-stage-dots button.is-all.is-active { background: var(--fg); }
+.track-stage-dots button.is-all::before { width: 10px; background: color-mix(in srgb, var(--text) 45%, transparent); }
+.track-stage-dots button.is-all.is-active::before { background: var(--text); }
 
 /* Every pinned flight gets a card. Six of them have to fit the bottom half of a wall panel, so
    they flow into as many columns as the width allows and the board scrolls past that. */
@@ -202,8 +220,9 @@ main.is-fixed-view .flights-view {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
   align-content: start;
-  gap: 8px;
+  gap: var(--gap);
   overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: none;
 }
 .track-board::-webkit-scrollbar { display: none; }
@@ -211,23 +230,23 @@ main.is-fixed-view .flights-view {
 .track-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
 .track-card-title { min-width: 0; display: grid; }
 .track-card-title strong { font: 750 .82rem var(--mono); letter-spacing: .03em; }
-.track-card-title span { color: var(--muted); font-size: .62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-card-title span { color: var(--muted); font-size: .72rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .track-card.is-mappable { cursor: pointer; }
 .track-card.is-mappable:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
-.track-card.is-focused { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--surface) 78%, var(--accent-soft)); }
-.track-card-maphint { justify-self: start; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; font-size: .58rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.track-card.is-focused { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background-color: color-mix(in srgb, var(--surface) 70%, var(--accent-soft)); }
+.track-card-maphint { justify-self: start; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; font-size: .68rem; font-weight: 650; }
 .track-card.is-focused .track-card-maphint { color: var(--accent); }
 
+/* The idle hero: the one pane on the Track page that is itself glass rather than a map. */
 .track-showcase {
-  position: relative;
   min-height: 0;
-  padding: 10px 18px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background:
-    radial-gradient(120% 140% at 22% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 62%),
-    var(--surface-raised);
+  padding: 14px 22px;
+  border-radius: var(--r-lg);
+  /* It sits inside the glass panel shell, so it is a raised fill rather than a second blur layer. */
+  border: 1px solid var(--glass-border);
+  background: var(--surface-raised);
+  box-shadow: var(--glass-edge);
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(190px, 260px);
   align-items: center;
@@ -244,7 +263,7 @@ main.is-fixed-view .flights-view {
 .showcase-ring-b { height: 70%; border-style: dashed; animation-delay: -2.3s; }
 .showcase-ring-c { height: 44%; border-color: color-mix(in srgb, var(--accent) 40%, transparent); animation-delay: -4.6s; }
 
-.showcase-sweep { position: absolute; height: 96%; aspect-ratio: 1 / 1; border-radius: 50%; background: conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 26%, transparent), transparent 32%); mask: radial-gradient(circle, transparent 26%, #000 27%); animation: showcase-spin 9s linear infinite; }
+.showcase-sweep { position: absolute; height: 96%; aspect-ratio: 1 / 1; border-radius: 50%; background: conic-gradient(from 0deg, color-mix(in srgb, var(--accent) 26%, transparent), transparent 32%); mask: radial-gradient(circle, transparent 26%, black 27%); animation: showcase-spin 9s linear infinite; }
 
 .showcase-orbit { position: absolute; height: 96%; aspect-ratio: 1 / 1; animation: showcase-spin 14s linear infinite; }
 .showcase-orbit i { position: absolute; top: -3px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
@@ -267,7 +286,7 @@ main.is-fixed-view .flights-view {
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   filter: drop-shadow(0 8px 20px rgba(0, 0, 0, .55));
-  animation: showcase-enter .7s ease-out both;
+  animation: showcase-enter .7s var(--ease) both;
 }
 
 .showcase-plane[data-jet="b747"] { mask-image: url('./assets/aircraft/b747.svg'); -webkit-mask-image: url('./assets/aircraft/b747.svg'); }
@@ -280,17 +299,17 @@ main.is-fixed-view .flights-view {
 .showcase-plane[data-jet="md11"] { mask-image: url('./assets/aircraft/md11.svg'); -webkit-mask-image: url('./assets/aircraft/md11.svg'); }
 /* Windows and the cockpit are cut out in the panel colour, so they read on a solid body. */
 .showcase-caption { min-width: 0; display: grid; align-content: center; gap: 4px; }
-.showcase-code { justify-self: start; padding: 2px 9px; border-radius: 7px; color: var(--accent-ink); background: var(--accent); font: 800 .68rem var(--mono); letter-spacing: .08em; }
+.showcase-code { justify-self: start; padding: 2px 10px; border-radius: var(--r-pill); color: var(--accent-ink); background: var(--accent); font: 800 .7rem var(--mono); letter-spacing: .08em; }
 .showcase-caption strong { font-size: .92rem; line-height: 1.25; }
-.showcase-caption em { color: var(--muted); font-size: .68rem; font-style: normal; }
+.showcase-caption em { color: var(--muted); font-size: .74rem; font-style: normal; font-weight: 550; }
 
 .showcase-specs { margin: 6px 0 0; display: grid; gap: 4px; }
-.showcase-specs div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border); padding-bottom: 3px; }
-.showcase-specs dt { color: var(--muted); font-size: .6rem; text-transform: uppercase; letter-spacing: .08em; }
-.showcase-specs dd { margin: 0; font: 750 .72rem var(--mono); }
+.showcase-specs div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border); padding-bottom: 3px; }
+.showcase-specs dt { color: var(--muted); font-size: .68rem; font-weight: 600; }
+.showcase-specs dd { margin: 0; font: 750 .74rem var(--mono); }
 
 .showcase-dots { margin-top: 8px; display: flex; gap: 5px; }
-.showcase-dots span { width: 16px; height: 3px; border-radius: 2px; background: var(--border); transition: background .3s ease; }
+.showcase-dots span { width: 16px; height: 4px; border-radius: var(--r-pill); background: var(--border-strong); transition: background-color .3s var(--ease); }
 .showcase-dots span.is-active { background: var(--accent); }
 
 @keyframes showcase-spin { to { transform: rotate(360deg); } }
@@ -300,99 +319,90 @@ main.is-fixed-view .flights-view {
 
 .track-form { display: flex; align-items: center; gap: 8px; }
 
-.track-input-wrap { flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.track-input-wrap { flex: 1 1 auto; min-width: 0; height: var(--tap); padding: 0 14px; border-radius: var(--r-pill); color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .track-input-wrap input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--text); font: 750 .82rem var(--mono); letter-spacing: .03em; }
 .track-input-wrap input::placeholder { color: var(--muted); font-weight: 500; }
 .track-input-wrap input:focus { outline: none; }
 .track-input-wrap:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
 
-.track-action { min-height: 40px; padding: 0 16px; border: 1px solid var(--border); border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 750; font-size: .76rem; cursor: pointer; transition: border-color .16s ease, background .16s ease, opacity .16s ease; }
-.track-action:disabled { opacity: .45; cursor: default; }
+.track-action { padding: 0 18px; border: 1px solid var(--border); border-radius: var(--r-pill); display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: .78rem; }
 .track-action-go { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .track-action-go:not(:disabled):hover { background: var(--accent-strong); }
 .track-action-stop { color: var(--danger); background: var(--surface); }
 .track-action-stop:not(:disabled):hover { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); background: var(--danger-soft); }
 
-.track-empty { min-height: 0; height: 100%; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
-.track-empty p { margin: 0; max-width: 340px; font-size: .76rem; line-height: 1.5; }
+.track-cap-hint { margin: 0; color: var(--muted); font-size: .72rem; font-weight: 550; }
 
-.track-cap-hint { margin: 0; color: var(--muted); font-size: .66rem; letter-spacing: .02em; }
-
-.track-list { margin: 0; padding: 0; list-style: none; flex: 0 0 auto; max-height: 34%; overflow-y: auto; display: grid; gap: 6px; }
-.track-list-row { padding: 6px 8px 6px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
-.track-list-call { font: 750 .74rem var(--mono); letter-spacing: .03em; }
-.track-list-route { min-width: 0; color: var(--muted); font-size: .66rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.track-list-status { padding: 2px 8px; border-radius: 7px; background: var(--surface-raised); font-size: .6rem; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
-.track-list-status.tone-good { color: var(--good); }
-.track-list-status.tone-accent { color: var(--accent); }
-.track-list-status.tone-muted { color: var(--muted); }
-.track-list-remove { width: 24px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); color: var(--muted); display: grid; place-items: center; cursor: pointer; transition: color .16s ease, border-color .16s ease; }
+/* Drawn at 32px so six card headers stay one line; the .hit-area ring makes it a finger wide. */
+.track-list-remove { width: 32px; height: 32px; min-height: 0; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--surface-raised); color: var(--muted); display: grid; place-items: center; }
 .track-list-remove:not(:disabled):hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
-.track-list-remove:disabled { opacity: .45; cursor: default; }
 
-.track-card { min-height: 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); display: grid; align-content: start; gap: 7px; transition: border-color .16s ease, background .16s ease; }
+/* Cards sit inside the page's glass pane, so they take a surface fill rather than a second blur. */
+.track-card { min-height: 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background-color: var(--surface); box-shadow: var(--glass-edge); display: grid; align-content: start; gap: 8px; transition: border-color .16s var(--ease), background-color .16s var(--ease); }
 .track-card .airline-logo { flex: 0 0 auto; width: 34px; height: 24px; object-fit: contain; }
 /* The single-card layout could afford a headline-sized airport code; six cards in a row cannot. */
 .track-card .track-route { padding: 6px 2px; gap: 8px; }
 .track-card .track-route-end strong { font-size: clamp(.95rem, 1.5vw, 1.2rem); }
 .track-card .track-schedule { gap: 6px; }
-.track-card .track-schedule-col { padding: 5px 6px; background: var(--surface-raised); }
+.track-card .track-schedule-col { padding: 5px 8px; background: var(--surface-raised); }
 /* Six cards have to share one half of a wall panel, so every row here is sized to stay on one
    line: a wrapped clock or a second telemetry row is what pushed the last row off the card. */
 .track-card .track-schedule-col strong { font-size: .72rem; white-space: nowrap; }
 .track-card .track-telemetry { gap: 5px; }
-.track-card .track-telemetry div { padding: 5px; background: var(--surface-raised); }
-.track-card .track-telemetry span { font-size: .54rem; }
-.track-card .track-telemetry strong { font-size: .66rem; }
-.track-card .track-eta { font-size: .66rem; }
+.track-card .track-telemetry div { padding: 5px 8px; background: var(--surface-raised); }
+.track-card .track-telemetry span { font-size: .66rem; }
+.track-card .track-telemetry strong { font-size: .7rem; }
+.track-card .track-eta { font-size: .72rem; }
 
-.track-mode { justify-self: start; padding: 3px 8px; border-radius: 8px; font-size: .58rem; font-weight: 650; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
-.track-mode.tone-good { color: var(--good); background: var(--good-soft); }
-.track-mode.tone-accent { color: var(--accent-strong); background: var(--accent-soft); }
+.track-mode { justify-self: start; padding: 3px 10px; border-radius: var(--r-pill); font-size: .68rem; font-weight: 650; white-space: nowrap; }
+.track-mode.tone-good { color: var(--good); background: var(--good-soft); border: 0; }
+.track-mode.tone-accent { color: var(--accent-strong); background: var(--accent-soft); border: 0; }
 .track-mode.tone-muted { color: var(--muted); background: var(--surface-raised); }
 
-.track-route { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 4px; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); }
+.track-route { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 10px 4px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 /* min-width: 0 is what actually lets the ellipsis below engage — without it a grid item refuses to
    shrink under its content and a long airport city name spills outside the card. */
 .track-route-end { min-width: 0; display: grid; gap: 2px; }
 .track-route-end:last-child { text-align: right; }
 .track-route-end strong { font: 800 clamp(1.05rem, 3.4vw, 1.5rem) var(--mono); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.track-route-end span { color: var(--muted); font-size: .66rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.track-route-arrow { color: var(--accent); display: grid; place-items: center; }
+.track-route-end span { color: var(--muted); font-size: .72rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track-route-arrow { color: var(--muted); display: grid; place-items: center; }
 
-.track-progress-track { position: relative; height: 6px; border-radius: 4px; background: var(--surface-raised); }
-.track-progress-fill { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s ease; }
-.track-progress-plane { position: absolute; top: 50%; color: var(--accent); background: var(--canvas); border-radius: 50%; display: grid; place-items: center; width: 22px; height: 22px; transform: translate(-50%, -50%); transition: left .4s ease; }
+/* Progress: one series-hue fill in a recessed well, the same bar the header badge draws. The fill
+   animates by scale rather than width so it stays on the compositor. */
+.track-progress-track { position: relative; height: 8px; border-radius: var(--r-pill); }
+.track-progress-fill { position: absolute; inset: 0; border-radius: inherit; background: var(--chart-1); transform-origin: left center; transition: transform .4s var(--ease); }
+.track-progress-plane { position: absolute; top: 50%; color: var(--text); background: var(--surface-solid); border: 1px solid var(--border-strong); border-radius: 50%; display: grid; place-items: center; width: 22px; height: 22px; transform: translate(-50%, -50%); }
 
 .track-schedule { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.track-schedule-col { min-width: 0; padding: 8px; border-radius: 8px; background: var(--surface); display: grid; gap: 2px; }
-.track-schedule-col span { color: var(--muted); font-size: .58rem; text-transform: uppercase; letter-spacing: .06em; }
+.track-schedule-col { min-width: 0; padding: 8px; border-radius: var(--r-sm); background: var(--surface); display: grid; gap: 2px; }
+.track-schedule-col span { color: var(--muted); font-size: .68rem; font-weight: 600; }
 .track-schedule-col strong { font: 750 .78rem var(--mono); }
-.track-schedule-col small { color: var(--muted); font-size: .6rem; }
+.track-schedule-col small { color: var(--muted); font-size: .68rem; }
 
-.delay-badge { justify-self: start; padding: 3px 8px; border-radius: 6px; font: 750 .7rem var(--mono); }
-.delay-badge.tone-danger { color: var(--danger); background: var(--danger-soft); }
-.delay-badge.tone-good { color: var(--good); background: var(--good-soft); }
+.delay-badge { justify-self: start; padding: 3px 8px; border-radius: var(--r-pill); font: 750 .7rem var(--mono); }
+.delay-badge.tone-danger { color: var(--danger); background: var(--danger-soft); border: 0; }
+.delay-badge.tone-good { color: var(--good); background: var(--good-soft); border: 0; }
 .delay-badge.tone-neutral { color: var(--muted); background: var(--surface-raised); }
 .delay-badge.tone-muted { color: var(--muted); background: var(--surface-raised); }
 
-.track-eta { margin: 0; color: var(--muted); font-size: .72rem; }
+.track-eta { margin: 0; color: var(--muted); font-size: .74rem; font-weight: 600; }
 
 /* Why a pin has no position yet — the difference between "not found" and "broken". */
-.track-await-reason { margin: 0; color: var(--muted); display: flex; align-items: flex-start; gap: 5px; font-size: .6rem; line-height: 1.35; }
+.track-await-reason { margin: 0; color: var(--muted); display: flex; align-items: flex-start; gap: 5px; font-size: .68rem; line-height: 1.35; }
 .track-await-reason svg { flex: 0 0 auto; margin-top: 2px; }
 
 .track-telemetry { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.track-telemetry div { min-width: 0; padding: 8px; border-radius: 7px; background: var(--surface); display: flex; flex-direction: column; }
-.track-telemetry span { color: var(--muted); font-size: .58rem; text-transform: uppercase; }
-.track-telemetry strong { margin-top: 2px; font-size: .7rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.track-telemetry div { min-width: 0; padding: 8px; border-radius: var(--r-sm); background: var(--surface); display: flex; flex-direction: column; }
+.track-telemetry span { color: var(--muted); font-size: .68rem; font-weight: 600; }
+.track-telemetry strong { margin-top: 2px; font-size: .72rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* ---------- Pager ---------- */
-.flights-pager { display: flex; justify-content: center; gap: 8px; }
-.flights-pager button { min-height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface); font-size: .72rem; font-weight: 600; cursor: pointer; transition: border-color .16s ease, color .16s ease, background .16s ease; }
-.flights-pager button.is-active { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+.flights-pager { flex: 0 0 auto; display: flex; justify-content: center; gap: 8px; }
+.flights-pager button { min-width: 96px; padding: 0 20px; color: var(--muted); font-size: .78rem; font-weight: 650; }
 .flights-pager button:hover { color: var(--text); }
-.flights-pager button.is-active:hover { color: var(--accent-ink); }
+.flights-pager button.is-active { color: var(--accent-ink); border-color: var(--accent); background-color: var(--accent); }
+.flights-pager button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 @media (min-width: 1220px) {
   .flight-row-metrics { display: grid; }
@@ -412,3 +422,4 @@ main.is-fixed-view .flights-view {
   .radar-sweep { animation: none; }
   .showcase-sweep, .showcase-orbit, .showcase-ring, .showcase-contrail, .showcase-plane { animation: none; }
 }
+

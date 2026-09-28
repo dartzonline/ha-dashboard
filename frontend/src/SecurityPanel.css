@@ -1,47 +1,42 @@
-/* Names the exact doors, locks, and covers behind the banner count. */
-.detail-sheet.security-sheet { width: min(600px, 100%); }
-.detail-sheet.security-sheet {
-  border: 1px solid var(--border);
-  background: var(--surface);
-}
+/* Names the exact doors, locks, and covers behind the banner count. The sheet frame itself
+   (glass, handle, header) comes from App.css's shared .detail-sheet. */
+.detail-sheet.security-sheet { width: min(620px, 100%); }
 .security-groups { display: grid; gap: 12px; padding: 16px 0 4px; }
-.security-group { padding: 11px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-raised); }
-.security-group h3 { margin: 0 0 9px; display: flex; align-items: center; gap: 7px; font-size: .76rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.security-group h3 em { margin-left: auto; padding: 2px 8px; border-radius: 12px; font-size: .7rem; font-style: normal; font-weight: 700; }
+.security-group { padding: 12px; border: 1px solid var(--glass-border); border-radius: var(--r-md); background: var(--surface); box-shadow: var(--glass-edge); }
+.security-group.tone-danger { border-color: color-mix(in srgb, var(--danger) 32%, var(--glass-border)); background-color: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.security-group.tone-warn { border-color: color-mix(in srgb, var(--warn) 32%, var(--glass-border)); background-color: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.security-group h3 { margin: 0 0 10px; padding: 0 2px; display: flex; align-items: center; gap: 8px; font-size: .74rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.security-group h3 em { margin-left: auto; min-width: 26px; padding: 2px 9px; border-radius: var(--r-pill); font-size: .72rem; font-style: normal; font-weight: 750; text-align: center; }
 .security-group.tone-danger h3 { color: var(--danger); }
 .security-group.tone-danger h3 em { color: var(--danger); background: var(--danger-soft); }
 .security-group.tone-warn h3 { color: var(--warn); }
 .security-group.tone-warn h3 em { color: var(--warn); background: var(--warn-soft); }
-.security-rows { display: grid; gap: 7px; }
-.security-rows button { min-height: 52px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--surface); display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; text-align: left; cursor: pointer; transition: transform .16s ease, border-color .16s ease, background .16s ease; }
-.security-rows button:hover { transform: translateX(2px); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: var(--surface-raised); }
+.security-rows { display: grid; gap: 6px; }
+.security-rows button {
+  min-height: 56px; padding: 9px 14px; border: 1px solid var(--glass-border); border-radius: var(--r-sm);
+  color: var(--text); background: var(--surface-raised); box-shadow: var(--glass-edge);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; text-align: left;
+}
+.security-rows button:not(:disabled):hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); }
 .security-rows button:disabled {
   opacity: 1;
-  cursor: default;
   border-style: dashed;
-  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
-  background: color-mix(in srgb, var(--warn-soft) 28%, var(--surface));
-}
-.security-rows button:disabled:hover {
-  transform: none;
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--glass-border));
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface-raised));
 }
 .security-rows button > div { min-width: 0; display: grid; gap: 2px; }
-.security-rows strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.security-rows small { color: var(--muted); font-size: .68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.security-rows strong { font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.security-rows small { color: var(--muted); font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .security-rows svg { color: var(--muted); }
-.security-hint {
-  color: var(--warn);
-  font-size: .64rem;
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+.security-hint { color: var(--warn); font-size: .64rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.security-clear {
+  margin: 16px 0 4px; padding: 28px 16px; border: 1px solid color-mix(in srgb, var(--good) 30%, var(--glass-border));
+  border-radius: var(--r-md); color: var(--good); background: color-mix(in srgb, var(--good) 10%, var(--surface));
+  display: grid; justify-items: center; gap: 8px; text-align: center;
 }
-.security-clear { padding: 26px 16px; border: 1px solid color-mix(in srgb, var(--good) 30%, var(--border)); border-radius: 11px; background: color-mix(in srgb, var(--surface) 60%, var(--good-soft)); color: var(--good); display: grid; justify-items: center; gap: 8px; text-align: center; margin: 16px 0 4px; }
-.security-clear strong { font-size: .92rem; }
-.security-clear p { margin: 0; max-width: 380px; color: var(--muted); font-size: .74rem; line-height: 1.45; }
-.security-section-link { width: 100%; min-height: 50px; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; color: var(--accent-strong); background: var(--surface-raised); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 750; cursor: pointer; }
-.security-section-link:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
+.security-clear strong { font-size: .94rem; }
+.security-clear p { margin: 0; max-width: 380px; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.detail-action.security-section-link { width: 100%; margin-top: 14px; color: var(--accent-strong); }
 @media (max-width: 760px) {
   .detail-sheet.security-sheet { width: 100%; }
-  .security-rows strong { font-size: .8rem; }
 }

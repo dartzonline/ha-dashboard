@@ -1,33 +1,28 @@
+/* Weather is a fixed view: the topbar floats over it, so the page owns the full viewport height and
+   starts below the header rather than under it. */
 .weather-view {
-  margin-top: 0;
+  flex: 1 1 auto;
   height: 100svh;
   width: 100%;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  /* The header floats over this view, so the hero starts below it rather than under it. */
+  gap: var(--gap);
   padding: 74px clamp(16px, 3vw, 32px) 14px;
   overflow: hidden;
 }
 
-main.is-fixed-view .weather-view {
-  height: 100svh;
-  margin: 0;
-}
-
-/* Background, tint and animation now come from the shared sky theme (WeatherAtmosphere.css) so this
-   hero and the world-clock city card stay visually identical. */
-/* Capped so the panel below it — especially the radar map — keeps a usable share of the screen. */
+/* Background, tint and animation come from the shared sky theme (WeatherAtmosphere.css) so this
+   hero and the world-clock city sheet stay visually identical. Capped so the panel below it,
+   especially the radar map, keeps a usable share of the screen. */
 .weather-hero {
   min-height: 132px;
   max-height: 34vh;
-  padding: 11px 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  padding: 14px 16px;
+  border-radius: var(--r-lg);
   display: grid;
   grid-template-columns: minmax(220px, 1.1fr) minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--gap);
 }
 
 .weather-current, .weather-stat-grid {
@@ -38,41 +33,32 @@ main.is-fixed-view .weather-view {
   gap: 8px;
 }
 
+/* Readability over effect: the reading sits on its own near-opaque pane rather than straight on
+   the sky, which can be a bright noon gradient or a lightning flash. The sky still shows around
+   and between the panes. */
+.weather-current { padding: 10px 14px; border-radius: var(--r-md); }
+
 .weather-today-band {
   margin-top: 4px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--canvas) 42%, transparent);
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-raised);
   display: grid;
   gap: 2px;
 }
 
-.weather-today-band span {
-  color: var(--muted);
-  font-size: .66rem;
-  font-weight: 600;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
-.weather-today-band strong {
-  font-size: .98rem;
-}
-
-.weather-today-band small {
-  color: var(--muted);
-  font-size: .66rem;
-}
-
+.weather-today-band span,
 .weather-eyebrow {
   margin: 0;
   color: var(--muted);
   font-size: .7rem;
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: .1em;
   text-transform: uppercase;
-  letter-spacing: .09em;
 }
+
+.weather-today-band strong { font-size: .98rem; font-weight: 750; }
+.weather-today-band small { color: var(--muted); font-size: .72rem; font-weight: 550; }
 
 .weather-current-main {
   display: flex;
@@ -84,8 +70,9 @@ main.is-fixed-view .weather-view {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  color: var(--sky-ink, var(--text));
-  background: rgba(255, 255, 255, .07);
+  color: var(--sky-ink);
+  background: var(--surface-raised);
+  box-shadow: var(--glass-edge);
   display: grid;
   place-items: center;
   animation: weather-float 3.4s ease-in-out infinite;
@@ -100,58 +87,45 @@ main.is-fixed-view .weather-view {
 .weather-current-main p {
   margin: 2px 0 0;
   color: var(--muted);
-  text-transform: capitalize;
 }
 
 .weather-stat-grid {
-  position: relative;
-  z-index: 1;
-  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
   align-content: center;
 }
 
 .weather-stat-card {
   min-height: 62px;
-  padding: 6px 10px 5px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
   color: var(--text);
-  background: color-mix(in srgb, var(--canvas) 46%, transparent);
   display: grid;
   align-content: center;
   gap: 4px;
 }
 
-.weather-stat-card strong {
-  font-size: 1.05rem;
-}
+.weather-stat-card svg { color: var(--muted); }
+.weather-stat-card strong { font-size: 1.05rem; font-weight: 750; }
 
 .weather-stat-card span {
   color: var(--muted);
-  font-size: .68rem;
+  font-size: .72rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .06em;
 }
 
 .weather-panel-shell {
   min-height: 0;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface);
-  box-shadow: none;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 
 .weather-panel {
   height: 100%;
   min-height: 0;
-  padding: 10px;
+  padding: 14px 16px;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: var(--gap);
 }
 
 .weather-panel-heading {
@@ -161,24 +135,21 @@ main.is-fixed-view .weather-view {
   gap: 8px;
 }
 
+.weather-panel-heading h3,
 .weather-panel-heading strong {
-  font-size: .86rem;
-  font-weight: 650;
+  margin: 0;
+  font-size: .82rem;
+  font-weight: 700;
   letter-spacing: -.01em;
 }
 
 .weather-panel-heading span {
   color: var(--muted);
-  font-size: .65rem;
+  font-size: .74rem;
+  font-weight: 550;
 }
 
-.weather-panel-heading.compact {
-  margin-bottom: 2px;
-}
-
-.today-panel {
-  grid-template-rows: auto auto auto;
-}
+.today-panel { grid-template-rows: auto auto auto; }
 
 .today-metric-grid {
   min-height: 0;
@@ -187,11 +158,19 @@ main.is-fixed-view .weather-view {
   gap: 8px;
 }
 
+/* Inner tiles are a thin fill, not their own glass: the shell is already the pane. */
+.today-metric-card,
+.hourly-card,
+.forecast-card,
+.now-detail-strip span {
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
 .today-metric-card {
   min-height: 74px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 11px;
+  padding: 10px 12px;
   display: grid;
   align-content: start;
   gap: 2px;
@@ -199,20 +178,12 @@ main.is-fixed-view .weather-view {
 
 .today-metric-card span {
   color: var(--muted);
-  font-size: .65rem;
+  font-size: .72rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .07em;
 }
 
-.today-metric-card strong {
-  font-size: 1rem;
-}
-
-.today-metric-card small {
-  color: var(--muted);
-  font-size: .62rem;
-}
+.today-metric-card strong { font-size: 1rem; }
+.today-metric-card small { color: var(--muted); font-size: .72rem; font-weight: 550; }
 
 .now-detail-strip {
   display: grid;
@@ -221,66 +192,17 @@ main.is-fixed-view .weather-view {
 }
 
 .now-detail-strip span {
-  min-height: 30px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  min-height: var(--tap);
+  padding: 6px 12px;
   color: var(--text);
-  background: color-mix(in srgb, var(--canvas) 40%, transparent);
-  font-size: .7rem;
-  letter-spacing: 0;
+  font-size: .74rem;
   display: flex;
   align-items: center;
 }
 
-.today-metric-card.tone-cool {
-  background: color-mix(in srgb, var(--canvas) 40%, color-mix(in srgb, var(--accent) 14%, transparent));
-}
-
-.today-metric-card.tone-warm {
-  background: color-mix(in srgb, var(--canvas) 40%, color-mix(in srgb, var(--warn) 14%, transparent));
-}
-
-.today-metric-card.tone-breeze {
-  background: color-mix(in srgb, var(--canvas) 40%, color-mix(in srgb, var(--good) 13%, transparent));
-}
-
-.today-metric-card.tone-daylight {
-  background: color-mix(in srgb, var(--canvas) 40%, color-mix(in srgb, var(--warn) 9%, transparent));
-}
-
 .hourly-strip {
   min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 8px;
-}
-
-.hourly-strip-title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.hourly-strip-title strong {
-  font-size: .86rem;
-  font-weight: 650;
-  letter-spacing: -.01em;
-}
-
-.hourly-strip-title span {
-  color: var(--muted);
-  font-size: .66rem;
-}
-
-.hourly-error {
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
-  border-radius: 10px;
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger-soft) 70%, var(--canvas));
-  font-size: .7rem;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 /* One row whatever the slot count: auto-columns keeps twelve hours on a single line instead of
@@ -296,28 +218,17 @@ main.is-fixed-view .weather-view {
 .hourly-card {
   min-height: 100px;
   padding: 8px 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--canvas) 42%, transparent);
   display: grid;
   justify-items: center;
   align-content: start;
   gap: 4px;
 }
 
-.hourly-card > span {
-  color: var(--muted);
-  font-size: .66rem;
-}
-
-.hourly-card > strong {
-  font-size: .92rem;
-}
-
-.hourly-card > small {
-  color: var(--muted);
-  font-size: .64rem;
-}
+.hourly-card > span { color: var(--muted); font-size: .72rem; font-weight: 600; }
+.hourly-card > svg { color: var(--muted); }
+.hourly-card > strong { font-size: .92rem; }
+.hourly-card > small { color: var(--muted); font-size: .72rem; }
+.hourly-card.is-tomorrow { background: transparent; border-style: dashed; }
 
 .forecast-grid {
   min-height: 0;
@@ -328,38 +239,31 @@ main.is-fixed-view .weather-view {
 
 .forecast-card {
   min-height: 150px;
-  padding: 10px 9px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--canvas) 42%, transparent);
+  padding: 12px;
   display: grid;
   align-content: start;
   gap: 8px;
 }
 
-.forecast-card header {
-  display: grid;
-  gap: 2px;
-}
+.forecast-card header { display: grid; gap: 2px; }
 
 .forecast-card header strong {
   font-size: .86rem;
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: -.01em;
 }
 
 .forecast-card header span {
   color: var(--muted);
-  font-size: .68rem;
-  text-transform: capitalize;
+  font-size: .72rem;
 }
 
 .forecast-icon {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  color: var(--sky-ink, var(--text));
-  background: rgba(255, 255, 255, .06);
+  color: var(--text);
+  background: var(--surface-raised);
   display: grid;
   place-items: center;
   animation: weather-float 4s ease-in-out infinite;
@@ -371,34 +275,15 @@ main.is-fixed-view .weather-view {
   gap: 8px;
 }
 
-.forecast-temp-row strong {
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
-.forecast-temp-row small {
-  color: var(--muted);
-  font-size: .8rem;
-  line-height: 1.1;
-}
+.forecast-temp-row strong { font-size: 1.35rem; line-height: 1; }
+.forecast-temp-row small { color: var(--muted); font-size: .8rem; line-height: 1.1; }
 
 .forecast-meta {
   margin-top: auto;
   display: grid;
   gap: 3px;
   color: var(--muted);
-  font-size: .64rem;
-}
-
-.forecast-empty {
-  margin: 0;
-  min-height: 90px;
-  grid-column: 1 / -1;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  color: var(--muted);
-  display: grid;
-  place-items: center;
+  font-size: .72rem;
 }
 
 .weather-pager {
@@ -408,31 +293,19 @@ main.is-fixed-view .weather-view {
 }
 
 .weather-pager button {
-  min-height: 28px;
-  padding: 0 11px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  min-height: var(--tap);
+  min-width: 88px;
+  padding: 0 18px;
   color: var(--muted);
-  background: var(--surface);
-  font-size: .72rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  cursor: pointer;
-  transition: border-color .16s ease, color .16s ease, background .16s ease;
+  font-size: .78rem;
+  font-weight: 650;
 }
 
 .weather-pager button.is-active {
   color: var(--accent-ink);
   border-color: var(--accent);
-  background: var(--accent);
-}
-
-.weather-pager button:hover {
-  color: var(--text);
-}
-
-.weather-pager button.is-active:hover {
-  color: var(--accent-ink);
+  background-color: var(--accent);
+  background-image: none;
 }
 
 @keyframes weather-float {
@@ -441,67 +314,27 @@ main.is-fixed-view .weather-view {
 }
 
 @media (min-width: 1100px) and (max-width: 1400px) and (orientation: landscape) {
-  .weather-hero {
-    min-height: 154px;
-    padding: 12px;
-  }
-
-  .weather-panel {
-    padding: 8px;
-  }
-
-  .today-metric-card {
-    min-height: 68px;
-  }
-
-  .forecast-card {
-    min-height: 136px;
-    padding: 8px;
-  }
-
-  .hourly-card {
-    min-height: 92px;
-  }
+  .weather-hero { min-height: 154px; padding: 12px 14px; }
+  .weather-panel { padding: 12px 14px; }
+  .today-metric-card { min-height: 68px; }
+  .forecast-card { min-height: 136px; padding: 10px; }
+  .hourly-card { min-height: 92px; }
 }
 
 @media (max-width: 1040px) {
-  .weather-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .today-metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .now-detail-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .weather-stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .forecast-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .hourly-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
+  .weather-hero { grid-template-columns: 1fr; }
+  .today-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .now-detail-strip { grid-template-columns: 1fr; }
+  .weather-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .forecast-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .hourly-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 680px) {
-  .forecast-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .weather-stat-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .hourly-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  .forecast-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .weather-stat-grid { grid-template-columns: 1fr; }
+  .hourly-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .weather-pager button { min-width: 0; padding: 0 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -510,3 +343,4 @@ main.is-fixed-view .weather-view {
     animation: none;
   }
 }
+

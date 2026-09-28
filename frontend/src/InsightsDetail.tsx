@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
-import { Activity, Clock, Info, Sigma, TrendingUp, X } from 'lucide-react'
+import { useEffect, useId, useState } from 'react'
+import { Activity, AlertTriangle, CheckCircle2, Clock, Info, Sigma, TrendingUp, X } from 'lucide-react'
 import {
-  Area, AreaChart, CartesianGrid, Legend, Line, LineChart,
+  Area, AreaChart, CartesianGrid, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
-import { apiUrl } from './api'
+import { ChartLegend, GlassTooltip } from './chartKit'
+import { chartMargin, gridProps, lineProps, seriesColor, tooltipCursor, xAxisProps, yAxisProps } from './chartTheme'
+import { fetchHistory, unwrapHistoryPayload } from './history'
 import { comfortScore, historyWindowLabel } from './insightDetails'
 import type { InsightDetailConfig } from './insightDetails'
+import { EmptyState, LoadingState } from './ui/StateMessages'
+import { useDialog } from './ui/useDialog'
 import './InsightsDetail.css'
 
 interface InsightsDetailProps {
@@ -34,18 +38,15 @@ interface ChartRow {
   [key: string]: number
 }
 
-const tooltipStyle = { borderRadius: 10, border: '1px solid var(--border)', background: '#0d1a25', color: 'var(--text)', fontSize: 11 }
 const emptyHistory: ParsedHistory = { numeric: [], transitions: [] }
+/** Sheets are opened by hand and share their cache with the tiles and Insights panels behind them. */
+const HISTORY_TTL_MS = 5 * 60_000
 
 function parseHistory(payload: unknown, scale = 1): ParsedHistory {
-  if (!Array.isArray(payload)) return emptyHistory
-  const states = Array.isArray(payload[0]) ? payload[0] : payload
   const numeric: NumericPoint[] = []
   const transitions: Transition[] = []
   let previous = ''
-  states.forEach((item) => {
-    if (!item || typeof item !== 'object') return
-    const record = item as Record<string, unknown>
+  unwrapHistoryPayload(payload).forEach((record) => {
     const rawState = String(record.state ?? '')
     const time = Date.parse(String(record.last_changed ?? record.last_updated ?? ''))
     if (!Number.isFinite(time)) return
@@ -71,6 +72,12 @@ function formatValue(value: number, unit: string) {
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(value)}${unit && unit !== 'score' ? ` ${unit}` : ''}`
 }
 
+/** Recorder states are raw slugs ("spin_cycle"); sentence-case them here rather than with CSS. */
+function sentenceCase(state: string) {
+  const text = state.replaceAll('_', ' ')
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function formatAxisTime(timestamp: number, hours: number) {
   const date = new Date(timestamp)
   return hours <= 24
@@ -82,13 +89,8 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
   const [histories, setHistories] = useState<Map<string, ParsedHistory>>(new Map())
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [onClose])
+  const sheetRef = useDialog<HTMLElement>({ onClose })
+  const titleId = useId()
 
   useEffect(() => {
     let stopped = false
@@ -99,9 +101,8 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
 
     Promise.all(config.series.map(async (series) => {
       try {
-        const response = await fetch(apiUrl(`history/${series.entityId}?hours=${config.hours}`), { signal: controller.signal })
-        if (!response.ok) return [series.entityId, emptyHistory] as const
-        return [series.entityId, parseHistory(await response.json(), series.scale ?? 1)] as const
+        const payload = await fetchHistory(series.entityId, config.hours, HISTORY_TTL_MS, controller.signal)
+        return [series.entityId, parseHistory(payload, series.scale ?? 1)] as const
       } catch {
         return [series.entityId, emptyHistory] as const
       }
@@ -133,18 +134,21 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
   const rows = Array.from(buckets.values()).sort((left, right) => left.time - right.time)
 
   let chartRows = rows
-  let chartKeys = config.series.map((series, index) => ({ key: `s${index}`, label: series.label, color: series.color }))
+  // Paint by position, not by the tile's own colour: every sheet then uses the same --chart-n order
+  // as the charts behind it, whatever hue the tile config happened to carry.
+  let chartKeys = config.series.map((series, index) => ({ key: `s${index}`, label: series.label, color: seriesColor(index) }))
 
   if (config.derived === 'comfort') {
     let temperature = Number.NaN
     let humidity = Number.NaN
-    chartRows = rows.flatMap((row) => {
+    const comfortRows: ChartRow[] = []
+    for (const row of rows) {
       temperature = Number.isFinite(row.s0) ? row.s0 : temperature
       humidity = Number.isFinite(row.s1) ? row.s1 : humidity
-      if (!Number.isFinite(temperature) || !Number.isFinite(humidity)) return []
-      return [{ time: row.time, comfort: comfortScore(temperature, humidity) }]
-    })
-    chartKeys = [{ key: 'comfort', label: 'Comfort score', color: config.series[0]?.color ?? '#62d7d3' }]
+      if (Number.isFinite(temperature) && Number.isFinite(humidity)) comfortRows.push({ time: row.time, comfort: comfortScore(temperature, humidity) })
+    }
+    chartRows = comfortRows
+    chartKeys = [{ key: 'comfort', label: 'Comfort score', color: seriesColor(0) }]
   }
 
   const primaryKey = chartKeys[0]?.key ?? ''
@@ -156,9 +160,7 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
     .slice(0, 6)
 
   const sampleCount = config.series.reduce((total, series) => total + (histories.get(series.entityId)?.numeric.length ?? 0), 0)
-  const emptyMessage = loading
-    ? 'Loading recorder history'
-    : config.series.length === 0
+  const emptyMessage = config.series.length === 0
       ? 'This value is derived from live state, not a single recorded entity'
       : sampleCount === 1
         ? 'Only one recorded sample in this window, so the current value above is the latest reading'
@@ -167,20 +169,28 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
   const trend = values.length > 1 ? values[values.length - 1] - values[0] : Number.NaN
   const ChartComponent = config.chart === 'area' ? AreaChart : LineChart
 
+  const latest = (key: string) => {
+    for (let index = chartRows.length - 1; index >= 0; index -= 1) {
+      if (Number.isFinite(chartRows[index][key])) return formatValue(chartRows[index][key], config.unit)
+    }
+    return undefined
+  }
+
   return (
     <div className="detail-backdrop" role="presentation" onClick={onClose}>
       <section
-        className="detail-sheet insight-sheet"
+        ref={sheetRef}
+        className="detail-sheet insight-sheet glass-strong"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="insight-detail-title"
+        aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="sheet-handle" />
+        <div className="sheet-handle" aria-hidden="true" />
         <header>
-          <span className="detail-icon"><Activity size={24} /></span>
-          <div><p>{config.subtitle}</p><h2 id="insight-detail-title">{config.title}</h2></div>
-          <button onClick={onClose} title="Close details" aria-label="Close details"><X size={20} /></button>
+          <span className="detail-icon" aria-hidden="true"><Activity size={24} /></span>
+          <div><p>{config.subtitle}</p><h2 id={titleId}>{config.title}</h2></div>
+          <button type="button" className="glass-pill" data-autofocus onClick={onClose} title="Close details" aria-label="Close details"><X size={20} aria-hidden="true" /></button>
         </header>
 
         <div className="insight-headline">
@@ -188,62 +198,61 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
           <div><span>{historyWindowLabel(config.hours)}</span><strong>{Number.isFinite(average) ? formatValue(average, config.unit) : '—'} avg</strong></div>
           <div>
             <span>Change</span>
-            <strong className={Number.isFinite(trend) ? (trend > 0 ? 'up' : trend < 0 ? 'down' : '') : ''}>
+            <strong>
               {Number.isFinite(trend) ? `${trend > 0 ? '+' : ''}${formatValue(trend, config.unit)}` : '—'}
             </strong>
           </div>
         </div>
 
-        <div className="insight-detail-chart">
+        <div className="insight-detail-chart glass-inset">
           {hasChart ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ChartComponent data={chartRows} margin={{ top: 8, right: 10, left: -16, bottom: 0 }}>
-                <defs>
-                  {chartKeys.map((item) => (
-                    <linearGradient key={item.key} id={`detailFill-${item.key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={item.color} stopOpacity={.4} />
-                      <stop offset="95%" stopColor={item.color} stopOpacity={.02} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid stroke="rgba(100,145,165,.16)" vertical={false} />
-                <XAxis dataKey="time" tickFormatter={(value) => formatAxisTime(Number(value), config.hours)} tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} minTickGap={36} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} domain={config.unit === '%' || config.unit === 'score' ? [0, 100] : ['auto', 'auto']} />
-                <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => new Date(Number(label)).toLocaleString()} formatter={(value) => formatValue(Number(value), config.unit)} />
-                {chartKeys.length > 1 && <Legend wrapperStyle={{ fontSize: 10 }} />}
-                {chartKeys.map((item) => config.chart === 'area'
-                  ? <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} fill={`url(#detailFill-${item.key})`} strokeWidth={2} connectNulls />
-                  : <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2} dot={false} connectNulls />)}
-              </ChartComponent>
-            </ResponsiveContainer>
+            <>
+              <ChartLegend items={chartKeys.map((item) => ({ label: item.label, color: item.color, value: latest(item.key) }))} />
+              <div className="insight-detail-plot" data-swipe-ignore>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ChartComponent data={chartRows} margin={chartMargin}>
+                    <CartesianGrid {...gridProps} />
+                    <XAxis dataKey="time" {...xAxisProps} tickFormatter={(value) => formatAxisTime(Number(value), config.hours)} minTickGap={36} />
+                    <YAxis {...yAxisProps} domain={config.unit === '%' || config.unit === 'score' ? [0, 100] : ['auto', 'auto']} tickFormatter={(value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} />
+                    <Tooltip cursor={tooltipCursor} content={<GlassTooltip labelFormat={(label) => new Date(Number(label)).toLocaleString()} valueFormat={(value) => formatValue(value, config.unit)} />} />
+                    {chartKeys.map((item) => config.chart === 'area'
+                      ? <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} fill={item.color} fillOpacity={0.1} {...lineProps} connectNulls />
+                      : <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} {...lineProps} connectNulls />)}
+                  </ChartComponent>
+                </ResponsiveContainer>
+              </div>
+            </>
           ) : timeline.length ? (
-            <ul className="state-timeline">
+            <ul className="insight-transitions">
               {timeline.map((item) => (
                 <li key={`${item.time}-${item.state}`}>
-                  <Clock size={14} />
-                  <strong>{item.state.replaceAll('_', ' ')}</strong>
+                  <Clock size={14} aria-hidden="true" />
+                  <strong>{sentenceCase(item.state)}</strong>
                   <small>{new Date(item.time).toLocaleString()}</small>
                 </li>
               ))}
             </ul>
+          ) : loading ? (
+            <LoadingState size="compact" label="Loading recorder history" />
           ) : (
-            <div className={`chart-empty ${loading ? 'is-loading' : ''}`}>
-              <TrendingUp size={22} />
-              <span>{emptyMessage}</span>
-            </div>
+            <EmptyState size="compact" icon={<TrendingUp />} title="No chart for this window" hint={emptyMessage} />
           )}
         </div>
 
         <div className="insight-explainer">
-          <span><Info size={16} /></span>
+          <span aria-hidden="true"><Info size={16} /></span>
           <div><h3>How this is measured</h3><p>{config.explanation}</p></div>
         </div>
 
-        <h3 className="insight-subheading"><Sigma size={15} /> Contributing values</h3>
+        <h3 className="insight-subheading"><Sigma size={15} aria-hidden="true" /> Contributing values</h3>
         <div className="factor-grid">
           {config.factors.map((factor) => (
-            <div key={factor.label} className={factor.tone ? `tone-${factor.tone}` : ''}>
-              <span>{factor.label}</span>
+            <div key={factor.label} className={factor.tone ? `is-${factor.tone}` : ''}>
+              <span>
+                {factor.tone === 'good' && <CheckCircle2 size={12} aria-label="OK" />}
+                {(factor.tone === 'warn' || factor.tone === 'danger') && <AlertTriangle size={12} aria-label={factor.tone === 'danger' ? 'Alert' : 'Check'} />}
+                {factor.label}
+              </span>
               <strong>{factor.value}</strong>
               {factor.detail && <small>{factor.detail}</small>}
             </div>
@@ -252,7 +261,7 @@ export function InsightsDetail({ config, onClose }: InsightsDetailProps) {
 
         {config.chips && config.chips.length > 0 && (
           <>
-            <h3 className="insight-subheading"><Activity size={15} /> Related entities</h3>
+            <h3 className="insight-subheading"><Activity size={15} aria-hidden="true" /> Related entities</h3>
             <div className="insight-chip-row">
               {config.chips.map((chip) => <span key={chip.label}><em>{chip.label}</em>{chip.value}</span>)}
             </div>

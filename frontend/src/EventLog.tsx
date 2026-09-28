@@ -1,5 +1,7 @@
-import { X } from 'lucide-react'
+import { History, X } from 'lucide-react'
 import type { LogEntry } from './useEventLog'
+import { useDialog } from './ui/useDialog'
+import { EmptyState } from './ui/StateMessages'
 import './EventLog.css'
 
 interface EventLogProps {
@@ -46,24 +48,31 @@ function groupByDay(events: LogEntry[]): DayGroup[] {
 
 export function EventLog({ events, onClose }: EventLogProps) {
   const groups = groupByDay(events)
+  const ref = useDialog<HTMLElement>({ onClose })
 
   return (
-    <div className="event-log-backdrop" onClick={onClose}>
-      <aside className="event-log-drawer" onClick={(event) => event.stopPropagation()}>
+    <div className="event-log-backdrop" role="presentation" onClick={onClose}>
+      <aside
+        ref={ref}
+        className="event-log-drawer glass-strong"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="event-log-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="sheet-handle" aria-hidden="true" />
         <header className="event-log-header">
           <div>
-            <h2>Activity</h2>
+            <h2 id="event-log-title">Activity</h2>
             <span>{events.length} {events.length === 1 ? 'event' : 'events'}</span>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close activity log">
-            <X size={18} />
+          <button type="button" className="sheet-close" data-autofocus onClick={onClose} aria-label="Close activity log">
+            <X size={20} aria-hidden="true" />
           </button>
         </header>
         <div className="event-log-body">
           {events.length === 0 ? (
-            <div className="event-log-empty">
-              <p>No activity yet.</p>
-            </div>
+            <EmptyState icon={<History />} title="No activity yet" hint="Doors, locks and lights changing state will be listed here." />
           ) : (
             groups.map((group) => (
               <section className="event-log-group" key={group.label}>
@@ -71,11 +80,11 @@ export function EventLog({ events, onClose }: EventLogProps) {
                 <ul>
                   {group.entries.map((entry) => (
                     <li className={`event-log-row tone-${entry.tone}`} key={entry.id}>
-                      <i />
+                      <i aria-hidden="true" />
                       <div className="event-log-row-main">
                         <div className="event-log-row-top">
                           <strong>{entry.title}</strong>
-                          <time>{timeLabel(entry.at)}</time>
+                          <time dateTime={new Date(entry.at).toISOString()}>{timeLabel(entry.at)}</time>
                         </div>
                         <span>{entry.message}</span>
                       </div>

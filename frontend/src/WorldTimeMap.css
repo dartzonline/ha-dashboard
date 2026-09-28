@@ -1,38 +1,40 @@
-.world-view { height: 100%; min-height: 0; padding-top: 8px; display: flex; flex-direction: column; gap: 8px; }
-.world-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
-.world-heading h2 { margin: 2px 0 0; font-size: clamp(1.2rem, 2vw, 1.8rem); font-weight: 700; letter-spacing: -.03em; }
-.world-heading p { margin: 0; color: var(--muted); font-size: .82rem; }
-.eyebrow { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .68rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
-/* Live readout for whatever is selected — a preset marker or a point tapped on the map. */
-.world-selection {
-  min-width: min(420px, 46vw); padding: 10px 14px; border: 1px solid var(--border);
-  border-radius: 12px; background: var(--surface); display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 7px;
+.world-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--gap); }
+/* Live readout for whatever is selected: a preset marker or a point tapped on the map. It floats on
+   the map as a glass pane so the map keeps its full height when a reading appears. */
+.world-map .world-selection {
+  position: absolute; top: 12px; right: 12px; z-index: 4;
+  width: min(420px, calc(100% - 24px)); padding: 12px 16px; border-radius: var(--r-md); display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 8px;
+  pointer-events: none; animation: world-selection-in .2s var(--ease);
 }
-.selection-icon { width: 40px; height: 40px; border-radius: 50%; color: var(--marker-color, var(--accent)); background: color-mix(in srgb, var(--marker-color, var(--accent)) 16%, transparent); display: grid; place-items: center; }
+@keyframes world-selection-in { from { opacity: 0; transform: translateY(-6px); } }
+.selection-icon { width: 40px; height: 40px; border-radius: 50%; color: var(--marker-color); background: color-mix(in srgb, var(--marker-color) 16%, transparent); display: grid; place-items: center; }
 .selection-place, .selection-time { min-width: 0; display: grid; }
-.selection-place span { color: var(--muted); font-size: .62rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.selection-place span { color: var(--muted); font-size: .7rem; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 .selection-place strong { margin-top: 2px; color: var(--text); font-size: 1.05rem; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.selection-place small { color: var(--muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selection-place small { color: var(--muted); font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selection-time { text-align: right; }
 .selection-time strong { color: var(--text); font: 750 1.55rem var(--mono); letter-spacing: -.04em; white-space: nowrap; }
-.selection-time small { color: var(--muted); font-size: .7rem; white-space: nowrap; }
-.selection-meta { grid-column: 1 / -1; margin: 0; padding-top: 7px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .72rem; }
+.selection-time small { color: var(--muted); font-size: .72rem; white-space: nowrap; }
+.selection-meta { grid-column: 1 / -1; margin: 0; padding-top: 8px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 550; }
 
 /* Map and clocks share the row so neither letterboxes the panel. */
-.world-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(232px, 268px); gap: 10px; }
-.world-map-shell { min-height: 0; border: 1px solid var(--border); border-radius: 12px; background: #0a0b0f; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow); }
-.timezone-ruler { flex: 0 0 auto; height: 32px; padding: 0 1px; border-bottom: 1px solid var(--border); color: var(--muted); background: var(--canvas); display: grid; grid-template-columns: repeat(24, 1fr); align-items: center; font: 650 .68rem var(--mono); }
+.world-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(232px, 268px); gap: var(--gap); }
+.world-map-shell { min-height: 0; border: 1px solid var(--glass-border); border-radius: var(--r-lg); background: var(--canvas); display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--glass-edge), var(--glass-shadow); }
+.timezone-ruler { flex: 0 0 auto; height: 32px; padding: 0 1px; border-bottom: 1px solid var(--border); color: var(--muted); background: var(--glass-bg-strong); display: grid; grid-template-columns: repeat(24, 1fr); align-items: center; font: 650 .68rem var(--mono); }
 .timezone-ruler span { text-align: center; }
-.timezone-ruler .is-noon { color: var(--warn); }
+.timezone-ruler .is-noon { color: var(--text-strong); font-weight: 800; }
 .timezone-ruler .is-midnight { color: var(--accent); }
-.world-map { flex: 1 1 auto; position: relative; min-height: 320px; overflow: hidden; background: #0a0b0f; touch-action: manipulation; }
+.world-map { flex: 1 1 auto; position: relative; min-height: 320px; overflow: hidden; background: var(--canvas); touch-action: manipulation; }
 /* The whole map is the control; markers sit above this and stop the event. */
 .map-surface { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; cursor: crosshair; }
+/* A full-bleed hit target must not shrink under the global press feedback. */
+.map-surface:not(:disabled):active { transform: none; }
 .map-surface:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
 /* Direct child only: this is the basemap layer, not the pin/legend glyphs nested inside it.
    isolate keeps the layers' blend modes inside the map instead of reaching the page behind it. */
 .world-map > svg { position: absolute; inset: 0; width: 100%; height: 100%; isolation: isolate; }
+/* The fills below paint the map imagery itself (ocean, night, sunlit wash), not UI chrome. */
 .map-ocean { fill: #0a0b0f; }
 .satellite-layer { filter: saturate(1.15) contrast(1.12) brightness(1.02); }
 /* Night reads as dusk, not a hole in the map: deep blue at two thirds rather than near-black, so
@@ -43,65 +45,62 @@
 .day-wash { fill: #ffd9a3; opacity: .1; mix-blend-mode: soft-light; }
 .map-grid line { stroke: rgba(210, 208, 202, .11); stroke-width: .8; vector-effect: non-scaling-stroke; }
 .route-line { fill: none; stroke: color-mix(in srgb, var(--accent) 42%, transparent); stroke-width: 1.3; stroke-dasharray: 5 7; vector-effect: non-scaling-stroke; }
-/* Refined jewel-tone dots instead of thick-bordered map pins: a small glass-highlight
-   circle, a soft glow ring, and a pill label matching the app's chip/badge language. */
-.map-marker { --marker-color: var(--accent); position: absolute; z-index: 2; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); cursor: pointer; }
+/* A 44px target centred on a small jewel dot: the dot stays refined, the finger still lands. */
+.map-marker { --marker-color: var(--accent); position: absolute; z-index: 2; width: var(--tap); height: var(--tap); min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; transform: translate(-50%, -50%); cursor: pointer; }
+.map-marker:not(:disabled):active { transform: translate(-50%, -50%) scale(.94); }
 .marker-dot {
   /* Spans are inline by default, which silently drops the width/height below. */
   display: block;
-  position: relative; z-index: 2; width: 12px; height: 12px; margin: 4px; border-radius: 50%;
+  position: relative; z-index: 2; width: 12px; height: 12px; margin: 16px; border-radius: 50%;
   background:
-    radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--marker-color) 55%, #fff), color-mix(in srgb, var(--marker-color) 88%, #04070d) 68%);
+    radial-gradient(circle at 34% 28%, color-mix(in srgb, var(--marker-color) 55%, var(--text-strong)), color-mix(in srgb, var(--marker-color) 88%, var(--canvas)) 68%);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--marker-color) 16%, transparent), 0 2px 7px rgba(0, 0, 0, .45);
-  transition: transform .18s ease, box-shadow .18s ease;
+  transition: transform .18s ease;
 }
-.marker-pulse { position: absolute; z-index: 1; inset: 2px; border: 1px solid color-mix(in srgb, var(--marker-color) 60%, transparent); border-radius: 50%; opacity: .3; }
-.map-marker:hover .marker-dot, .map-marker.is-selected .marker-dot { transform: scale(1.3); box-shadow: 0 0 0 5px color-mix(in srgb, var(--marker-color) 22%, transparent), 0 3px 10px rgba(0, 0, 0, .5); }
+.marker-pulse { position: absolute; z-index: 1; inset: 14px; border: 1px solid color-mix(in srgb, var(--marker-color) 60%, transparent); border-radius: 50%; opacity: .3; }
+.map-marker.is-selected .marker-dot { transform: scale(1.3); }
 .map-marker.is-selected .marker-pulse { animation: marker-pulse 2.2s ease-out infinite; }
-.marker-label { position: absolute; left: 24px; top: -5px; min-width: 76px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--marker-color) 32%, var(--border)); border-radius: 8px; color: var(--text); background: color-mix(in srgb, var(--surface) 90%, var(--canvas)); display: grid; text-align: left; white-space: nowrap; box-shadow: 0 6px 18px rgba(0, 0, 0, .35); backdrop-filter: blur(10px); }
+.world-map .marker-label { position: absolute; left: 36px; top: 7px; min-width: 76px; padding: 5px 10px; border-radius: var(--r-sm); color: var(--text); display: grid; text-align: left; white-space: nowrap; box-shadow: var(--glass-edge); }
 .marker-label strong { font-size: .74rem; font-weight: 700; line-height: 1.2; }
-.marker-label small { margin-top: 2px; color: color-mix(in srgb, var(--marker-color) 80%, var(--text)); font: 700 .7rem var(--mono); }
-.marker-auckland .marker-label { right: 24px; left: auto; text-align: right; }
-.map-credit { position: absolute; left: 10px; bottom: 9px; z-index: 2; color: color-mix(in srgb, var(--muted) 85%, transparent); font-size: .55rem; text-decoration: none; text-shadow: 0 1px 3px #000; }
-.map-credit:hover { color: #fff; text-decoration: underline; }
-.map-legend { position: absolute; right: 12px; bottom: 10px; z-index: 2; padding: 6px 9px; border: 1px solid var(--border); border-radius: 7px; color: var(--muted); background: color-mix(in srgb, var(--canvas) 80%, transparent); display: flex; gap: 12px; font-size: .68rem; white-space: nowrap; backdrop-filter: blur(8px); }
+.marker-label small { margin-top: 2px; color: var(--muted); font: 700 .7rem var(--mono); }
+.world-map .marker-auckland .marker-label { right: 36px; left: auto; text-align: right; }
+.map-credit { position: absolute; left: 12px; bottom: 10px; z-index: 2; color: var(--muted); font-size: .6rem; text-decoration: none; }
+.map-credit:hover { color: var(--text-strong); text-decoration: underline; }
+.world-map .map-legend { position: absolute; right: 12px; bottom: 10px; z-index: 2; padding: 6px 12px; color: var(--muted); display: flex; gap: 12px; font-size: .72rem; white-space: nowrap; }
 .map-legend span { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
 /* Lucide glyphs are flex items here; without this they collapse and print over their label. */
-.map-legend svg, .clock-card-meta svg, .selection-meta svg, .eyebrow svg { flex: 0 0 auto; }
-/* Rows share the rail so a pinned fifth clock still fits without scrolling. */
+.map-legend svg, .clock-card-meta svg, .selection-meta svg { flex: 0 0 auto; }
 /* auto rows, not 1fr: at wall-panel type sizes a forced equal share cut the meta line off the
-   bottom of each card. Cards now take the height they need and the column scrolls if that overflows. */
-.world-clock-grid { min-height: 0; display: grid; grid-auto-rows: min-content; align-content: start; gap: 8px; overflow-y: auto; scrollbar-width: none; }
+   bottom of each card. Cards take the height they need and the column scrolls if that overflows. */
+.world-clock-grid { min-height: 0; display: grid; grid-auto-rows: min-content; align-content: start; gap: 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
 .world-clock-grid::-webkit-scrollbar { display: none; }
-.world-clock-card { position: relative; min-width: 0; min-height: 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 7px; text-align: left; cursor: pointer; box-shadow: var(--shadow); transition: border-color .18s ease, transform .18s ease, background .18s ease; }
-.world-clock-card:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
-.world-clock-card.is-selected { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--surface) 76%, var(--accent-soft)); box-shadow: var(--shadow); }
+.world-clock-card { position: relative; min-width: 0; min-height: var(--tap); padding: 10px 12px; border-radius: var(--r-md); color: var(--text); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 8px; text-align: left; cursor: pointer; }
+.world-clock-card:hover { border-color: var(--border-strong); }
+.world-clock-card.is-selected { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background-color: color-mix(in srgb, var(--accent) 12%, var(--glass-bg)); }
 .clock-card-icon { width: 32px; height: 32px; border-radius: 50%; color: var(--marker-color); background: color-mix(in srgb, var(--marker-color) 16%, transparent); display: grid; place-items: center; }
 .clock-card-place, .clock-card-time { min-width: 0; display: grid; }
-.clock-card-time { text-align: right; }
-.clock-card-time strong { font: 700 .68rem var(--mono); letter-spacing: -.02em; white-space: nowrap; }
-.clock-card-meta { grid-column: 1 / -1; margin: 0; padding-top: 3px; color: var(--muted); display: flex; align-items: center; gap: 4px; font-size: .6rem; }
-.clock-card-place strong { overflow: hidden; display: flex; align-items: baseline; gap: 4px; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.clock-card-place strong { overflow: hidden; display: flex; align-items: baseline; gap: 4px; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
 /* The country already reads on the line below, so the code chip only crowded the city name out. */
 .clock-card-code { display: none; }
-
-/* A dropped pin needs an obvious way out that is not hidden inside the clock list. */
-.map-clear-pin { position: absolute; left: 10px; top: 10px; z-index: 3; min-height: 30px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); background: color-mix(in srgb, var(--canvas) 85%, transparent); display: flex; align-items: center; gap: 6px; font-size: .68rem; cursor: pointer; backdrop-filter: blur(8px); }
-.map-clear-pin:hover { color: var(--danger); border-color: var(--danger); }
-.clock-card-place small, .clock-card-time small { margin-top: 1px; color: var(--muted); font-size: .62rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clock-card-place small, .clock-card-time small { margin-top: 1px; color: var(--muted); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clock-card-time { text-align: right; }
 .clock-card-time strong { font: 750 .92rem var(--mono); white-space: nowrap; }
-.clock-card-meta { grid-column: 1 / -1; padding-top: 5px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .7rem; overflow: hidden; white-space: nowrap; }
+.clock-card-meta { grid-column: 1 / -1; padding-top: 5px; border-top: 1px solid var(--border); color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 550; overflow: hidden; white-space: nowrap; }
+
+/* A dropped pin needs an obvious way out that is not hidden inside the clock list. */
+.world-map .map-clear-pin { position: absolute; left: 12px; top: 12px; z-index: 3; min-height: var(--tap); padding: 0 16px; color: var(--text); display: flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 650; }
 
 /* Dropped pin: the point the panel was actually touched, with the time it keeps. */
 .map-pin { --marker-color: var(--accent-strong); position: absolute; z-index: 3; color: var(--marker-color); transform: translate(-50%, -100%); pointer-events: none; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .6)); }
 .pin-rings { position: absolute; left: 50%; bottom: -6px; width: 13px; height: 13px; margin-left: -6.5px; border: 1px solid var(--marker-color); border-radius: 50%; animation: marker-pulse 2s ease-out infinite; }
-.pin-label { position: absolute; left: 26px; bottom: -6px; padding: 5px 10px; border: 1px solid color-mix(in srgb, var(--marker-color) 40%, var(--border)); border-radius: 9px; background: color-mix(in srgb, var(--surface) 88%, var(--canvas)); display: grid; text-align: left; white-space: nowrap; backdrop-filter: blur(10px); }
-.pin-label strong { color: var(--marker-color); font: 750 .88rem var(--mono); }
-.pin-label small { color: var(--text); font-size: .7rem; }
-.map-pin.flip-label .pin-label { left: auto; right: 26px; text-align: right; }
-.world-clock-card.is-pinned { padding-right: 40px; border-style: dashed; border-color: color-mix(in srgb, var(--marker-color) 55%, var(--border)); }
-.clock-card-clear { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 8px; color: var(--muted); background: var(--surface-raised); display: grid; place-items: center; }
+.world-map .pin-label { position: absolute; left: 26px; bottom: -6px; padding: 5px 10px; border-radius: var(--r-sm); display: grid; text-align: left; white-space: nowrap; box-shadow: var(--glass-edge); }
+.pin-label strong { color: var(--text); font: 750 .88rem var(--mono); }
+.pin-label small { color: var(--muted); font-size: .72rem; }
+.world-map .map-pin.flip-label .pin-label { left: auto; right: 26px; text-align: right; }
+.world-clock-card.is-pinned { padding-right: 44px; border-style: dashed; }
+/* Drawn at 28px so it does not crowd the card; the ::after pads the touch target to 44px. */
+.clock-card-clear { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: var(--r-sm); color: var(--muted); background: var(--surface-raised); display: grid; place-items: center; }
+.clock-card-clear::after { content: ''; position: absolute; inset: -8px; }
 .clock-card-clear:hover { color: var(--danger); background: var(--danger-soft); }
 
 @keyframes marker-pulse { from { opacity: .65; transform: scale(.65); } to { opacity: 0; transform: scale(1.5); } }
@@ -111,9 +110,7 @@
   .world-clock-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(84px, auto); overflow: visible; }
 }
 @media (max-width: 680px) {
-  .world-view { padding-top: 14px; }
-  .world-heading { align-items: stretch; flex-direction: column; gap: 8px; }
-  .world-selection { width: 100%; }
+  .world-map .world-selection { top: auto; bottom: 12px; right: 12px; }
   .timezone-ruler { display: none; }
   .world-map { min-height: 270px; aspect-ratio: 1.35 / 1; }
   .world-map > svg { width: 138%; max-width: none; transform: translateX(-18%); }
@@ -121,9 +118,14 @@
   .marker-frankfurt { left: 47% !important; }
   .marker-hyderabad { left: 74% !important; }
   .marker-auckland { left: 94% !important; }
-  .marker-label { left: 31px; padding: 4px 6px; }
-  .marker-home .marker-label, .marker-auckland .marker-label { right: 31px; left: auto; text-align: right; }
-  .map-legend { display: none; }
+  .world-map .marker-label { left: 43px; padding: 4px 6px; }
+  .world-map .marker-home .marker-label, .world-map .marker-auckland .marker-label { right: 43px; left: auto; text-align: right; }
+  .world-map .map-legend { display: none; }
   .world-clock-grid { grid-template-columns: 1fr; }
   .world-clock-card { min-height: 90px; }
 }
+
+/* Attribution never sits on raw map tiles: a small near-opaque backing keeps it legible over bright
+   imagery without competing with the data. */
+.map-credit { padding: 1px 7px; border-radius: 6px; background: var(--glass-bg-strong); color: var(--muted); font-size: .6rem; text-shadow: none; }
+

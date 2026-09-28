@@ -1,6 +1,8 @@
 import { ArrowRight, DoorOpen, Droplets, Lock, ShieldCheck, Warehouse, Wrench, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { HAEntity, TileConfig } from './types'
+import { friendlyName } from './entityNames'
+import { useDialog } from './ui/useDialog'
 import './SecurityPanel.css'
 
 interface SecurityPanelProps {
@@ -29,10 +31,6 @@ interface SecurityGroup {
 }
 
 const openDoorClasses = ['door', 'garage_door', 'window', 'opening']
-
-function friendlyName(entity: HAEntity) {
-  return String(entity.attributes.friendly_name ?? entity.entity_id.split('.')[1].replaceAll('_', ' '))
-}
 
 function deviceClass(entity: HAEntity) {
   return String(entity.attributes.device_class ?? '')
@@ -63,6 +61,7 @@ function toItem(entity: HAEntity, icon: string, state: string, now: Date, inspec
 }
 
 export function SecurityPanel({ entities, onInspect, onOpenSection, onClose, now }: SecurityPanelProps) {
+  const ref = useDialog<HTMLElement>({ onClose })
   const all = Array.from(entities.values())
   const openDoorCountEntity = entities.get('sensor.doors_open_count')
 
@@ -107,17 +106,17 @@ export function SecurityPanel({ entities, onInspect, onOpenSection, onClose, now
 
   return (
     <div className="detail-backdrop" role="presentation" onClick={onClose}>
-      <section className="detail-sheet security-sheet" role="dialog" aria-modal="true" aria-labelledby="security-title" onClick={(event) => event.stopPropagation()}>
-        <div className="sheet-handle" />
+      <section ref={ref} className="detail-sheet glass-strong security-sheet" role="dialog" aria-modal="true" aria-labelledby="security-title" onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-handle" aria-hidden="true" />
         <header>
-          <span className="detail-icon"><ShieldCheck size={24} /></span>
+          <span className={`detail-icon ${total ? 'is-danger' : 'is-good'}`}><ShieldCheck size={24} aria-hidden="true" /></span>
           <div><p>Live security status</p><h2 id="security-title">{total ? `${total} item${total === 1 ? '' : 's'} need attention` : 'Everything is secure'}</h2></div>
-          <button onClick={onClose} title="Close" aria-label="Close security details"><X size={20} /></button>
+          <button type="button" className="sheet-close" data-autofocus onClick={onClose} title="Close" aria-label="Close security details"><X size={20} aria-hidden="true" /></button>
         </header>
 
         {groups.length === 0 ? (
           <div className="security-clear">
-            <ShieldCheck size={30} />
+            <ShieldCheck size={30} aria-hidden="true" />
             <strong>All doors closed and locked</strong>
             <p>No open doors or windows, no unlocked locks, and no leak or device faults reported right now.</p>
           </div>
@@ -127,10 +126,11 @@ export function SecurityPanel({ entities, onInspect, onOpenSection, onClose, now
               const GroupIcon = group.icon
               return (
                 <section key={group.id} className={`security-group tone-${group.tone}`}>
-                  <h3><GroupIcon size={16} />{group.title}<em>{group.items.length}</em></h3>
+                  <h3><GroupIcon size={16} aria-hidden="true" />{group.title}<em>{group.items.length}</em></h3>
                   <div className="security-rows">
                     {group.items.map((item) => (
                       <button
+                        type="button"
                         key={item.entityId}
                         onClick={() => {
                           if (item.inspectable === false) return
@@ -150,7 +150,7 @@ export function SecurityPanel({ entities, onInspect, onOpenSection, onClose, now
           </div>
         )}
 
-        <button className="security-section-link" onClick={onOpenSection}>Open the Security page<ArrowRight size={16} aria-hidden="true" /></button>
+        <button type="button" className="detail-action security-section-link" onClick={onOpenSection}>Open the Security page<ArrowRight size={16} aria-hidden="true" /></button>
       </section>
     </div>
   )

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { MapPinned } from 'lucide-react'
 import { buildFlightLine, project, unwrap } from './routeGeometry'
 import type { Point } from './routeGeometry'
+import { EmptyState } from './ui/StateMessages'
 import './RouteMap.css'
 
 export interface RoutePoint {
@@ -167,7 +169,8 @@ export function RouteMap({ from, to, position, flownPath, progress = 0, callsign
   const unplaced = !isPlaced(from) || !isPlaced(to)
 
   return (
-    <div className="route-map" ref={ref}>
+    // A map is its own gesture surface: a drag across it must never also turn the page.
+    <div className="route-map" ref={ref} data-swipe-ignore>
       {geometry && (
         <div className="route-map-tiles" aria-hidden="true">
           {geometry.tiles.map((tile) => (
@@ -224,11 +227,15 @@ export function RouteMap({ from, to, position, flownPath, progress = 0, callsign
       )}
 
       {unplaced && (
-        <p className="route-map-empty">
-          {from.code || to.code
-            ? `Waiting on coordinates for ${from.code ?? '—'} → ${to.code ?? '—'}`
-            : 'Route not resolved yet'}
-        </p>
+        <div className="route-map-empty">
+          <EmptyState
+            size="compact"
+            icon={<MapPinned />}
+            title={from.code || to.code
+              ? `Waiting on coordinates for ${from.code ?? '—'} → ${to.code ?? '—'}`
+              : 'Route not resolved yet'}
+          />
+        </div>
       )}
 
       {callsign && <span className="route-map-callsign">{callsign}</span>}

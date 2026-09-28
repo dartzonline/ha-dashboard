@@ -44,11 +44,15 @@ def apply_addon_options() -> None:
     present_but_empty: list[str] = []
     for option_key, env_key in OPTION_ENV_MAP.items():
         value = options.get(option_key)
-        if value:
-            os.environ[env_key] = str(value)
-            applied.append(env_key)
-        elif option_key in options:
-            present_but_empty.append(option_key)
+        # Only `None` and the empty string mean "unset". `0`, `0.0` and `False` are real values --
+        # `airlabs_daily_budget: 0` is how someone switches a metered source off, and a plain
+        # truthiness test used to drop it and fall back to the default budget instead.
+        if value is None or value == "":
+            if option_key in options:
+                present_but_empty.append(option_key)
+            continue
+        os.environ[env_key] = str(value)
+        applied.append(env_key)
 
     print(f"[addon_entrypoint] {OPTIONS_PATH} keys: {sorted(options.keys())}", flush=True)
     print(f"[addon_entrypoint] env vars applied: {applied or 'none'}", flush=True)

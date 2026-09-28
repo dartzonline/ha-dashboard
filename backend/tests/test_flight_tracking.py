@@ -518,3 +518,115 @@ def _run(coro):
 async def _stub_board():
     """The board build makes live upstream calls; the pin bookkeeping is what these assert."""
     return {"flights": []}
+
+
+# ---------------------------------------------------------------------------------------------
+# Request bounds, ETA fields, status probe cache, budget spend
+# ---------------------------------------------------------------------------------------------
+
+from datetime import datetime, timezone
+
+from fastapi.testclient import TestClient
+
+from app import flight_sources
+from app.main import app as _app
+
+_client = TestClient(_app)
+
+
+class TestNearbyBounds:
+    def test_out_of_range_coordinates_and_limits_are_422s(self):
+        assert _client.get("/api/flights/nearby", params={"latitude": 91, "longitude": 0}).status_code == 422
+        assert _client.get("/api/flights/nearby", params={"latitude": 0, "longitude": -181}).status_code == 422
+        assert _client.get("/api/flights/nearby", params={"latitude": 0, "longitude": 0, "limit": 0}).status_code == 422
+        assert _client.get("/api/flights/nearby", params={"latitude": 0, "longitude": 0, "limit": 51}).status_code == 422
+        assert _client.get("/api/flights/nearby", params={"longitude": 0}).status_code == 422
+
+    def test_a_valid_request_still_answers(self, monkeypatch):
+        async def no_states(client, lat, lon, radius):
+            return []
+
+        monkeypatch.setattr(flights, "fetch_states_in_radius", no_states)
+        response = _client.get("/api/flights/nearby", params={"latitude": 30.27, "longitude": -97.74, "limit": 50})
+        assert response.status_code == 200
+        assert response.json()["aircraft"] == []
+
+
+class TestEtaFields:
+    def test_eta_at_is_utc_iso8601_with_minutes_left(self):
+        fields = flights._eta_fields(1.5, now=datetime(2025, 6, 1, 12, 0, tzinfo=timezone.utc))
+        assert fields["etaAt"] == "2025-06-01T13:30:00Z"
+        assert fields["minutesLeft"] == 90
+        assert isinstance(fields["minutesLeft"], int)
+        assert fields["etaLine"].startswith("ETA ~") and fields["etaLine"].endswith("90 min left")
+
+    def test_the_empty_context_carries_the_new_fields(self):
+        context = flights._empty_track_context()
+        assert context["etaAt"] is None and context["minutesLeft"] is None and context["etaLine"] is None
+
+
+class TestStatusProbeCache:
+    def test_the_opensky_probe_is_reused_for_a_minute(self, monkeypatch):
+        monkeypatch.setenv("OPENSKY_CLIENT_ID", "id")
+        monkeypatch.setenv("OPENSKY_CLIENT_SECRET", "secret")
+        flights._status_probe_cache.update({"at": 0.0, "tokenOk": False, "statesOk": False})
+        probes = 0
+
+        async def fake_token(client):
+            nonlocal probes
+            probes += 1
+            return "tok"
+
+        async def fake_headers(client):
+            return {"Authorization": "Bearer tok"}
+
+        class _Probe:
+            status_code = 200
+
+        async def fake_get(*args, **kwargs):
+            return _Probe()
+
+        monkeypatch.setattr(flights, "get_opensky_token", fake_token)
+        monkeypatch.setattr(flights, "_opensky_headers", fake_headers)
+        monkeypatch.setattr(flights, "get_http_client", lambda: types.SimpleNamespace(get=fake_get))
+
+        first = _client.get("/api/flights/status").json()
+        second = _client.get("/api/flights/status").json()
+        assert first["opensky"] == {"configured": True, "tokenOk": True, "statesOk": True, "historyAvailable": True}
+        assert second["opensky"]["statesOk"] is True
+        assert probes == 1
+
+        flights._status_probe_cache["at"] = time.time() - flights.STATUS_PROBE_TTL - 1
+        _client.get("/api/flights/status")
+        assert probes == 2
+        flights._status_probe_cache.update({"at": 0.0, "tokenOk": False, "statesOk": False})
+
+
+class TestScheduleBudget:
+    def test_an_unsplittable_flight_number_spends_no_flightstats_budget(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(flight_sources, "_BUDGET_DIR", tmp_path)
+        monkeypatch.setattr(flight_sources, "_BUDGET_PATH", tmp_path / "quota.json")
+        monkeypatch.delenv("FLIGHTSTATS_DAILY_BUDGET", raising=False)
+        monkeypatch.setattr(flight_sources, "budget", flight_sources.Budget())
+        flights._schedule_cache.clear()
+        scraped: list[str] = []
+
+        async def scrape(client, number, on_error):
+            scraped.append(number)
+            return {}
+
+        async def no_airlabs(client, number):
+            return {}
+
+        monkeypatch.setattr(flight_sources, "schedule_from_flightstats", scrape)
+        monkeypatch.setattr(flights, "airlabs_schedule", no_airlabs)
+
+        assert _run(flights.resolve_schedule(None, "N12345")) == {}  # a registration, not a flight number
+        assert flight_sources.budget.used("flightstats") == 0
+        assert scraped == []
+
+        flights._schedule_cache.clear()
+        _run(flights.resolve_schedule(None, "AA193"))
+        assert flight_sources.budget.used("flightstats") == 1
+        assert scraped == ["AA193"]
+        flights._schedule_cache.clear()

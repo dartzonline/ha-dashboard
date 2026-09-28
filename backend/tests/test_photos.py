@@ -375,13 +375,25 @@ class TestDeleteRoute:
         assert response.json() == {"deleted": False}
 
 
+async def _public(host: str) -> list[str]:
+    return ["93.184.216.34"]
+
+
+async def _private(host: str) -> list[str]:
+    return ["192.168.1.20"]
+
+
 class TestAddByUrl:
+    @pytest.fixture(autouse=True)
+    def resolve_to_a_public_address(self, monkeypatch):
+        monkeypatch.setattr(photos, "_resolve_host", _public)
+
     def test_a_non_http_url_is_rejected_before_any_fetch_is_attempted(self):
         response = client.post("/api/photos/url", json={"url": "not-a-url"})
         assert response.status_code == 400
 
     def test_a_fetched_image_is_stored_like_an_upload(self, monkeypatch):
-        monkeypatch.setattr(photos.httpx, "AsyncClient", lambda **kwargs: _FakeAsyncClient(TINY_GIF, "image/jpeg"))
+        monkeypatch.setattr(photos, "_get_http_client", lambda: _FakeAsyncClient(TINY_GIF, "image/jpeg"))
         response = client.post("/api/photos/url", json={"url": "https://example.com/pic.jpg"})
         assert response.status_code == 200
         body = response.json()
@@ -390,20 +402,151 @@ class TestAddByUrl:
 
     def test_an_oversized_fetch_is_rejected_mid_stream_rather_than_fully_buffered(self, monkeypatch):
         monkeypatch.setattr(photos, "MAX_PHOTO_BYTES", 4)
-        monkeypatch.setattr(photos.httpx, "AsyncClient", lambda **kwargs: _FakeAsyncClient(TINY_GIF, "image/jpeg"))
+        monkeypatch.setattr(photos, "_get_http_client", lambda: _FakeAsyncClient(TINY_GIF, "image/jpeg"))
         response = client.post("/api/photos/url", json={"url": "https://example.com/pic.jpg"})
         assert response.status_code == 400
 
     def test_an_unreachable_url_is_reported_rather_than_crashing(self, monkeypatch):
-        monkeypatch.setattr(photos.httpx, "AsyncClient", lambda **kwargs: _FailingAsyncClient())
+        monkeypatch.setattr(photos, "_get_http_client", lambda: _FailingAsyncClient())
         response = client.post("/api/photos/url", json={"url": "https://example.com/pic.jpg"})
         assert response.status_code == 502
+        # The transport error text can name resolved addresses; the caller gets a fixed message.
+        assert response.json() == {"detail": "Could not fetch that image"}
+        assert "boom" not in response.text
+
+    @pytest.mark.parametrize("url", [
+        "http://supervisor/core/api/states",
+        "http://homeassistant:8123/api/",
+        "http://hassio/",
+        "http://localhost:8000/api/health",
+        "http://homeassistant.local:8123/",
+    ])
+    def test_home_assistant_and_local_hostnames_are_refused_without_a_lookup(self, monkeypatch, url):
+        async def no_lookup(host: str) -> list[str]:
+            raise AssertionError("must not resolve a blocked hostname")
+
+        monkeypatch.setattr(photos, "_resolve_host", no_lookup)
+        monkeypatch.setattr(photos, "_get_http_client", lambda: _FailingAsyncClient())
+        response = client.post("/api/photos/url", json={"url": url})
+        assert response.status_code == 400
+        assert "public web addresses" in response.json()["detail"]
+
+    @pytest.mark.parametrize("address", [
+        "127.0.0.1", "10.0.0.5", "172.16.4.4", "192.168.1.20", "169.254.169.254", "100.64.1.1",
+        "224.0.0.1", "0.0.0.0", "::1", "fe80::1", "fd00::5", "::ffff:192.168.1.1",
+    ])
+    def test_a_hostname_that_resolves_to_a_private_address_is_refused(self, monkeypatch, address):
+        async def resolve(host: str) -> list[str]:
+            return [address]
+
+        fetched: list[str] = []
+        monkeypatch.setattr(photos, "_resolve_host", resolve)
+        monkeypatch.setattr(photos, "_get_http_client", lambda: _RecordingAsyncClient(fetched))
+        response = client.post("/api/photos/url", json={"url": "https://cdn.example.com/pic.jpg"})
+        assert response.status_code == 400
+        assert fetched == []
+
+    def test_a_literal_private_ip_is_refused(self, monkeypatch):
+        fetched: list[str] = []
+        monkeypatch.setattr(photos, "_get_http_client", lambda: _RecordingAsyncClient(fetched))
+        assert client.post("/api/photos/url", json={"url": "http://192.168.1.1/admin.jpg"}).status_code == 400
+        assert fetched == []
+
+    def test_a_redirect_to_a_private_address_is_refused(self, monkeypatch):
+        resolved: list[str] = []
+
+        async def resolve(host: str) -> list[str]:
+            resolved.append(host)
+            return ["10.0.0.9"] if host == "router" else ["93.184.216.34"]
+
+        monkeypatch.setattr(photos, "_resolve_host", resolve)
+        monkeypatch.setattr(
+            photos, "_get_http_client",
+            lambda: _RedirectingAsyncClient({"https://example.com/pic.jpg": "http://router/snapshot.jpg"}),
+        )
+        response = client.post("/api/photos/url", json={"url": "https://example.com/pic.jpg"})
+        assert response.status_code == 400
+        assert resolved == ["example.com", "router"]
+
+    def test_a_redirect_to_another_public_address_is_followed(self, monkeypatch):
+        monkeypatch.setattr(
+            photos, "_get_http_client",
+            lambda: _RedirectingAsyncClient({"https://example.com/pic": "https://cdn.example.com/real.jpg"}),
+        )
+        response = client.post("/api/photos/url", json={"url": "https://example.com/pic"})
+        assert response.status_code == 200
+        assert response.json()["sourceUrl"] == "https://example.com/pic"
+        assert response.json()["originalName"] == "real.jpg"
+
+    def test_a_redirect_loop_gives_up(self, monkeypatch):
+        monkeypatch.setattr(
+            photos, "_get_http_client",
+            lambda: _RedirectingAsyncClient({"https://example.com/a": "https://example.com/a"}),
+        )
+        response = client.post("/api/photos/url", json={"url": "https://example.com/a"})
+        assert response.status_code == 400
+
+
+class TestHardening:
+    def test_a_decompression_bomb_is_refused_before_decoding(self, monkeypatch):
+        # A tiny PNG that *declares* a huge canvas: Pillow reads the header lazily, so this is
+        # cheap to build and would only cost memory once something asked for pixels.
+        monkeypatch.setattr(photos, "MAX_PHOTO_PIXELS", 1000)
+        with pytest.raises(ValueError, match="megapixel"):
+            photos.add_photo(make_image(40, 40, fmt="PNG"), "image/png", "bomb.png", None)
+
+    def test_pillows_own_bomb_guard_is_reported_kindly(self, monkeypatch):
+        monkeypatch.setattr(photos.Image, "MAX_IMAGE_PIXELS", 100)
+        with pytest.raises(ValueError, match="too large"):
+            photos.add_photo(make_image(40, 40, fmt="PNG"), "image/png", "bomb.png", None)
+
+    def test_an_oversized_upload_is_refused_from_its_declared_size(self, monkeypatch):
+        monkeypatch.setattr(photos, "MAX_PHOTO_BYTES", 10)
+        response = client.post("/api/photos", files={"file": ("big.jpg", io.BytesIO(SMALL_JPEG), "image/jpeg")})
+        assert response.status_code == 400
+        assert "MB limit" in response.json()["detail"]
+        assert client.get("/api/photos").json() == []
+
+    def test_served_files_are_marked_immutable_for_the_browser_cache(self):
+        added = client.post("/api/photos", files={"file": ("a.jpg", io.BytesIO(SMALL_JPEG), "image/jpeg")}).json()
+        for suffix in ("file", "thumb"):
+            response = client.get(f"/api/photos/{added['id']}/{suffix}")
+            assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+
+    def test_the_index_is_written_atomically_leaving_no_temp_files(self, isolated_photo_store):
+        upload()
+        assert sorted(p.name for p in isolated_photo_store.iterdir()) == ["photos", "photos.json"]
+
+    def test_a_lost_index_is_rebuilt_from_the_files(self, isolated_photo_store):
+        first = upload("one.jpg")
+        second = upload("two.jpg")
+        (isolated_photo_store / "photos.json").unlink()
+        rebuilt = photos.list_photos()
+        assert [entry["id"] for entry in rebuilt] == [first["id"], second["id"]]
+        assert all(entry["recovered"] for entry in rebuilt)
+        assert rebuilt[0]["thumbName"] == first["thumbName"]
+        assert rebuilt[0]["width"] == first["width"]
+        # And it is persisted, so the rebuild happens once rather than on every read.
+        assert (isolated_photo_store / "photos.json").is_file()
+        assert client.get(f"/api/photos/{first['id']}/thumb").status_code == 200
+
+    def test_a_corrupt_index_is_rebuilt_rather_than_read_as_empty(self, isolated_photo_store):
+        entry = upload()
+        (isolated_photo_store / "photos.json").write_text("{not json")
+        assert [item["id"] for item in photos.list_photos()] == [entry["id"]]
+
+    def test_an_empty_library_with_no_index_stays_empty_without_writing_one(self, isolated_photo_store):
+        assert photos.list_photos() == []
+        assert not (isolated_photo_store / "photos.json").exists()
 
 
 class _FakeStreamResponse:
-    def __init__(self, data: bytes, content_type: str):
+    def __init__(self, data: bytes, content_type: str, status_code: int = 200, location: str | None = None):
         self._data = data
+        self.status_code = status_code
         self.headers = {"content-type": content_type}
+        if location:
+            self.headers["location"] = location
 
     def raise_for_status(self) -> None:
         return None
@@ -444,3 +587,29 @@ class _FailingAsyncClient:
 
     async def __aexit__(self, *exc_info: Any) -> None:
         return None
+
+
+class _RecordingAsyncClient(_FakeAsyncClient):
+    """Notes every URL it is asked to fetch, so a test can prove a refused URL was never fetched."""
+
+    def __init__(self, fetched: list[str]):
+        super().__init__(TINY_GIF, "image/jpeg")
+        self._fetched = fetched
+
+    def stream(self, method: str, url: str) -> _FakeStreamResponse:
+        self._fetched.append(url)
+        return super().stream(method, url)
+
+
+class _RedirectingAsyncClient(_FakeAsyncClient):
+    """Answers the given URLs with a 302 to their mapped target, and anything else with an image."""
+
+    def __init__(self, redirects: dict[str, str]):
+        super().__init__(TINY_GIF, "image/jpeg")
+        self._redirects = redirects
+
+    def stream(self, method: str, url: str) -> _FakeStreamResponse:
+        target = self._redirects.get(url)
+        if target:
+            return _FakeStreamResponse(b"", "text/html", status_code=302, location=target)
+        return super().stream(method, url)

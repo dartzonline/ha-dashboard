@@ -1,41 +1,52 @@
-/* Circular thermostat dial: drag the arc, use the steppers, or open the tile for full options. */
-.thermo-knob { position: relative; display: grid; justify-items: center; }
+/* Circular thermostat dial: drag the arc, use the steppers, or open the tile for full options.
+   The arc takes the HVAC tone (warm when heating, cool when cooling, neutral otherwise), which is
+   state, not a data series, so it uses the status/accent tokens rather than --chart-n. */
+.thermo-knob { --thermo-tone: var(--accent-strong); position: relative; display: grid; justify-items: center; }
+.thermo-knob.mode-heating { --thermo-tone: var(--warn); }
+.thermo-knob.mode-cooling { --thermo-tone: var(--accent); }
+.thermo-knob.mode-off { --thermo-tone: var(--muted-2); }
+
 .thermo-knob svg { width: 100%; height: auto; touch-action: none; cursor: grab; overflow: visible; }
 .thermo-knob svg:active { cursor: grabbing; }
 .thermo-knob svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 50%; }
-.thermo-track { fill: none; stroke-width: 9; stroke-linecap: round; }
-.thermo-progress { fill: none; stroke-width: 9; stroke-linecap: round; transition: d .12s linear; filter: none; }
-.thermo-handle { fill: var(--text); stroke: rgba(8, 8, 10, .8); stroke-width: 1.6; filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .45)); }
-.mode-heating .thermo-progress { filter: none; }
-.mode-off .thermo-progress, .mode-idle .thermo-progress { filter: none; }
 
-.thermo-readout { position: absolute; top: 50%; left: 50%; display: grid; justify-items: center; gap: 1px; transform: translate(-50%, -54%); pointer-events: none; text-align: center; }
-.thermo-mode { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: .58rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
-.thermo-readout strong { font: 750 1.6rem var(--mono); line-height: 1; letter-spacing: -.04em; }
-.thermo-readout strong i { font-size: .9rem; font-style: normal; vertical-align: top; }
-.thermo-readout small { color: var(--muted); font-size: .56rem; white-space: nowrap; }
-.mode-cooling .thermo-mode { color: var(--accent); }
-.mode-heating .thermo-mode { color: var(--warn); }
+.thermo-face { fill: rgba(255, 255, 255, .045); stroke: rgba(255, 255, 255, .10); stroke-width: .6; }
+.thermo-track { fill: none; stroke: rgba(255, 255, 255, .09); stroke-width: 8; stroke-linecap: round; }
+.thermo-progress { fill: none; stroke: var(--thermo-tone); stroke-width: 8; stroke-linecap: round; transition: stroke .3s ease; }
+.thermo-handle { fill: var(--text-strong); stroke: rgba(8, 8, 10, .7); stroke-width: 1.4; }
 
-.thermo-steppers { position: absolute; bottom: 0; display: flex; justify-content: center; gap: 8px; }
-.thermo-steppers button { width: 30px; height: 28px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-raised); display: grid; place-items: center; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease; }
-.thermo-steppers button:hover:not(:disabled) { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); background: var(--accent-soft); }
-.thermo-knob.is-disabled { opacity: .55; }
+.thermo-readout { position: absolute; top: 0; left: 0; right: 0; aspect-ratio: 1; display: grid; place-content: center; justify-items: center; gap: 2px; pointer-events: none; text-align: center; }
+.thermo-mode { display: inline-flex; align-items: center; gap: 4px; color: var(--thermo-tone); font-size: .66rem; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
+.thermo-readout strong { font-size: 1.9rem; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -.04em; }
+.thermo-readout strong i { font-size: .55em; font-style: normal; vertical-align: top; }
+.thermo-readout small { color: var(--muted); font-size: .62rem; white-space: nowrap; }
 
-.thermo-knob.size-tile { width: 118px; padding-bottom: 4px; }
-.thermo-knob.size-large { width: 210px; margin: 4px auto 6px; }
-.thermo-knob.size-large .thermo-readout strong { font-size: 2.6rem; }
-.thermo-knob.size-large .thermo-readout strong i { font-size: 1.3rem; }
-.thermo-knob.size-large .thermo-mode { font-size: .68rem; }
-.thermo-knob.size-large .thermo-readout small { font-size: .7rem; }
-.thermo-knob.size-large .thermo-steppers { gap: 12px; }
-.thermo-knob.size-large .thermo-steppers button { width: 44px; height: 40px; }
+/* In flow under the dial, tucked into the arc's open bottom, so both steppers get a full 44px
+   target without covering the number. */
+.thermo-steppers { display: flex; justify-content: center; gap: 10px; margin-top: -14px; }
+.thermo-step {
+  width: var(--tap); height: var(--tap); padding: 0;
+  border: 1px solid var(--glass-border); border-radius: 50%;
+  color: var(--text); background: var(--surface-raised); box-shadow: var(--glass-edge);
+  display: grid; place-items: center;
+}
+.thermo-step:not(:disabled):hover { border-color: color-mix(in srgb, var(--thermo-tone) 45%, var(--glass-border)); }
+.thermo-knob.is-disabled svg { opacity: .55; }
+.thermo-knob.is-disabled .thermo-readout strong { color: var(--muted); }
+
+.thermo-knob.size-tile { width: 124px; }
+.thermo-knob.size-tile .thermo-mode { display: none; }
+.thermo-knob.size-large { width: 220px; margin: 4px auto 6px; }
+.thermo-knob.size-large .thermo-readout strong { font-size: 3rem; }
+.thermo-knob.size-large .thermo-readout small { font-size: .74rem; }
+.thermo-knob.size-large .thermo-steppers { gap: 16px; margin-top: -22px; }
+.thermo-knob.size-large .thermo-step { width: 52px; height: 52px; }
 
 /* The thermostat tile needs extra height for the dial. */
-.entity-tile.is-thermostat { min-height: 214px; align-items: center; }
+.entity-tile.is-thermostat { min-height: 236px; align-items: center; }
 .entity-tile.is-thermostat .tile-heading { align-self: stretch; }
-@media (max-width: 680px) {
-  .entity-tile.is-thermostat { min-height: 208px; }
-  .thermo-knob.size-tile { width: 104px; }
-  .thermo-readout strong { font-size: 1.4rem; }
+@media (max-width: 760px) {
+  .entity-tile.is-thermostat { min-height: 224px; }
+  .thermo-knob.size-tile { width: 112px; }
+  .thermo-knob.size-tile .thermo-readout strong { font-size: 1.6rem; }
 }

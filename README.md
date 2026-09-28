@@ -33,8 +33,8 @@ Docker Compose:
 Native runtime:
 
 1. Install frontend deps: `npm --prefix frontend install`
-2. Create venv: `python3 -m venv backend/.venv`
-3. Install backend deps: `backend/.venv/bin/pip install -r backend/requirements.txt`
+2. Create venv with Python 3.12 or newer: `python3.12 -m venv backend/.venv`
+3. Install backend deps: `backend/.venv/bin/pip install -r backend/requirements.txt` (use `backend/requirements-dev.txt` instead if you also want to run the tests)
 4. Create env file: `cp backend/.env.example backend/.env`
 5. Set `HA_URL` and `HA_TOKEN` in `backend/.env`
 6. Start: `./run.sh`
@@ -264,12 +264,14 @@ Initial native setup:
 
 ```bash
 npm --prefix frontend install
-python3 -m venv backend/.venv
-backend/.venv/bin/pip install -r backend/requirements.txt
+python3.12 -m venv backend/.venv          # Python 3.12+ is required (matches the Docker image)
+backend/.venv/bin/pip install -r backend/requirements-dev.txt   # runtime deps plus pytest
 cp backend/.env.example backend/.env
 ```
 
 Then edit `backend/.env` and run `./run.sh`. The script always rebuilds the frontend so stale assets are not served.
+
+`backend/requirements.txt` is the runtime set the Docker image installs; `backend/requirements-dev.txt` layers the test runner on top. Run the backend tests with `backend/.venv/bin/python -m pytest -q` from `backend/`.
 
 ## Development
 
@@ -299,7 +301,7 @@ npm --prefix frontend run build
 
 - `frontend/`: React, TypeScript, Recharts, and responsive dashboard styling.
 - `backend/`: FastAPI proxy for Home Assistant REST, recorder history, services, WebSocket events, and guarded aggregate actions.
-- `Dockerfile`: multi-stage frontend build, non-root Python runtime, and Home Assistant add-on labels.
+- `Dockerfile`: multi-stage frontend build, a Python 3.12 runtime installing only `backend/requirements.txt`, and Home Assistant add-on labels. It runs as root on purpose: Supervisor writes `/data/options.json` as root-only, and a non-root process could not read the add-on's configuration (see the comment in the Dockerfile).
 - `config.yaml`: local add-on metadata, authenticated ingress, sidebar panel, and Supervisor API permission.
 - `compose.yaml`: runtime environment injection, port publishing, restart policy, and healthcheck.
 - The browser never receives a Home Assistant or Supervisor token.

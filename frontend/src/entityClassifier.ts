@@ -1,3 +1,4 @@
+import { friendlyName } from './entityNames'
 import type { HAEntity, TileKind } from './types'
 
 /** One entity's row from `GET /api/registry` (backend/app/entity_registry.py). */
@@ -59,12 +60,7 @@ function domainOf(entityId: string) {
 
 /** Lowercased id + friendly name, the haystack both this and the backend's heuristics search. */
 function searchable(entity: HAEntity) {
-  return `${entity.entity_id} ${String(entity.attributes.friendly_name ?? '')}`.toLowerCase()
-}
-
-function labelFor(entity: HAEntity) {
-  const fallback = entity.entity_id.split('.')[1]?.replaceAll('_', ' ') ?? entity.entity_id
-  return String(entity.attributes.friendly_name ?? fallback)
+  return `${entity.entity_id} ${friendlyName(entity, '')}`.toLowerCase()
 }
 
 function deviceClassOf(entity: HAEntity) {
@@ -73,7 +69,7 @@ function deviceClassOf(entity: HAEntity) {
 }
 
 function propose(entity: HAEntity, sectionId: string, kind: TileKind, icon: string): TileProposal {
-  return { entityId: entity.entity_id, sectionId, label: labelFor(entity), kind, icon }
+  return { entityId: entity.entity_id, sectionId, label: friendlyName(entity), kind, icon }
 }
 
 /**

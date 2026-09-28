@@ -1,4 +1,5 @@
-/* Condition-driven sky.
+/* Condition-driven sky. Every hex in this file is part of the painted sky (imagery), not UI chrome:
+   text, borders and pills over it use the shared tokens.
    A themed container sets --sky-a / --sky-b / --sky-glow from the .sky-* class below and paints its
    own background from them, so the tint and the animation always agree. */
 
@@ -13,13 +14,15 @@
 .sky-sunny.is-night { --sky-a: #1e2130; --sky-b: #131419; --sky-glow: #8fa0c8; --sky-ink: #ccd3e6; }
 .is-night { --sky-a: #1b1c22; --sky-b: #121317; }
 
-/* Shared surface treatment, so the weather hero and a city card read as the same object. */
+/* Shared surface treatment, so the weather hero and a city sheet read as the same object. The sky
+   gradient is imagery (it paints the weather); the frame around it is ordinary glass, so the pane
+   edge, highlight and shadow match every other pane on the panel. */
 .sky-surface {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(140deg, var(--sky-a, #1b2433), var(--sky-b, #0f1622) 72%);
-  border-color: color-mix(in srgb, var(--sky-glow, var(--accent)) 26%, var(--border));
-  transition: background .5s ease, border-color .5s ease;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-highlight), linear-gradient(140deg, var(--sky-a), var(--sky-b) 72%);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
 }
 
 .sky-atmosphere {

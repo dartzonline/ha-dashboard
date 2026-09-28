@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   AlertTriangle, Battery, BatteryCharging, Bot, CircleDot, Droplets, Filter, MapPin,
   Pause, Play, RotateCw, ScanLine, Sparkles, Waves,
 } from 'lucide-react'
+import { friendlyName } from './entityNames'
 import type { HAEntity, TileConfig } from './types'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
+import { PageFrame } from './ui/PageFrame'
+import type { Tone } from './ui/PageFrame'
 import './RoborockView.css'
 
 interface RoborockViewProps {
@@ -95,9 +99,21 @@ const ERROR_SENSORS: { entityId: string; label: string; clear: string }[] = [
   { entityId: `${PREFIX}_dock_dock_error`, label: 'Dock', clear: 'ok' },
 ]
 
+/** How long an armed confirmation waits for its second tap, matching useTwoTapConfirm. */
+const CONFIRM_MS = 4_000
+
 export function RoborockView({ entities, onService, onExpand }: RoborockViewProps) {
   const [pending, setPending] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // One armed control at a time. useTwoTapConfirm holds a single flag, and two of these controls
+  // can ask for confirmation, so the armed control's id is tracked here instead.
+  const [armed, setArmed] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!armed) return
+    const timer = window.setTimeout(() => setArmed(null), CONFIRM_MS)
+    return () => window.clearTimeout(timer)
+  }, [armed])
 
   const vacuum = entities.get(VACUUM)
   const offline = !vacuum || MISSING.has(vacuum.state)
@@ -144,16 +160,43 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
   }
 
   async function send(id: string, service: string, confirmation?: string) {
-    if (confirmation && !window.confirm(confirmation)) return
+    // window.confirm blocks the socket and is suppressed in some kiosk WebViews, so a risky
+    // command arms on the first tap and fires on the second.
+    if (confirmation && armed !== id) {
+      setArmed(id)
+      return
+    }
+    setArmed(null)
     setPending(id)
     setNotice(null)
     try {
       await onService('vacuum', service, { entity_id: VACUUM })
-    } catch {
-      setNotice('Could not send that command to the vacuum.')
+    } catch (error) {
+      // The backend's `detail` (a refused service, HA offline) says what actually went wrong.
+      setNotice(error instanceof Error && error.message
+        ? `Could not send that command to the vacuum: ${error.message}`
+        : 'Could not send that command to the vacuum.')
     } finally {
       setPending(null)
     }
+  }
+
+  const hasRoborock = Boolean(vacuum) || Array.from(entities.keys()).some((id) => id.startsWith(PREFIX) || id.startsWith(BINARY))
+  if (!hasRoborock) {
+    // An empty map means the socket has not delivered its first snapshot yet, not that there is no vacuum.
+    return entities.size === 0 ? (
+      <PageFrame className="roborock-view" icon={<Bot />} title="Connecting">
+        <LoadingState label="Waiting for Home Assistant" />
+      </PageFrame>
+    ) : (
+      <PageFrame className="roborock-view" icon={<Bot />} title="No vacuum connected">
+        <EmptyState
+          icon={<Bot />}
+          title="No Roborock vacuum found"
+          hint={`Looks for ${VACUUM} and its ${PREFIX}_* sensors from the Roborock integration.`}
+        />
+      </PageFrame>
+    )
   }
 
   const waterTrouble = problems.some((problem) => problem.entityId.includes('water'))
@@ -161,30 +204,42 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
     {
       id: 'start',
       label: cleaning ? 'Resume' : 'Clean',
-      glyph: <Play size={15} />,
+      glyph: <Play size={16} />,
       service: 'start',
       primary: true,
       // Mopping with an empty clean-water tank drags a dry pad over the floor.
-      confirmation: waterTrouble ? 'The dock reports a water problem. Start cleaning anyway?' : undefined,
+      confirmation: waterTrouble ? 'The dock reports a water problem. Tap again to start cleaning anyway.' : undefined,
     },
-    { id: 'pause', label: 'Pause', glyph: <Pause size={15} />, service: 'pause' },
+    { id: 'pause', label: 'Pause', glyph: <Pause size={16} />, service: 'pause' },
     {
       id: 'dock',
       label: 'Return to dock',
-      glyph: <Bot size={15} />,
+      glyph: <Bot size={16} />,
       service: 'return_to_base',
-      confirmation: cleaning ? 'Send the vacuum back to its dock and end this clean?' : undefined,
+      confirmation: cleaning ? 'Tap again to send the vacuum back to its dock and end this clean.' : undefined,
     },
-    { id: 'locate', label: 'Locate', glyph: <MapPin size={15} />, service: 'locate' },
+    { id: 'locate', label: 'Locate', glyph: <MapPin size={16} />, service: 'locate' },
   ]
+  const armedControl = controls.find((control) => control.id === armed && control.confirmation)
 
-  const cards: { entityId: string; label: string; icon: string; tone: string; glyph: ReactNode; value: string; detail: string; kind?: TileConfig['kind'] }[] = [
+  const batteryLow = battery !== null && battery <= 20
+  const cards: {
+    entityId: string
+    label: string
+    icon: string
+    tone?: Tone
+    glyph: ReactNode
+    value: string
+    detail: string
+    kind?: TileConfig['kind']
+    meter?: number
+  }[] = [
     {
       entityId: VACUUM,
       label: 'Status',
       icon: 'bot',
-      tone: cleaning ? 'tone-active' : 'tone-status',
-      glyph: <Bot size={14} />,
+      tone: cleaning ? 'accent' : undefined,
+      glyph: <Bot size={15} />,
       kind: 'vacuum',
       value: status,
       detail: cleaning && progress !== null
@@ -195,17 +250,17 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
       entityId: `${PREFIX}_battery`,
       label: 'Battery',
       icon: 'battery',
-      tone: battery !== null && battery <= 20 ? 'tone-bad' : 'tone-battery',
-      glyph: charging ? <BatteryCharging size={14} /> : <Battery size={14} />,
+      tone: batteryLow ? 'danger' : undefined,
+      glyph: charging ? <BatteryCharging size={15} /> : <Battery size={15} />,
       value: battery === null ? '--' : `${Math.round(battery)}%`,
-      detail: charging ? 'Charging on dock' : battery === null ? 'Not reported' : 'On battery',
+      detail: charging ? 'Charging on dock' : battery === null ? 'Not reported' : batteryLow ? 'Low, on battery' : 'On battery',
+      meter: battery === null ? undefined : Math.max(0, Math.min(100, battery)),
     },
     {
       entityId: `${PREFIX}_last_clean_end`,
       label: 'Last clean',
       icon: 'rotate-cw',
-      tone: 'tone-clean',
-      glyph: <RotateCw size={14} />,
+      glyph: <RotateCw size={15} />,
       value: lastClean ?? '--',
       detail: [
         cleanMinutes !== null ? minutesLabel(cleanMinutes) : null,
@@ -217,8 +272,8 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
         entityId: problems[0].entityId,
         label: 'Needs attention',
         icon: problems[0].icon,
-        tone: 'tone-bad',
-        glyph: <AlertTriangle size={14} />,
+        tone: 'danger',
+        glyph: <AlertTriangle size={15} />,
         value: problems[0].label,
         detail: problems.length > 1 ? `${problems[0].detail} · +${problems.length - 1} more` : problems[0].detail,
       }
@@ -226,28 +281,34 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
         entityId: `${PREFIX}_vacuum_error`,
         label: 'Needs attention',
         icon: 'bot',
-        tone: 'tone-good',
-        glyph: <Sparkles size={14} />,
+        glyph: <Sparkles size={15} />,
         value: 'All clear',
         detail: 'No dock or robot faults',
       },
   ]
 
-  return (
-    <section className="roborock-view" aria-label="Roborock vacuum">
-      <header>
-        <div>
-          <Bot size={17} />
-          <h2>{typeof vacuum?.attributes.friendly_name === 'string' ? vacuum.attributes.friendly_name : 'Roborock Qrevo MaxV'}</h2>
-          <span className={cleaning ? 'is-active' : ''}>{status}</span>
-        </div>
-        <div className="roborock-battery">
-          {charging ? <BatteryCharging size={15} /> : <Battery size={15} />}
-          <strong>{battery === null ? '--' : `${Math.round(battery)}%`}</strong>
-        </div>
-      </header>
+  const reportedConsumables = CONSUMABLES.filter((item) => numeric(entities.get(item.entityId)) !== null)
 
-      {notice && <p className="roborock-notice" role="status">{notice}</p>}
+  // The sub-heading is what someone glancing at the wall wants: what it is doing and how full it is.
+  const title = [status === '--' ? (offline ? 'Unavailable' : null) : status, battery === null ? null : `${Math.round(battery)}%`]
+    .filter(Boolean).join(' · ') || 'Vacuum'
+  const pageTone: Tone = problems.length > 0 ? 'warn' : cleaning ? 'accent' : 'neutral'
+  const meta = cleaning && progress !== null
+    ? `${Math.round(progress)}% done${room && !MISSING.has(room.state) ? ` · ${room.state}` : ''}`
+    : problems.length > 0
+      ? `${problems.length} to fix`
+      : lastClean ? `Last clean ${lastClean}` : undefined
+
+  return (
+    <PageFrame
+      className="roborock-view"
+      icon={charging ? <BatteryCharging /> : <Bot />}
+      eyebrow={friendlyName(vacuum, 'Roborock Qrevo MaxV')}
+      title={title}
+      tone={pageTone}
+      meta={meta}
+    >
+      {notice && <InlineError message={notice} />}
 
       {/* Buttons, not read-only figures: each fronts a real entity so a tap opens
           the same detail sheet with history that tiles elsewhere do. */}
@@ -258,13 +319,25 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
             <button
               key={card.label}
               type="button"
-              className={`${card.tone} ${linked ? 'is-linked' : ''}`.trim()}
+              className={`roborock-card glass glass-card${card.tone ? ` tone-${card.tone}` : ''}`}
               onClick={linked ? () => expand(card.entityId, card.label, card.icon, card.kind) : undefined}
               disabled={!linked}
               title={linked ? `Open ${card.label} history` : `${card.label} is unavailable`}
             >
-              <span>{card.glyph} {card.label}</span>
+              <span className="roborock-card-label">{card.glyph} {card.label}</span>
               <strong>{card.value}</strong>
+              {card.meter !== undefined && (
+                <span
+                  className="roborock-meter glass-inset"
+                  role="meter"
+                  aria-label="Battery charge"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(card.meter)}
+                >
+                  <i style={{ width: `${card.meter}%` }} />
+                </span>
+              )}
               <small>{card.detail}</small>
             </button>
           )
@@ -272,72 +345,83 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
       </div>
 
       <div className="roborock-controls" role="group" aria-label="Vacuum controls">
-        {controls.map((control) => (
-          <button
-            key={control.id}
-            type="button"
-            className={control.primary ? 'is-primary' : ''}
-            onClick={() => void send(control.id, control.service, control.confirmation)}
-            disabled={offline || pending !== null}
-            title={offline ? 'The vacuum is unavailable' : control.label}
-          >
-            {control.glyph}
-            {pending === control.id ? 'Sending…' : control.label}
-          </button>
-        ))}
-        {offline && <small>The vacuum is not reporting — controls are disabled.</small>}
+        {controls.map((control) => {
+          const isArmed = armedControl?.id === control.id
+          return (
+            <button
+              key={control.id}
+              type="button"
+              className={`glass-pill${control.primary ? ' tone-accent' : ''}${isArmed ? ' tone-warn is-armed' : ''}`}
+              onClick={() => void send(control.id, control.service, control.confirmation)}
+              disabled={offline || pending !== null}
+              title={offline ? 'The vacuum is unavailable' : control.label}
+            >
+              {isArmed ? <AlertTriangle size={16} /> : control.glyph}
+              {pending === control.id ? 'Sending…' : isArmed ? 'Tap to confirm' : control.label}
+            </button>
+          )
+        })}
+        {armedControl && <p className="roborock-controls-note is-armed" role="status">{armedControl.confirmation}</p>}
+        {offline && !armedControl && <p className="roborock-controls-note">The vacuum is not reporting, so controls are disabled.</p>}
       </div>
 
       <div className="roborock-lower">
-        <div className="roborock-consumables">
-          <div className="roborock-panel-head">
-            <Filter size={15} />
+        <section className="roborock-consumables glass glass-card" aria-label="Consumables">
+          <header className="roborock-card-head">
+            <Filter size={15} aria-hidden="true" />
             <h3>Consumables</h3>
-            <span>{totalHours !== null ? `${Math.round(totalHours)}h cleaned total` : ''}</span>
-          </div>
-          <ul>
-            {CONSUMABLES.map((item) => {
-              const entity = entities.get(item.entityId)
-              const hours = numeric(entity)
-              if (hours === null) {
+            {totalHours !== null && <span>{Math.round(totalHours)}h cleaned total</span>}
+          </header>
+          {reportedConsumables.length === 0 ? (
+            <EmptyState size="compact" icon={<Filter />} title="Not reported" hint={`Looks for ${PREFIX}_*_time_left sensors.`} />
+          ) : (
+            <ul>
+              {CONSUMABLES.map((item) => {
+                const entity = entities.get(item.entityId)
+                const hours = numeric(entity)
+                if (hours === null) {
+                  return (
+                    <li key={item.entityId} className="is-unreported">
+                      <span>{item.glyph} {item.label}</span>
+                      <em>Not reported</em>
+                    </li>
+                  )
+                }
+                const percent = Math.max(0, Math.min(100, (hours / item.totalHours) * 100))
+                // Status tints only once a part is near its interval, and always with a word, so the
+                // colour never has to be decoded on its own.
+                const tone = percent <= 5 ? 'is-bad' : percent <= 20 ? 'is-warn' : 'is-good'
+                const word = tone === 'is-bad' ? 'Replace' : tone === 'is-warn' ? 'Due soon' : null
                 return (
-                  <li key={item.entityId} className="is-empty">
-                    <span>{item.glyph} {item.label}</span>
-                    <em>Not reported</em>
+                  <li key={item.entityId}>
+                    <button
+                      type="button"
+                      className={tone}
+                      onClick={() => expand(item.entityId, item.label, item.icon)}
+                      title={`Open ${item.label} history`}
+                    >
+                      <span>{item.glyph} {item.label}</span>
+                      <em>{word ? `${word} · ` : ''}{hoursLabel(hours)}</em>
+                      <small>{Math.round(percent)}%</small>
+                      <i className="glass-inset" aria-hidden="true"><b style={{ width: `${percent}%` }} /></i>
+                    </button>
                   </li>
                 )
-              }
-              const percent = Math.max(0, Math.min(100, (hours / item.totalHours) * 100))
-              const tone = percent <= 5 ? 'is-bad' : percent <= 20 ? 'is-warn' : 'is-good'
-              return (
-                <li key={item.entityId}>
-                  <button
-                    type="button"
-                    className={tone}
-                    onClick={() => expand(item.entityId, item.label, item.icon)}
-                    title={`Open ${item.label} history`}
-                  >
-                    <span>{item.glyph} {item.label}</span>
-                    <em>{hoursLabel(hours)}</em>
-                    <small>{Math.round(percent)}%</small>
-                    <i aria-hidden="true"><b style={{ width: `${percent}%` }} /></i>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+              })}
+            </ul>
+          )}
           <p className="roborock-note">
-            Percentages are the hours remaining against each part’s service interval —
+            Percentages are the hours remaining against each part’s service interval:
             {' '}150h filter, 300h main brush, 200h side brush, 30h sensors.
           </p>
-        </div>
+        </section>
 
-        <div className="roborock-dock">
-          <div className="roborock-panel-head">
-            <Droplets size={15} />
+        <section className="roborock-dock glass glass-card" aria-label="Dock and maintenance">
+          <header className="roborock-card-head">
+            <Droplets size={15} aria-hidden="true" />
             <h3>Dock &amp; maintenance</h3>
-            <span>{problems.length > 0 ? `${problems.length} to fix` : 'All clear'}</span>
-          </div>
+            <span className={problems.length > 0 ? 'is-attention' : undefined}>{problems.length > 0 ? `${problems.length} to fix` : 'All clear'}</span>
+          </header>
           <ul>
             {DOCK_ROWS.map((row) => {
               const entity = entities.get(row.entityId)
@@ -389,13 +473,13 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
             <dt>Dock brush</dt>
             <dd>{dockBrush === null ? 'Not reported' : hoursLabel(dockBrush)}</dd>
           </dl>
-        </div>
+        </section>
 
-        <div className="roborock-totals">
-          <div className="roborock-panel-head">
-            <Waves size={15} />
+        <section className="roborock-totals glass glass-card" aria-label="Lifetime">
+          <header className="roborock-card-head">
+            <Waves size={15} aria-hidden="true" />
             <h3>Lifetime</h3>
-          </div>
+          </header>
           <dl>
             <dt>Cleans</dt>
             <dd>{totalCleans === null ? '—' : Math.round(totalCleans)}</dd>
@@ -408,8 +492,8 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
               ? new Date(lastEnd.state).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
               : '—'}</dd>
           </dl>
-        </div>
+        </section>
       </div>
-    </section>
+    </PageFrame>
   )
 }

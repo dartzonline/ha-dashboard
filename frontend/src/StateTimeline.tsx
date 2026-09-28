@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
 import { Activity, History } from 'lucide-react'
-import { apiUrl } from './api'
+import { isAbortError } from './cachedFetch'
+import { ChartLegend } from './chartKit'
+import { OTHER_COLOR, SERIES_MAX, seriesColor } from './chartTheme'
+import type { LegendItem } from './chartKit'
+import { fetchHistory, parseHistoryRecords } from './history'
+import { EmptyState, LoadingState } from './ui/StateMessages'
 import './StateTimeline.css'
+
+const HISTORY_TTL_MS = 5 * 60_000
 
 interface StateTimelineProps {
   entityId: string
@@ -21,22 +29,32 @@ const activeStates = new Set([
 ])
 const unknownStates = new Set(['unavailable', 'unknown', ''])
 
-function segmentTone(state: string) {
-  if (unknownStates.has(state)) return 'unknown'
-  return activeStates.has(state) ? 'active' : 'inactive'
+/** Hatched "no data" fill, so a gap in the recorder never reads as a real state. */
+const UNKNOWN_FILL = 'repeating-linear-gradient(45deg, transparent 0 3px, rgba(255, 255, 255, .14) 3px 6px)'
+/** The resting half of an on/off pair: a quiet fill, so the one series hue marks when it was active. */
+const RESTING_FILL = 'rgba(255, 255, 255, .08)'
+
+/**
+ * One colour per raw state. An on/off-like pair (one active state, one resting state) is a single
+ * series: the active state wears --chart-1 and the resting one a muted fill. Anything else is
+ * categorical, coloured in a fixed alphabetical order of the raw state so a state keeps its colour
+ * however long it lasted today; past six states the rest fold into "Other".
+ */
+function stateColors(segments: Segment[]) {
+  const known = Array.from(new Set(segments.map((segment) => segment.state).filter((state) => !unknownStates.has(state)))).sort()
+  const colors = new Map<string, string>()
+  const active = known.filter((state) => activeStates.has(state))
+  if (known.length === 1 || (known.length === 2 && active.length === 1)) {
+    known.forEach((state) => colors.set(state, activeStates.has(state) ? seriesColor(0) : RESTING_FILL))
+  } else {
+    known.forEach((state, index) => colors.set(state, index < SERIES_MAX ? seriesColor(index) : OTHER_COLOR))
+  }
+  unknownStates.forEach((state) => colors.set(state, UNKNOWN_FILL))
+  return { colors, overflow: known.length > SERIES_MAX }
 }
 
 function parseSegments(payload: unknown, windowStart: number, now: number): Segment[] {
-  if (!Array.isArray(payload)) return []
-  const states = Array.isArray(payload[0]) ? payload[0] : payload
-  const entries = states
-    .flatMap((item): { state: string; time: number }[] => {
-      if (!item || typeof item !== 'object') return []
-      const record = item as Record<string, unknown>
-      const time = Date.parse(String(record.last_changed ?? record.last_updated ?? ''))
-      return Number.isFinite(time) ? [{ state: String(record.state ?? ''), time }] : []
-    })
-    .sort((left, right) => left.time - right.time)
+  const entries = parseHistoryRecords(payload).sort((left, right) => left.time - right.time)
   if (!entries.length) return []
 
   const segments: Segment[] = []
@@ -73,70 +91,97 @@ export function StateTimeline({ entityId, currentState, formatState }: StateTime
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let stopped = false
+    const abort = new AbortController()
     const now = Date.now()
-    fetch(apiUrl(`history/${entityId}`))
-      .then((response) => (response.ok ? response.json() : []))
+    fetchHistory(entityId, 24, HISTORY_TTL_MS, abort.signal)
       .then((payload) => {
-        if (!stopped) setSegments(parseSegments(payload, now - 24 * 3_600_000, now))
+        setSegments(parseSegments(payload, now - 24 * 3_600_000, now))
+        setLoading(false)
       })
-      .catch(() => {
-        if (!stopped) setSegments([])
+      .catch((error: unknown) => {
+        if (isAbortError(error)) return
+        setSegments([])
+        setLoading(false)
       })
-      .finally(() => {
-        if (!stopped) setLoading(false)
-      })
-    return () => { stopped = true }
+    return () => abort.abort()
   }, [entityId])
 
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState<{ segment: Segment; x: number } | null>(null)
   const changes = Math.max(0, segments.length - 1)
-  const totals = new Map<string, number>()
+  const { colors, overflow } = stateColors(segments)
+  const colorFor = (state: string) => colors.get(state) ?? OTHER_COLOR
+  const labelFor = (state: string) => (unknownStates.has(state) ? 'No data' : formatState(state))
+
+  // Legend entries are keyed by colour so the "Other" fold and the no-data hatch each appear once.
+  const totals = new Map<string, { label: string; color: string; total: number }>()
   for (const segment of segments) {
-    const tone = segmentTone(segment.state)
-    if (tone === 'unknown') continue
-    const key = formatState(segment.state)
-    totals.set(key, (totals.get(key) ?? 0) + (segment.to - segment.from))
+    const color = colorFor(segment.state)
+    const label = color === OTHER_COLOR && overflow ? 'Other' : labelFor(segment.state)
+    const entry = totals.get(color) ?? { label, color, total: 0 }
+    entry.total += segment.to - segment.from
+    totals.set(color, entry)
   }
-  const legend = Array.from(totals.entries()).sort((left, right) => right[1] - left[1]).slice(0, 4)
-  const legendTone = (label: string) => {
-    const match = segments.find((segment) => formatState(segment.state) === label)
-    return match ? segmentTone(match.state) : 'inactive'
+  const legend: LegendItem[] = Array.from(totals.values())
+    .sort((left, right) => right.total - left.total)
+    .map((entry) => ({ label: entry.label, color: entry.color, shape: 'bar', value: formatDuration(entry.total) }))
+
+  // A tap or hover on the strip names the segment under the finger; segments can be a pixel wide,
+  // so this looks up by position instead of giving each sliver its own target.
+  function inspect(event: PointerEvent<HTMLDivElement>) {
+    const strip = stripRef.current
+    if (!strip || !segments.length) return
+    const rect = strip.getBoundingClientRect()
+    const fraction = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
+    const start = segments[0].from
+    const time = start + fraction * (segments[segments.length - 1].to - start)
+    const segment = segments.find((item) => time >= item.from && time <= item.to) ?? segments[segments.length - 1]
+    setHover({ segment, x: fraction * 100 })
   }
 
   return (
     <section className="state-timeline" aria-label="24 hour activity">
       <header>
-        <div><History size={17} /><h3>24-hour activity</h3></div>
+        <div><History size={16} aria-hidden="true" /><h3>24-hour activity</h3></div>
         <span>{segments.length ? `${changes} change${changes === 1 ? '' : 's'}` : ''}</span>
       </header>
       {segments.length ? (
         <>
-          <div className="timeline-strip" role="img" aria-label={`State over the last 24 hours, currently ${formatState(currentState)}`}>
-            {segments.map((segment) => (
-              <span
-                key={segment.from}
-                className={`timeline-segment tone-${segmentTone(segment.state)}`}
-                style={{ flexGrow: Math.max(1, segment.to - segment.from) }}
-                title={`${formatState(segment.state)} · ${formatClock(segment.from)} – ${formatClock(segment.to)}`}
-              />
-            ))}
+          <ChartLegend items={legend} className="timeline-legend" />
+          <div className="timeline-stage" data-swipe-ignore onPointerMove={inspect} onPointerDown={inspect} onPointerLeave={() => setHover(null)}>
+            <div
+              ref={stripRef}
+              className="timeline-strip glass-inset"
+              role="img"
+              aria-label={`State over the last 24 hours, currently ${formatState(currentState)}`}
+            >
+              {segments.map((segment) => (
+                <span
+                  key={segment.from}
+                  className="timeline-segment"
+                  style={{ flexGrow: Math.max(1, segment.to - segment.from), '--segment': colorFor(segment.state) } as CSSProperties}
+                />
+              ))}
+            </div>
+            {hover && (
+              <div className="timeline-tooltip chart-tooltip glass-strong" style={{ left: `clamp(70px, ${hover.x}%, calc(100% - 70px))` }} aria-hidden="true">
+                <p className="chart-tooltip-label">{formatClock(hover.segment.from)} – {formatClock(hover.segment.to)}</p>
+                <ul>
+                  <li>
+                    <span className="chart-swatch" style={{ '--swatch': colorFor(hover.segment.state) } as CSSProperties} />
+                    <span className="chart-tooltip-name">{labelFor(hover.segment.state)}</span>
+                    <strong>{formatDuration(hover.segment.to - hover.segment.from)}</strong>
+                  </li>
+                </ul>
+              </div>
+            )}
           </div>
-          <div className="timeline-scale"><span>24 hr ago</span><span>12 hr</span><span>Now</span></div>
-          <div className="timeline-legend">
-            {legend.map(([label, total]) => (
-              <span key={label} className="timeline-chip">
-                <i className={`tone-${legendTone(label)}`} />
-                <strong>{label}</strong>
-                <em>{formatDuration(total)}</em>
-              </span>
-            ))}
-          </div>
+          <div className="timeline-scale" aria-hidden="true"><span>24 hr ago</span><span>12 hr</span><span>Now</span></div>
         </>
+      ) : loading ? (
+        <LoadingState size="compact" label="Loading activity" />
       ) : (
-        <div className={`timeline-empty ${loading ? 'loading' : ''}`}>
-          <Activity size={20} />
-          <span>{loading ? 'Loading activity' : 'No recorded activity in the last 24 hours'}</span>
-        </div>
+        <EmptyState size="compact" icon={<Activity />} title="No recorded activity" hint="The recorder has no state changes for this entity in the last 24 hours" />
       )}
     </section>
   )

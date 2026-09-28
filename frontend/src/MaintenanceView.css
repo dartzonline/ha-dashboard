@@ -1,106 +1,86 @@
-/* Upkeep page: wear bars first, then the per-device panels. Severity colour is
-   the whole navigation aid -- red means order a part, everything else is fine. */
-.maint-view {
-  margin: 0;
-  padding: 4px 0 8px;
-  background: var(--canvas);
-  width: 100%;
-  min-height: calc(100svh - 150px);
-}
+/* Upkeep page: pending updates and faults first, then wear bars, then the per-device panels.
+   Bars fill in the series blue; only a due item takes a status tint, and it always says so in words. */
+.maint-view { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; flex: 1 1 auto; width: 100%; }
 
-.maint-view > header {
-  padding: 0 2px 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.maint-view > header > div { display: flex; align-items: center; gap: 8px; color: var(--warn); }
-.maint-view h2 { margin: 0; color: var(--text); font-size: 1rem; font-weight: 650; }
-.maint-view h3 { margin: 0; color: var(--text); font-size: .82rem; font-weight: 650; }
-.maint-view > header > span { color: var(--muted); font-size: .68rem; }
+.maint-notice { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 14px; border-radius: var(--r-sm); background: var(--warn-soft); color: var(--text); font-size: .78rem; font-weight: 550; }
+.maint-notice svg { flex: 0 0 auto; color: var(--warn); }
 
-.maint-notice { margin: 0 0 10px; padding: 7px 11px; border-radius: 8px; background: var(--surface-raised); color: var(--warn); font-size: .72rem; }
+/* One pane per list; rows are divided by hairlines rather than each wearing its own glass. */
+.maint-list { list-style: none; margin: 0; padding: 2px 0; border-radius: var(--r-md); display: grid; overflow: hidden; }
+.maint-list li + li { border-top: 1px solid var(--border); }
 
 /* One row per pending update: what it is, what it changes to, and a button that actually starts
    the install -- these are Home Assistant's own update.* entities, so the app is never guessing
    whether something is out of date. */
-.maint-updates { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
-.maint-updates li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
-  border-radius: 8px;
-  border-left: 3px solid var(--accent);
-  background: var(--surface);
-}
-.maint-update-body { display: flex; align-items: flex-start; gap: 9px; min-width: 0; flex: 1 1 auto; }
-.maint-update-body > svg { color: var(--accent); flex: 0 0 auto; margin-top: 2px; }
+.maint-update { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 16px; }
+.maint-update-body { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1 1 auto; }
+.maint-update-body > svg { color: var(--muted); flex: 0 0 auto; margin-top: 2px; }
 .maint-update-copy { display: grid; gap: 2px; min-width: 0; }
-.maint-update-copy strong { color: var(--text); font-size: .78rem; font-weight: 650; }
-.maint-update-copy span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: .68rem; font-variant-numeric: tabular-nums; }
+.maint-update-copy strong { color: var(--text); font-size: .86rem; font-weight: 650; }
+.maint-update-copy span { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .76rem; font-variant-numeric: tabular-nums; }
 .maint-update-copy span a { color: var(--muted); display: inline-flex; }
 .maint-update-copy span a:hover { color: var(--accent); }
-.maint-update-copy small { color: var(--muted); font-size: .64rem; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.maint-update-copy small { color: var(--muted); font-size: .72rem; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
+/* The page's single primary action. */
 .maint-update-install {
   flex: 0 0 auto;
-  padding: 6px 12px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: .68rem;
-  font-weight: 650;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
 }
-.maint-update-install:hover:not(:disabled) { filter: brightness(1.08); }
+.maint-update-install:hover:not(:disabled) { background: var(--accent-strong); }
 .maint-update-install:disabled { opacity: .6; cursor: default; }
-.maint-update-manual { flex: 0 0 auto; color: var(--muted); font-size: .64rem; white-space: nowrap; }
+.maint-update-manual { flex: 0 0 auto; color: var(--muted); font-size: .74rem; font-weight: 550; white-space: nowrap; }
 
-.maint-faults { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; }
-.maint-faults li { border-radius: 8px; background: var(--surface); border-left: 3px solid var(--bad, #e5484d); }
-.maint-faults button {
+.maint-fault button {
   width: 100%;
+  min-height: 52px;
   display: flex;
-  align-items: baseline;
-  gap: 9px;
-  padding: 9px 11px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
   border: 0;
-  border-radius: 8px;
   background: transparent;
   font: inherit;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
-.maint-faults button:hover { background: var(--surface-raised); }
-.maint-faults svg { color: var(--bad, #e5484d); flex: 0 0 auto; }
-.maint-faults span { color: var(--text); font-weight: 600; font-size: .78rem; }
-.maint-faults em { color: var(--muted); font-style: normal; font-size: .7rem; margin-left: auto; }
+.maint-fault button:hover { background: var(--surface); }
+.maint-fault svg { color: var(--danger); flex: 0 0 auto; }
+.maint-fault span { color: var(--text); font-weight: 650; font-size: .86rem; }
+.maint-fault em { color: var(--muted); font-style: normal; font-size: .76rem; margin-left: auto; }
 
-.maint-panel { padding: 10px 11px; border-radius: 8px; background: var(--surface-raised); margin-bottom: 10px; }
-.maint-panel.tone-critical { border-left: 3px solid var(--bad, #e5484d); }
-.maint-panel.tone-warning { border-left: 3px solid var(--warn); }
+.maint-panel { padding: 14px 16px; border-radius: var(--r-md); display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
-.maint-panel-head { display: flex; align-items: center; gap: 7px; color: var(--muted); padding-bottom: 8px; }
-.maint-panel-head > span { margin-left: auto; font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; }
+.maint-panel-head { display: flex; align-items: baseline; gap: 10px; }
+.maint-panel-head h3 { margin: 0; display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text); font-size: .8rem; font-weight: 700; }
+.maint-panel-head h3 svg { flex: 0 0 auto; color: var(--muted); }
+.maint-panel-head > span { margin-left: auto; color: var(--muted); font-size: .74rem; font-weight: 600; white-space: nowrap; }
+.maint-panel.is-critical .maint-status { color: var(--danger); }
+.maint-panel.is-warning .maint-status { color: var(--warn); }
 
-.maint-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.maint-bars li.is-empty { color: var(--muted); font-size: .68rem; }
+.maint-bars { list-style: none; margin: 0; padding: 0; display: grid; }
+.maint-bars li + li { border-top: 1px solid var(--border); }
 .maint-bars button {
-  width: 100%;
+  min-height: var(--tap);
   display: grid;
-  grid-template-columns: minmax(96px, 1.1fr) minmax(80px, 2fr) 52px 62px;
+  grid-template-columns: minmax(96px, 1.1fr) minmax(80px, 2fr) 60px 70px;
   align-items: center;
-  gap: 10px;
-  padding: 4px 5px;
-  margin: 0 -5px;
+  gap: 12px;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  width: calc(100% + 16px);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   background: transparent;
   font: inherit;
   color: inherit;
@@ -110,57 +90,51 @@
 .maint-bars button:hover { background: var(--surface); }
 .maint-bars button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-.maint-bar-label { color: var(--text); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.maint-bar-label { color: var(--text); font-size: .8rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .maint-bar-track {
   position: relative;
   display: block;
-  height: 7px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  height: 8px;
+  border-radius: var(--r-pill);
   overflow: hidden;
 }
-.maint-bar-track.is-wide { height: 9px; margin: 6px 0 2px; }
-.maint-bar-track i { position: absolute; inset: 0 auto 0 0; background: var(--good); }
+.maint-bar-track.is-wide { height: 10px; }
+.maint-bar-track i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--chart-1); }
 
-.maint-bars li.tone-warning .maint-bar-track i { background: var(--warn); }
-.maint-bars li.tone-critical .maint-bar-track i { background: var(--bad, #e5484d); }
-.maint-bars li.tone-unknown .maint-bar-track i { background: var(--muted); }
+.maint-bars li.is-warning .maint-bar-track i, .maint-panel.is-warning .maint-bar-track i { background: var(--warn); }
+.maint-bars li.is-critical .maint-bar-track i, .maint-panel.is-critical .maint-bar-track i { background: var(--danger); }
+.maint-bars li.is-unknown .maint-bar-track i { background: var(--muted-2); }
 
-.maint-bars em { color: var(--text); font-style: normal; font-size: .72rem; font-weight: 600; text-align: right; }
-.maint-bars li.tone-critical em { color: var(--bad, #e5484d); }
-.maint-bars li.tone-warning em { color: var(--warn); }
-.maint-bars small { color: var(--muted); font-size: .62rem; text-align: right; }
+.maint-bars em { color: var(--text); font-style: normal; font-size: .8rem; font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+.maint-bars small { color: var(--muted); font-size: .72rem; font-weight: 550; text-align: right; white-space: nowrap; }
+.maint-bars li.is-critical em, .maint-bars li.is-critical small { color: var(--danger); }
+.maint-bars li.is-warning small { color: var(--warn); }
 
-.maint-note { margin: 8px 0 0; color: var(--muted); font-size: .62rem; line-height: 1.45; max-width: 82ch; }
-.maint-warn { margin: 8px 0 0; color: var(--warn); font-size: .64rem; line-height: 1.45; max-width: 74ch; }
+.maint-note { margin: 0; color: var(--muted); font-size: .74rem; line-height: 1.45; max-width: 82ch; }
+.maint-warn { margin: 0; color: var(--warn); font-size: .74rem; line-height: 1.45; max-width: 74ch; }
 
-.maint-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 8px; align-items: start; }
-.maint-grid > .maint-panel { margin-bottom: 0; }
+.maint-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--gap); align-items: start; }
 
-.maint-figure { display: flex; align-items: baseline; gap: 9px; }
-.maint-figure strong { font-size: 1.3rem; line-height: 1.1; }
-.maint-figure small { color: var(--muted); font-size: .66rem; }
+.maint-figure { display: flex; align-items: baseline; gap: 10px; }
+.maint-figure strong { font-size: 1.5rem; font-weight: 750; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.maint-figure small { color: var(--muted); font-size: .76rem; font-weight: 550; }
 
-.maint-rows { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: .72rem; }
-.maint-rows dt { color: var(--muted); font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; }
-.maint-rows dd { margin: 0; color: var(--text); text-align: right; }
-.maint-rows dd.is-bad { color: var(--bad, #e5484d); font-weight: 600; }
+.maint-rows { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: .8rem; }
+.maint-rows dt { color: var(--muted); font-size: .74rem; font-weight: 600; }
+.maint-rows dd { margin: 0; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.maint-rows dd.is-bad { color: var(--danger); font-weight: 650; }
 
-.maint-link {
-  margin-top: 8px;
-  padding: 4px 9px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: .66rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.maint-link:hover { border-color: var(--accent); }
+.maint-link { align-self: flex-start; padding: 0 16px; color: var(--text); font: inherit; font-size: .76rem; font-weight: 650; cursor: pointer; }
+.maint-link:hover { border-color: var(--border-strong); }
 
 @media (max-width: 680px) {
-  .maint-bars button { grid-template-columns: minmax(80px, 1fr) minmax(60px, 1.4fr) 46px; }
-  .maint-bars small { display: none; }
+  .maint-bars button { grid-template-columns: minmax(80px, 1fr) minmax(50px, 1.2fr) 52px auto; gap: 8px; }
+  /* Hours left can go on a phone; the "Due" word cannot, or the tint would be colour alone. */
+  .maint-bars small:not(.is-word) { display: none; }
 }
+
+
+/* Armed for the confirming second tap: warn tone, so it reads as a different button, not a stuck one. */
+.maint-update-install.is-armed { color: var(--warn-ink); background: var(--warn); border-color: var(--warn); }
+.maint-update-warning { flex: 1 1 100%; color: var(--warn); font-size: .78rem; font-weight: 600; }

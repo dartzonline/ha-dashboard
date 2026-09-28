@@ -1,0 +1,18 @@
+.state-message { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px 16px; color: var(--muted); text-align: center; }
+.state-message.is-default { flex: 1 1 auto; min-height: 220px; }
+.state-message.is-compact { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 10px 12px; min-height: var(--tap); text-align: left; }
+.state-message-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; color: var(--muted); background: var(--surface-raised); box-shadow: var(--glass-edge); }
+.state-message-icon svg { width: 22px; height: 22px; }
+.state-message.is-compact .state-message-icon { width: 30px; height: 30px; }
+.state-message.is-compact .state-message-icon svg { width: 16px; height: 16px; }
+.state-message-title { margin: 0; font-size: .92rem; font-weight: 650; color: var(--text); }
+.state-message.is-compact .state-message-title { font-size: .82rem; }
+.state-message-hint { margin: 0; max-width: 34ch; font-size: .78rem; line-height: 1.4; }
+.state-message-action { margin-top: 8px; }
+.state-message.is-compact .state-message-action { margin: 0 0 0 auto; }
+.state-message.is-error .state-message-icon { color: var(--danger); background: var(--danger-soft); }
+.state-message.is-error .state-message-title { color: var(--danger); }
+.state-message.is-loading .state-message-title { color: var(--muted); font-weight: 600; }
+.state-message-retry { display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; color: var(--text); font-size: .78rem; font-weight: 650; }
+.spin { animation: state-spin 1.1s linear infinite; }
+@keyframes state-spin { to { transform: rotate(360deg); } }

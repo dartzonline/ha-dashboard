@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   BatteryCharging, Bot, CloudSun, Droplets, Gauge, HeartPulse, Maximize2,
@@ -6,15 +6,22 @@ import {
   Waves, Wifi, Wind, Zap,
 } from 'lucide-react'
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
-  RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, Line, LineChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import { ChartLegend, GlassTooltip } from './chartKit'
+import { BAR_GAP, barProps, barTooltipCursor, chartMargin, gridProps, hBarProps, lineProps, seriesColor, tooltipCursor, xAxisProps, yAxisProps } from './chartTheme'
+import { friendlyName } from './entityNames'
 import type { HAEntity } from './types'
 import type { HistoryPoint } from './useInsights'
 import { insightsSlides } from './insightsSlides'
 import { comfortScore, detailColors } from './insightDetails'
 import type { DetailChip, DetailFactor, DetailSeries, InsightDetailConfig } from './insightDetails'
 import { InsightsDetail } from './InsightsDetail'
+import { tabListKeyHandler } from './tablist'
+import { EmptyState, LoadingState } from './ui/StateMessages'
+import { PageFrame } from './ui/PageFrame'
+import { KIB_PER_SEC_TO_MBPS, formatNumber } from './units'
 import './InsightsView.css'
 
 interface InsightsViewProps {
@@ -38,13 +45,13 @@ interface ChartPoint {
 }
 
 const climateSeries: SeriesDefinition[] = [
-  { entityId: 'sensor.main_floor_temperature', key: 'main', label: 'Main floor', color: '#ff8065' },
-  { entityId: 'sensor.nursery_sensor_temperature', key: 'nursery', label: 'Nursery', color: '#78d58b' },
-  { entityId: 'sensor.master_bedroom_master_bedroom_temperature_temperature', key: 'primary', label: 'Primary', color: '#7ba7d8' },
-  { entityId: 'sensor.office_temperature_temperature_2', key: 'office', label: 'Office', color: '#bb8cff' },
-  { entityId: 'sensor.media_sensor_temperature', key: 'media', label: 'Media', color: '#62d7d3' },
-  { entityId: 'sensor.attic_sensor_temperature', key: 'attic', label: 'Attic', color: '#ffc857' },
-  { entityId: 'sensor.guest_bedroom_sensor_temperature', key: 'guest', label: 'Guest', color: '#f18db8' },
+  { entityId: 'sensor.main_floor_temperature', key: 'main', label: 'Main floor', color: seriesColor(0) },
+  { entityId: 'sensor.nursery_sensor_temperature', key: 'nursery', label: 'Nursery', color: seriesColor(1) },
+  { entityId: 'sensor.master_bedroom_master_bedroom_temperature_temperature', key: 'primary', label: 'Primary', color: seriesColor(2) },
+  { entityId: 'sensor.office_temperature_temperature_2', key: 'office', label: 'Office', color: seriesColor(3) },
+  { entityId: 'sensor.media_sensor_temperature', key: 'media', label: 'Media', color: seriesColor(4) },
+  { entityId: 'sensor.attic_sensor_temperature', key: 'attic', label: 'Attic', color: seriesColor(5) },
+  { entityId: 'sensor.guest_bedroom_sensor_temperature', key: 'guest', label: 'Guest', color: seriesColor(6) },
 ]
 
 const roomSensors = [
@@ -58,17 +65,67 @@ const roomSensors = [
 ]
 
 const monthlyEnergyId = 'sensor.smarthub_energy_monthly_usage_3001575154_641_hickory_bend_trail_smarthub_energy_monthly_usage_3001575154_641_hickory_bend_trail'
-const tooltipStyle = { borderRadius: 10, border: '1px solid var(--border)', background: '#0d1a25', color: 'var(--text)', fontSize: 11 }
 const slideIcons: LucideIcon[] = [Thermometer, Wifi, HeartPulse]
-const mbpsScale = 8 / 1024
+/** The gateway reports KiB/s; Mbps is decimal, so x8 x1024 / 1e6 (the old x8/1024 understated by ~2.4%). */
+const mbpsScale = KIB_PER_SEC_TO_MBPS
+
+const networkDefinitions: SeriesDefinition[] = [
+  { entityId: 'sensor.cbr750_gateway_download_speed', key: 'download', label: 'Download', color: seriesColor(0) },
+  { entityId: 'sensor.cbr750_gateway_upload_speed', key: 'upload', label: 'Upload', color: seriesColor(1) },
+]
+
+const SECURITY_DOMAINS = new Set(['lock', 'binary_sensor', 'cover'])
+const DOOR_CLASSES = ['door', 'garage_door', 'window', 'opening']
+
+/**
+ * One string that changes exactly when an entity the scans below read changes. Every WebSocket frame
+ * replaces the entities Map, so memoising on the Map itself would never hit; keyed on this, the
+ * seven filter-and-sort passes over ~800 entities run only when a lock, opening, cover, battery or
+ * humidity sensor actually moves.
+ */
+function scanSignature(entities: Map<string, HAEntity>) {
+  const parts: string[] = []
+  for (const entity of entities.values()) {
+    const domain = entity.entity_id.split('.')[0]
+    const deviceClass = entity.attributes.device_class
+    if (SECURITY_DOMAINS.has(domain) || deviceClass === 'battery' || deviceClass === 'humidity') {
+      parts.push(`${entity.entity_id}=${entity.state}`)
+    }
+  }
+  return parts.join('|')
+}
+
+function scanEntities(entities: Map<string, HAEntity>) {
+  const all = Array.from(entities.values())
+  const unsafeLocks = all.filter((entity) => entity.entity_id.startsWith('lock.') && ['unlocked', 'open', 'jammed'].includes(entity.state))
+  const activeProblems = all.filter((entity) => entity.entity_id.startsWith('binary_sensor.') && entity.attributes.device_class === 'problem' && entity.state === 'on')
+  const leaks = all.filter((entity) => entity.entity_id.startsWith('binary_sensor.') && entity.attributes.device_class === 'moisture' && entity.state === 'on')
+  const openDoorSensors = all.filter((entity) => entity.entity_id.startsWith('binary_sensor.')
+    && DOOR_CLASSES.includes(String(entity.attributes.device_class ?? ''))
+    && entity.state === 'on')
+  const openCovers = all.filter((entity) => entity.entity_id.startsWith('cover.') && ['open', 'opening'].includes(entity.state))
+  const batteryEntities = all.filter((entity) => entity.attributes.device_class === 'battery')
+  const batteryData = batteryEntities
+    .filter((entity) => Number.isFinite(Number(entity.state)))
+    .map((entity) => ({ entityId: entity.entity_id, name: friendlyName(entity).replace(/ battery( level)?/i, ''), value: Number(entity.state) }))
+    .sort((left, right) => left.value - right.value)
+    .slice(0, 8)
+  const plantData = all
+    .filter((entity) => {
+      const searchable = `${entity.entity_id} ${friendlyName(entity)}`.toLowerCase()
+      return entity.attributes.device_class === 'humidity' && /(plant|maple|magnolia|soil)/.test(searchable) && Number.isFinite(Number(entity.state))
+    })
+    .map((entity) => ({ entityId: entity.entity_id, name: friendlyName(entity).replace(/plant sensor|humidity/gi, '').trim(), value: Number(entity.state) }))
+  return { unsafeLocks, activeProblems, leaks, openDoorSensors, openCovers, batteryCount: batteryEntities.length, batteryData, plantData }
+}
+
+function roomSignature(entities: Map<string, HAEntity>) {
+  return roomSensors.map((room) => `${entities.get(room.temperature)?.state ?? ''}/${entities.get(room.humidity)?.state ?? ''}`).join('|')
+}
 
 function numericState(entities: Map<string, HAEntity>, entityId: string, fallback = 0) {
   const value = Number(entities.get(entityId)?.state)
   return Number.isFinite(value) ? value : fallback
-}
-
-function formatNumber(value: number, maximumFractionDigits = 0) {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(value)
 }
 
 function formatTime(timestamp: number) {
@@ -79,10 +136,6 @@ function humanState(value: string | undefined) {
   if (!value || value === 'unknown' || value === 'unavailable') return 'Unavailable'
   const text = value.replaceAll('_', ' ')
   return text.replace(/^./, (letter) => letter.toUpperCase())
-}
-
-function entityName(entity: HAEntity) {
-  return String(entity.attributes.friendly_name ?? entity.entity_id.split('.')[1].replaceAll('_', ' '))
 }
 
 function mergeHistory(series: Map<string, HistoryPoint[]>, definitions: SeriesDefinition[], bucketMinutes = 10): ChartPoint[] {
@@ -108,21 +161,167 @@ function toKwh(entity: HAEntity | undefined) {
 function PanelHeader({ icon: Icon, title, subtitle, value, onExpand }: { icon: LucideIcon; title: string; subtitle: string; value?: string; onExpand?: () => void }) {
   return (
     <header className="analytics-panel-header">
-      <span><Icon size={18} /></span>
+      <span aria-hidden="true"><Icon size={16} /></span>
       <div><h3>{title}</h3><p>{subtitle}</p></div>
       {value && <strong>{value}</strong>}
-      {onExpand && <button className="panel-expand" onClick={onExpand} title={`Explain ${title}`} aria-label={`Explain ${title}`}><Maximize2 size={14} /></button>}
+      {onExpand && <button type="button" className="panel-expand glass-pill" onClick={onExpand} title={`Explain ${title}`} aria-label={`Explain ${title}`}><Maximize2 size={16} aria-hidden="true" /></button>}
     </header>
   )
 }
 
-function EmptyChart({ loading }: { loading: boolean }) {
-  return <div className={`chart-empty ${loading ? 'is-loading' : ''}`}><TrendingUp size={24} /><span>{loading ? 'Loading recorder history' : 'More history will appear here'}</span></div>
+function EmptyChart({ loading, hint }: { loading: boolean; hint: string }) {
+  return loading
+    ? <LoadingState size="compact" label="Loading recorder history" />
+    : <EmptyState size="compact" icon={<TrendingUp />} title="More history will appear here" hint={hint} />
 }
+
+/** The newest finite reading per key, used as the legend's direct label. */
+function latestValues(data: ChartPoint[], definitions: SeriesDefinition[]) {
+  const latest: Record<string, number> = {}
+  definitions.forEach(({ key }) => {
+    for (let index = data.length - 1; index >= 0; index -= 1) {
+      const value = data[index][key]
+      if (Number.isFinite(value)) { latest[key] = value; break }
+    }
+  })
+  return latest
+}
+
+const formatDay = (value: number) => new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' })
+const formatTick = (value: number) => formatNumber(value, 1)
+
+// Recharts re-renders are the expensive part of this page. Each chart takes only memoised data, so a
+// WebSocket frame that changes nothing it draws leaves it alone.
+// Seven rooms as lines rather than areas: seven stacked washes turned the plot to mud, and a room is
+// read by its level, not by the area under it.
+const ClimateChart = memo(function ClimateChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) {
+  if (data.length < 2) return <EmptyChart loading={loading} hint="Looks for the room temperature sensors in recorder history" />
+  const latest = latestValues(data, climateSeries)
+  return (
+    <>
+      <ChartLegend items={climateSeries.map((item) => ({ label: item.label, color: item.color, value: item.key in latest ? `${formatNumber(latest[item.key], 1)}°` : undefined }))} />
+      <div className="insights-chart" data-swipe-ignore>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={chartMargin}>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="time" {...xAxisProps} tickFormatter={formatTime} minTickGap={38} />
+            <YAxis {...yAxisProps} domain={['auto', 'auto']} tickFormatter={formatTick} />
+            <Tooltip cursor={tooltipCursor} content={<GlassTooltip labelFormat={(label) => formatTime(Number(label))} valueFormat={(value) => `${formatNumber(value, 1)}°F`} />} />
+            {climateSeries.map((item) => <Line key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} {...lineProps} connectNulls />)}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  )
+})
+
+const NetworkChart = memo(function NetworkChart({ data, loading }: { data: ChartPoint[]; loading: boolean }) {
+  if (data.length < 2) return <EmptyChart loading={loading} hint="Looks for the gateway download and upload speed sensors" />
+  const latest = latestValues(data, networkDefinitions)
+  return (
+    <>
+      <ChartLegend items={networkDefinitions.map((item) => ({ label: item.label, color: item.color, value: item.key in latest ? `${formatNumber(latest[item.key], 1)} Mbps` : undefined }))} />
+      <div className="insights-chart" data-swipe-ignore>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={chartMargin}>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="time" {...xAxisProps} tickFormatter={formatTime} minTickGap={38} />
+            <YAxis {...yAxisProps} tickFormatter={formatTick} />
+            <Tooltip cursor={tooltipCursor} content={<GlassTooltip labelFormat={(label) => formatTime(Number(label))} valueFormat={(value) => `${formatNumber(value, 1)} Mbps`} />} />
+            {networkDefinitions.map((item) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} fill={item.color} fillOpacity={0.1} {...lineProps} connectNulls />)}
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  )
+})
+
+const energySeries = [
+  { key: 'current', label: 'This month', color: seriesColor(0) },
+  { key: 'previous', label: 'Last month', color: seriesColor(1) },
+]
+
+const EnergyChart = memo(function EnergyChart({ data }: { data: { name: string; current: number; previous: number }[] }) {
+  return (
+    <>
+      <ChartLegend items={energySeries.map((item) => ({ label: item.label, color: item.color, shape: 'bar' }))} />
+      <div className="insights-chart" data-swipe-ignore>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={chartMargin} barGap={BAR_GAP}>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey="name" {...xAxisProps} />
+            <YAxis {...yAxisProps} tickFormatter={formatTick} />
+            <Tooltip cursor={barTooltipCursor} content={<GlassTooltip valueFormat={(value) => `${formatNumber(value, 2)} kWh`} />} />
+            {energySeries.map((item) => <Bar key={item.key} dataKey={item.key} name={item.label} fill={item.color} {...barProps} />)}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  )
+})
+
+const SaltChart = memo(function SaltChart({ data, loading }: { data: HistoryPoint[]; loading: boolean }) {
+  if (data.length < 2) return <EmptyChart loading={loading} hint="Looks for the ESPHome salt level sensor in recorder history" />
+  return (
+    <div className="insights-chart" data-swipe-ignore>
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={chartMargin}>
+          <CartesianGrid {...gridProps} />
+          <XAxis dataKey="time" {...xAxisProps} tickFormatter={formatDay} minTickGap={30} />
+          <YAxis {...yAxisProps} domain={[0, 100]} tickFormatter={(value: number) => `${value}%`} />
+          <Tooltip cursor={tooltipCursor} content={<GlassTooltip labelFormat={(label) => new Date(Number(label)).toLocaleDateString()} valueFormat={(value) => `${formatNumber(value)}%`} />} />
+          <Area type="stepAfter" dataKey="value" name="Salt level" stroke={seriesColor(0)} fill={seriesColor(0)} fillOpacity={0.1} {...lineProps} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+})
+
+/** Thresholds shared by the bar labels and the detail factors. */
+function batteryStatus(value: number) {
+  if (value <= 20) return { word: 'Replace', tone: 'danger' as const }
+  if (value <= 40) return { word: 'Low', tone: 'warn' as const }
+  return null
+}
+
+interface BatteryLabelProps { x?: number | string; y?: number | string; width?: number | string; height?: number | string; value?: number | string }
+
+/**
+ * Value label at the end of each battery bar. The bars are all one series colour; a low battery is
+ * status, so it is carried by a word in the status ink next to the number rather than by repainting
+ * the bar red/amber/green (three hues that read as three series and fail for red-green CVD).
+ */
+function BatteryLabel({ x = 0, y = 0, width = 0, height = 0, value }: BatteryLabelProps) {
+  const numeric = Number(value)
+  const status = batteryStatus(numeric)
+  return (
+    <text x={Number(x) + Number(width) + 6} y={Number(y) + Number(height) / 2} dominantBaseline="central" fontSize="0.72rem" fill="var(--chart-ink)">
+      <tspan fill="var(--text)" fontWeight={700}>{formatNumber(numeric)}%</tspan>
+      {status && <tspan dx={5} fill={`var(--${status.tone})`} fontWeight={700}>{status.word}</tspan>}
+    </text>
+  )
+}
+
+const BatteryChart = memo(function BatteryChart({ data }: { data: { name: string; value: number }[] }) {
+  if (!data.length) return <EmptyState size="compact" icon={<BatteryCharging />} title="No battery devices" hint="Looks for entities with device_class battery" />
+  return (
+    <div className="insights-chart" data-swipe-ignore>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} layout="vertical" margin={{ top: 4, right: 76, left: 0, bottom: 0 }}>
+          <XAxis type="number" domain={[0, 100]} hide />
+          <YAxis type="category" dataKey="name" {...yAxisProps} width={104} />
+          <Tooltip cursor={barTooltipCursor} content={<GlassTooltip valueFormat={(value) => `${formatNumber(value)}%${batteryStatus(value) ? ` · ${batteryStatus(value)?.word}` : ''}`} />} />
+          <Bar dataKey="value" name="Battery" fill={seriesColor(0)} {...hBarProps} background={{ fill: 'rgba(255, 255, 255, .04)', radius: 4 }}>
+            <LabelList dataKey="value" content={<BatteryLabel />} />
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+})
 
 export function InsightsView({ entities, series, loading, slide, onSelectSlide }: InsightsViewProps) {
   const [detail, setDetail] = useState<InsightDetailConfig | null>(null)
-  const all = Array.from(entities.values())
   const inside = numericState(entities, 'sensor.main_floor_temperature', 72)
   const insideHumidity = numericState(entities, 'sensor.mainfoor_thermostat_humidity', 45)
   const outside = numericState(entities, 'sensor.open_weather_temperature', 72)
@@ -143,13 +342,10 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
   const washerLastMonth = toKwh(entities.get('sensor.washer_energy_last_month'))
   const comfort = comfortScore(inside, insideHumidity)
   const online = entities.get('binary_sensor.cbr750_gateway_wan_status')?.state === 'on'
-  const unsafeLocks = all.filter((entity) => entity.entity_id.startsWith('lock.') && ['unlocked', 'open', 'jammed'].includes(entity.state))
-  const activeProblems = all.filter((entity) => entity.entity_id.startsWith('binary_sensor.') && entity.attributes.device_class === 'problem' && entity.state === 'on')
-  const leaks = all.filter((entity) => entity.entity_id.startsWith('binary_sensor.') && entity.attributes.device_class === 'moisture' && entity.state === 'on')
-  const openDoorSensors = all.filter((entity) => entity.entity_id.startsWith('binary_sensor.')
-    && ['door', 'garage_door', 'window', 'opening'].includes(String(entity.attributes.device_class ?? ''))
-    && entity.state === 'on')
-  const openCovers = all.filter((entity) => entity.entity_id.startsWith('cover.') && ['open', 'opening'].includes(entity.state))
+  const scanKey = scanSignature(entities)
+  // The signature encodes every entity these scans read; `entities` itself changes on every frame.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { unsafeLocks, activeProblems, leaks, openDoorSensors, openCovers, batteryCount, batteryData, plantData } = useMemo(() => scanEntities(entities), [scanKey])
   const reportedDoors = numericState(entities, 'sensor.doors_open_count', 0)
   const openDoors = Math.max(reportedDoors, openDoorSensors.length)
   const homeIssues = unsafeLocks.length + activeProblems.length + openDoors
@@ -163,48 +359,36 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
   }
 
   const accessFactors: DetailFactor[] = [
-    { label: 'Unlocked locks', value: `${unsafeLocks.length}`, detail: unsafeLocks.length ? unsafeLocks.map(entityName).slice(0, 2).join(', ') : 'All locks secured', tone: unsafeLocks.length ? 'danger' : 'good' },
-    { label: 'Open doors', value: `${formatNumber(openDoors)}`, detail: openDoorSensors.length ? openDoorSensors.map(entityName).slice(0, 2).join(', ') : openDoors ? 'Reported by the door counter' : 'All doors closed', tone: openDoors ? 'warn' : 'good' },
-    { label: 'Open covers', value: `${openCovers.length}`, detail: openCovers.length ? openCovers.map(entityName).slice(0, 2).join(', ') : 'Garage and covers closed', tone: openCovers.length ? 'warn' : 'good' },
-    { label: 'Leak alerts', value: `${leaks.length}`, detail: leaks.length ? leaks.map(entityName)[0] : 'No moisture detected', tone: leaks.length ? 'danger' : 'good' },
-    { label: 'Device problems', value: `${activeProblems.length}`, detail: activeProblems.length ? entityName(activeProblems[0]) : 'No reported faults', tone: activeProblems.length ? 'warn' : 'good' },
+    { label: 'Unlocked locks', value: `${unsafeLocks.length}`, detail: unsafeLocks.length ? unsafeLocks.map((entity) => friendlyName(entity)).slice(0, 2).join(', ') : 'All locks secured', tone: unsafeLocks.length ? 'danger' : 'good' },
+    { label: 'Open doors', value: `${formatNumber(openDoors)}`, detail: openDoorSensors.length ? openDoorSensors.map((entity) => friendlyName(entity)).slice(0, 2).join(', ') : openDoors ? 'Reported by the door counter' : 'All doors closed', tone: openDoors ? 'warn' : 'good' },
+    { label: 'Open covers', value: `${openCovers.length}`, detail: openCovers.length ? openCovers.map((entity) => friendlyName(entity)).slice(0, 2).join(', ') : 'Garage and covers closed', tone: openCovers.length ? 'warn' : 'good' },
+    { label: 'Leak alerts', value: `${leaks.length}`, detail: leaks.length ? leaks.map((entity) => friendlyName(entity))[0] : 'No moisture detected', tone: leaks.length ? 'danger' : 'good' },
+    { label: 'Device problems', value: `${activeProblems.length}`, detail: activeProblems.length ? friendlyName(activeProblems[0]) : 'No reported faults', tone: activeProblems.length ? 'warn' : 'good' },
   ]
   const accessChips: DetailChip[] = [...openDoorSensors, ...openCovers, ...unsafeLocks, ...leaks, ...activeProblems]
     .slice(0, 8)
-    .map((entity) => ({ label: entityName(entity), value: humanState(entity.state) }))
+    .map((entity) => ({ label: friendlyName(entity), value: humanState(entity.state) }))
 
-  const climateData = mergeHistory(series, climateSeries)
-  const networkDefinitions: SeriesDefinition[] = [
-    { entityId: 'sensor.cbr750_gateway_download_speed', key: 'download', label: 'Download', color: '#39df8b' },
-    { entityId: 'sensor.cbr750_gateway_upload_speed', key: 'upload', label: 'Upload', color: '#55a8ff' },
-  ]
-  const networkData = mergeHistory(series, networkDefinitions, 5)
-  const saltData = series.get('sensor.esphome_web_79cc76_salt_level_percent') ?? []
+  // History only changes when useInsights refetches (every few minutes); bucketing seven series of
+  // recorder samples on every WebSocket frame was the single largest cost on this page.
+  const climateData = useMemo(() => mergeHistory(series, climateSeries), [series])
+  const networkData = useMemo(() => mergeHistory(series, networkDefinitions, 5), [series])
+  const saltData = useMemo(() => series.get('sensor.esphome_web_79cc76_salt_level_percent') ?? [], [series])
 
-  const energyData = [
+  const energyData = useMemo(() => [
     { name: 'Home', current: monthlyEnergy, previous: 0 },
     { name: 'Fridge', current: fridgeThisMonth, previous: fridgeLastMonth },
     { name: 'Washer', current: washerThisMonth, previous: washerLastMonth },
-  ]
+  ], [monthlyEnergy, fridgeThisMonth, fridgeLastMonth, washerThisMonth, washerLastMonth])
 
-  const batteryData = all
-    .filter((entity) => entity.attributes.device_class === 'battery' && Number.isFinite(Number(entity.state)))
-    .map((entity) => ({ entityId: entity.entity_id, name: entityName(entity).replace(/ battery( level)?/i, ''), value: Number(entity.state) }))
-    .sort((left, right) => left.value - right.value)
-    .slice(0, 8)
-
-  const plantData = all
-    .filter((entity) => {
-      const searchable = `${entity.entity_id} ${entityName(entity)}`.toLowerCase()
-      return entity.attributes.device_class === 'humidity' && /(plant|maple|magnolia|soil)/.test(searchable) && Number.isFinite(Number(entity.state))
-    })
-    .map((entity, index) => ({ entityId: entity.entity_id, name: entityName(entity).replace(/plant sensor|humidity/gi, '').trim(), value: Number(entity.state), fill: index % 2 ? '#62d7d3' : '#62d477' }))
-
-  const roomData = roomSensors.map((room) => ({
+  const roomKey = roomSignature(entities)
+  const roomData = useMemo(() => roomSensors.map((room) => ({
     ...room,
     temperatureValue: numericState(entities, room.temperature, Number.NaN),
     humidityValue: numericState(entities, room.humidity, Number.NaN),
-  }))
+  // The signature encodes every room reading; `entities` itself changes on every frame.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  })), [roomKey])
 
   const utilityReadings = [
     {
@@ -236,7 +420,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: HeartPulse, label: 'Air quality', value: airQualityCategory, detail: `AQI ${formatNumber(airQuality)}`, tone: airQuality > 50 ? 'alert' : '',
+      icon: HeartPulse, label: 'Air quality', value: airQualityCategory, detail: `AQI ${formatNumber(airQuality)}`, tone: airQuality > 50 ? 'danger' : '',
       detailConfig: {
         id: 'air-quality', title: 'Indoor air quality', subtitle: 'Dyson purifier air quality index', value: `AQI ${formatNumber(airQuality)}`, unit: 'AQI', hours: 24, chart: 'area',
         series: [...seriesFor('sensor.dyson_3wf_us_ugf5956a_air_quality_index', 'Air quality index', detailColors.air)],
@@ -250,7 +434,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: ShieldCheck, label: 'Access', value: homeIssues ? `${homeIssues} alerts` : 'Secure', detail: homeIssues ? 'Needs attention' : 'All clear', tone: homeIssues ? 'alert' : '',
+      icon: ShieldCheck, label: 'Access', value: homeIssues ? `${homeIssues} alerts` : 'Secure', detail: homeIssues ? 'Needs attention' : 'All clear', tone: homeIssues ? 'danger' : '',
       detailConfig: {
         id: 'access', title: 'Access and safety', subtitle: 'Locks, doors, leaks, and faults', value: homeIssues ? `${homeIssues} alerts` : 'Secure', unit: 'doors', hours: 24, chart: 'line',
         series: [...seriesFor('sensor.doors_open_count', 'Open doors', detailColors.access)],
@@ -263,7 +447,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
 
   const systems = [
     {
-      icon: WashingMachine, label: 'Washer', value: humanState(entities.get('sensor.washer_current_status')?.state), detail: `${formatNumber(numericState(entities, 'sensor.washer_cycles'))} cycles`, tone: 'blue',
+      icon: WashingMachine, label: 'Washer', value: humanState(entities.get('sensor.washer_current_status')?.state), detail: `${formatNumber(numericState(entities, 'sensor.washer_cycles'))} cycles`, tone: '',
       detailConfig: {
         id: 'washer', title: 'Washer', subtitle: 'Cycle status and energy use', value: humanState(entities.get('sensor.washer_current_status')?.state), unit: '', hours: 24, chart: 'line',
         series: [...seriesFor('sensor.washer_current_status', 'Washer status', detailColors.neutral)],
@@ -277,7 +461,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Waves, label: 'Dryer', value: humanState(entities.get('sensor.dryer_current_status')?.state), detail: 'Laundry system', tone: 'amber',
+      icon: Waves, label: 'Dryer', value: humanState(entities.get('sensor.dryer_current_status')?.state), detail: 'Laundry system', tone: '',
       detailConfig: {
         id: 'dryer', title: 'Dryer', subtitle: 'Laundry cycle status', value: humanState(entities.get('sensor.dryer_current_status')?.state), unit: '', hours: 24, chart: 'line',
         series: [...seriesFor('sensor.dryer_current_status', 'Dryer status', detailColors.energy)],
@@ -289,7 +473,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Refrigerator, label: 'Refrigerator', value: `${formatNumber(fridgeTemperature)}°F`, detail: `Freezer ${formatNumber(freezerTemperature)}°F`, tone: 'green',
+      icon: Refrigerator, label: 'Refrigerator', value: `${formatNumber(fridgeTemperature)}°F`, detail: `Freezer ${formatNumber(freezerTemperature)}°F`, tone: '',
       detailConfig: {
         id: 'refrigerator', title: 'Refrigerator', subtitle: 'Fridge and freezer setpoints', value: `${formatNumber(fridgeTemperature)}°F`, unit: '°F', hours: 24, chart: 'area',
         series: [...seriesFor('number.refrigerator_fridge_temperature', 'Fridge', detailColors.humidity), ...seriesFor('number.refrigerator_freezer_temperature', 'Freezer', detailColors.comfort)],
@@ -303,7 +487,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Bot, label: 'Roborock', value: humanState(entities.get('sensor.roborock_qrevo_maxv_status')?.state), detail: `${formatNumber(numericState(entities, 'sensor.roborock_qrevo_maxv_total_cleaning_count'))} cleanings`, tone: 'cyan',
+      icon: Bot, label: 'Roborock', value: humanState(entities.get('sensor.roborock_qrevo_maxv_status')?.state), detail: `${formatNumber(numericState(entities, 'sensor.roborock_qrevo_maxv_total_cleaning_count'))} cleanings`, tone: '',
       detailConfig: {
         id: 'roborock', title: 'Roborock vacuum', subtitle: 'Cleaning status and history', value: humanState(entities.get('sensor.roborock_qrevo_maxv_status')?.state), unit: '', hours: 24, chart: 'line',
         series: [...seriesFor('sensor.roborock_qrevo_maxv_status', 'Vacuum status', detailColors.comfort)],
@@ -316,7 +500,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Gauge, label: 'Vacuum sensor', value: `${formatNumber(vacuumTimeLeft, 1)} h`, detail: 'Maintenance remaining', tone: vacuumTimeLeft < 0 ? 'coral' : 'green',
+      icon: Gauge, label: 'Vacuum sensor', value: `${formatNumber(vacuumTimeLeft, 1)} h`, detail: 'Maintenance remaining', tone: vacuumTimeLeft < 0 ? 'danger' : '',
       detailConfig: {
         id: 'vacuum-sensor', title: 'Vacuum sensor life', subtitle: 'Consumable maintenance countdown', value: `${formatNumber(vacuumTimeLeft, 1)} h`, unit: 'h', hours: 24 * 7, chart: 'line',
         series: [...seriesFor('sensor.roborock_qrevo_maxv_sensor_time_left', 'Sensor hours left', detailColors.energy)],
@@ -329,7 +513,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Wind, label: 'Wind', value: `${formatNumber(windSpeed, 1)} mph`, detail: 'Current outdoor speed', tone: 'cyan',
+      icon: Wind, label: 'Wind', value: `${formatNumber(windSpeed, 1)} mph`, detail: 'Current outdoor speed', tone: '',
       detailConfig: {
         id: 'wind', title: 'Outdoor wind', subtitle: 'OpenWeather wind speed', value: `${formatNumber(windSpeed, 1)} mph`, unit: 'mph', hours: 24, chart: 'area',
         series: [...seriesFor('sensor.open_weather_windspeed', 'Wind speed', detailColors.comfort)],
@@ -342,7 +526,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Waves, label: 'Softener salt', value: `${formatNumber(salt)}%`, detail: salt < 25 ? 'Refill soon' : 'Level healthy', tone: salt < 25 ? 'coral' : 'cyan',
+      icon: Waves, label: 'Softener salt', value: `${formatNumber(salt)}%`, detail: salt < 25 ? 'Refill soon' : 'Level healthy', tone: salt < 25 ? 'danger' : '',
       detailConfig: {
         id: 'salt', title: 'Water softener salt', subtitle: '30-day salt level trend', value: `${formatNumber(salt)}%`, unit: '%', hours: 24 * 30, chart: 'area',
         series: [...seriesFor('sensor.esphome_web_79cc76_salt_level_percent', 'Salt level', detailColors.salt)],
@@ -355,7 +539,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Sprout, label: 'Magnolia moisture', value: `${formatNumber(magnoliaMoisture)}%`, detail: magnoliaMoisture < 20 ? 'Dry · water needed' : magnoliaMoisture > 90 ? 'Saturated' : 'Healthy range', tone: magnoliaMoisture < 20 || magnoliaMoisture > 90 ? 'coral' : 'green',
+      icon: Sprout, label: 'Magnolia moisture', value: `${formatNumber(magnoliaMoisture)}%`, detail: magnoliaMoisture < 20 ? 'Dry · water needed' : magnoliaMoisture > 90 ? 'Saturated' : 'Healthy range', tone: magnoliaMoisture < 20 || magnoliaMoisture > 90 ? 'danger' : '',
       detailConfig: {
         id: 'magnolia', title: 'Magnolia soil moisture', subtitle: '7-day lawn sensor trend', value: `${formatNumber(magnoliaMoisture)}%`, unit: '%', hours: 24 * 7, chart: 'area',
         series: [...seriesFor('sensor.lawn_plant_sensor_magnolia_humidity', 'Magnolia moisture', detailColors.plant)],
@@ -369,7 +553,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: Sprout, label: 'Maple moisture', value: `${formatNumber(mapleMoisture)}%`, detail: mapleMoisture < 20 ? 'Dry · water needed' : mapleMoisture > 90 ? 'Saturated' : 'Healthy range', tone: mapleMoisture < 20 || mapleMoisture > 90 ? 'coral' : 'green',
+      icon: Sprout, label: 'Maple moisture', value: `${formatNumber(mapleMoisture)}%`, detail: mapleMoisture < 20 ? 'Dry · water needed' : mapleMoisture > 90 ? 'Saturated' : 'Healthy range', tone: mapleMoisture < 20 || mapleMoisture > 90 ? 'danger' : '',
       detailConfig: {
         id: 'maple', title: 'Maple soil moisture', subtitle: '7-day lawn sensor trend', value: `${formatNumber(mapleMoisture)}%`, unit: '%', hours: 24 * 7, chart: 'area',
         series: [...seriesFor('sensor.lawn_plant_sensor_maple_humidity', 'Maple moisture', detailColors.plant)],
@@ -383,14 +567,14 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      icon: BatteryCharging, label: 'Lowest battery', value: batteryData.length ? `${formatNumber(batteryData[0].value)}%` : '—', detail: batteryData[0]?.name ?? 'No battery data', tone: (batteryData[0]?.value ?? 100) <= 20 ? 'coral' : 'green',
+      icon: BatteryCharging, label: 'Lowest battery', value: batteryData.length ? `${formatNumber(batteryData[0].value)}%` : '—', detail: batteryData[0]?.name ?? 'No battery data', tone: (batteryData[0]?.value ?? 100) <= 20 ? 'danger' : '',
       detailConfig: {
         id: 'lowest-battery', title: batteryData[0] ? `${batteryData[0].name} battery` : 'Battery levels', subtitle: 'Device closest to needing service', value: batteryData.length ? `${formatNumber(batteryData[0].value)}%` : '—', unit: '%', hours: 24 * 7, chart: 'line',
         series: batteryData[0] ? [{ entityId: batteryData[0].entityId, label: batteryData[0].name, color: detailColors.battery }] : [],
         explanation: 'This is the lowest reported battery percentage across every Home Assistant device that exposes a battery. The 7-day slope estimates how quickly it is draining so you can replace it before the device goes offline.',
         factors: [
           { label: 'Lowest level', value: batteryData.length ? `${formatNumber(batteryData[0].value)}%` : '—', detail: batteryData[0]?.name, tone: (batteryData[0]?.value ?? 100) <= 20 ? 'danger' : 'good' },
-          { label: 'Devices tracked', value: `${all.filter((entity) => entity.attributes.device_class === 'battery').length}` },
+          { label: 'Devices tracked', value: `${batteryCount}` },
           { label: 'Below 20%', value: `${batteryData.filter((item) => item.value <= 20).length}` },
           { label: 'Wall tablet', value: `${formatNumber(dashboardBattery)}%` },
         ] as DetailFactor[],
@@ -401,7 +585,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
 
   const metrics = [
     {
-      label: 'Comfort score', value: `${comfort}`, detail: `${formatNumber(inside, 1)}° · ${formatNumber(insideHumidity)}% inside`, icon: HeartPulse, tone: 'coral',
+      label: 'Comfort score', value: `${comfort}`, detail: `${formatNumber(inside, 1)}° · ${formatNumber(insideHumidity)}% inside`, icon: HeartPulse, tone: '',
       detailConfig: {
         id: 'comfort', title: 'Comfort score', subtitle: 'Derived indoor comfort index', value: `${comfort}`, unit: 'score', hours: 24, chart: 'area', derived: 'comfort',
         series: [
@@ -419,7 +603,7 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      label: 'Home status', value: homeIssues ? `${homeIssues} alerts` : 'Secure', detail: unsafeLocks.length ? `${unsafeLocks.length} locks unlocked` : activeProblems.length ? `${activeProblems.length} device problems` : 'All monitored access clear', icon: ShieldCheck, tone: homeIssues ? 'coral' : 'green',
+      label: 'Home status', value: homeIssues ? `${homeIssues} alerts` : 'Secure', detail: unsafeLocks.length ? `${unsafeLocks.length} locks unlocked` : activeProblems.length ? `${activeProblems.length} device problems` : 'All monitored access clear', icon: ShieldCheck, tone: homeIssues ? 'danger' : 'good',
       detailConfig: {
         id: 'home-status', title: 'Home status', subtitle: 'Combined security and fault count', value: homeIssues ? `${homeIssues} alerts` : 'Secure', unit: 'doors', hours: 24, chart: 'line',
         series: [...seriesFor('sensor.doors_open_count', 'Open doors', detailColors.access)],
@@ -429,24 +613,24 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
       } as InsightDetailConfig,
     },
     {
-      label: 'Network', value: online ? 'Online' : 'Offline', detail: `${formatNumber(download)}↓ · ${formatNumber(upload)}↑ Mbps`, icon: Wifi, tone: online ? 'blue' : 'coral',
+      label: 'Network', value: online ? 'Online' : 'Offline', detail: `${formatNumber(download)}↓ · ${formatNumber(upload)}↑ Mbps`, icon: Wifi, tone: online ? '' : 'danger',
       detailConfig: {
         id: 'network', title: 'Network throughput', subtitle: 'Gateway upload and download', value: `${formatNumber(download)}↓ / ${formatNumber(upload)}↑ Mbps`, unit: 'Mbps', hours: 24, chart: 'area',
         series: [
           ...seriesFor('sensor.cbr750_gateway_download_speed', 'Download', detailColors.download, mbpsScale),
           ...seriesFor('sensor.cbr750_gateway_upload_speed', 'Upload', detailColors.upload, mbpsScale),
         ],
-        explanation: 'The gateway reports throughput in KiB/s, which the dashboard converts to Mbps by multiplying by 8 and dividing by 1024. Online status comes from the WAN connectivity sensor, so a flat line at zero with an offline status means the link itself dropped.',
+        explanation: 'The gateway reports throughput in KiB/s, which the dashboard converts to Mbps by multiplying by 8 × 1024 and dividing by 1,000,000. Online status comes from the WAN connectivity sensor, so a flat line at zero with an offline status means the link itself dropped.',
         factors: [
           { label: 'WAN status', value: online ? 'Online' : 'Offline', tone: online ? 'good' : 'danger' },
           { label: 'Download', value: `${formatNumber(download, 1)} Mbps` },
           { label: 'Upload', value: `${formatNumber(upload, 1)} Mbps` },
-          { label: 'Conversion', value: '× 8 ÷ 1024', detail: 'KiB/s to Mbps' },
+          { label: 'Conversion', value: '× 8,192 ÷ 10⁶', detail: 'KiB/s to Mbps' },
         ] as DetailFactor[],
       } as InsightDetailConfig,
     },
     {
-      label: 'Monthly energy', value: `${formatNumber(monthlyEnergy, 1)} kWh`, detail: `Est. $${formatNumber(monthlyEnergy * .12, 2)} at $0.12/kWh`, icon: Zap, tone: 'amber',
+      label: 'Monthly energy', value: `${formatNumber(monthlyEnergy, 1)} kWh`, detail: `Est. $${formatNumber(monthlyEnergy * .12, 2)} at $0.12/kWh`, icon: Zap, tone: '',
       detailConfig: {
         id: 'energy', title: 'Monthly energy', subtitle: 'Utility meter and appliance usage', value: `${formatNumber(monthlyEnergy, 1)} kWh`, unit: 'kWh', hours: 24 * 30, chart: 'area',
         series: [...seriesFor(monthlyEnergyId, 'Monthly usage', detailColors.energy)],
@@ -511,116 +695,168 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
     factors: plantData.map((item) => ({ label: item.name, value: `${formatNumber(item.value)}%`, detail: item.value < 20 ? 'Dry' : item.value > 90 ? 'Saturated' : 'Healthy', tone: item.value < 20 || item.value > 90 ? 'danger' : 'good' })),
   }
 
+  const slideValues = insightsSlides.map((_, index) => index)
+  const lowBatteries = batteryData.filter((item) => item.value <= 20).length
+  const slideHeading = activeSlide.id === 'climate'
+    ? { title: `${formatNumber(inside, 1)}° inside, comfort ${comfort}`, tone: 'neutral' as const }
+    : activeSlide.id === 'network'
+      ? { title: online ? 'Internet online' : 'Internet offline', tone: online ? 'neutral' as const : 'danger' as const }
+      : { title: lowBatteries ? `${lowBatteries} ${lowBatteries === 1 ? 'battery needs' : 'batteries need'} replacing` : 'Nothing needs attention', tone: lowBatteries ? 'warn' as const : 'neutral' as const }
+  const hasInsightEntities = entities.size > 0 && (
+    climateSeries.some((item) => entities.has(item.entityId))
+    || networkDefinitions.some((item) => entities.has(item.entityId))
+    || entities.has(monthlyEnergyId)
+    || batteryCount > 0
+  )
+
+  if (!hasInsightEntities) {
+    return (
+      <section className="insights-view" aria-label="Home analytics">
+        <PageFrame icon={<TrendingUp />} title={entities.size ? 'No insight sensors found' : 'Connecting to Home Assistant'} />
+        {entities.size
+          ? <EmptyState title="Nothing to chart yet" hint="Looks for room temperature sensors, the gateway speed sensors, the SmartHub energy meter and battery entities" />
+          : <LoadingState label="Waiting for Home Assistant states" />}
+      </section>
+    )
+  }
+
   return (
     <section className="insights-view" aria-label="Home analytics">
+      <PageFrame
+        icon={<SlideIcon />}
+        eyebrow={activeSlide.title}
+        title={slideHeading.title}
+        tone={slideHeading.tone}
+        meta={activeSlide.subtitle}
+        actions={(
+          <div className="insights-pager" role="tablist" aria-label="Insights panels" onKeyDown={tabListKeyHandler(slideValues, slide, onSelectSlide)}>
+            {insightsSlides.map((item, index) => {
+              const Icon = slideIcons[index] ?? Thermometer
+              const selected = index === slide
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  id={`insights-tab-${item.id}`}
+                  aria-selected={selected}
+                  aria-controls="insights-panel"
+                  tabIndex={selected ? 0 : -1}
+                  className={`glass-pill ${selected ? 'is-active' : ''}`}
+                  onClick={() => onSelectSlide(index)}
+                >
+                  <Icon size={16} aria-hidden="true" /><span>{item.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      />
+
       <div className="metric-grid">
         {metrics.map(({ label, value, detail, icon: Icon, tone, detailConfig }) => (
-          <button className="metric-card" key={label} onClick={() => setDetail(detailConfig)} aria-label={`Explain ${label}`}>
-            <span className={`metric-icon ${tone}`}><Icon size={18} /></span>
+          <button type="button" className="metric-card glass" key={label} onClick={() => setDetail(detailConfig)} aria-label={`Explain ${label}`}>
+            <span className={`metric-icon ${tone}`} aria-hidden="true"><Icon size={18} /></span>
             <div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div>
-            <Maximize2 className="card-expand" size={13} aria-hidden="true" />
+            <Maximize2 className="card-expand" size={16} aria-hidden="true" />
           </button>
         ))}
       </div>
 
-      <div className="slide-titlebar">
-        <div><span className="slide-badge"><SlideIcon size={16} /></span><div><h2>{activeSlide.title}</h2><p>{activeSlide.subtitle}</p></div></div>
-        <div className="slide-dots" role="tablist" aria-label="Insights panels">
-          {insightsSlides.map((item, index) => (
-            <button
-              key={item.id}
-              role="tab"
-              aria-selected={index === slide}
-              aria-label={item.title}
-              className={index === slide ? 'is-active' : ''}
-              onClick={() => onSelectSlide(index)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {activeSlide.id === 'climate' && (
-        <div className="insight-slide climate-slide" key="climate">
-          <div className="utility-band">
-            {utilityReadings.map(({ icon: Icon, label, value, detail, tone, detailConfig }) => (
-              <button className={`utility-reading ${tone}`} key={label} onClick={() => setDetail(detailConfig)} aria-label={`Explain ${label}`}>
-                <Icon size={17} /><span>{label}</span><strong>{value}</strong><small>{detail}</small>
-              </button>
-            ))}
-          </div>
-          <article className="analytics-panel">
-            <PanelHeader icon={Thermometer} title="Room temperature · 24 hours" subtitle="Seven monitored spaces" value={`${formatNumber(outside)}° outside`} onExpand={() => setDetail(climatePanelDetail)} />
-            <div className="chart-frame">
-              {climateData.length > 1 ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={climateData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}><defs>{climateSeries.map((item) => <linearGradient key={item.key} id={`climateFill-${item.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={item.color} stopOpacity={.26} /><stop offset="95%" stopColor={item.color} stopOpacity={.01} /></linearGradient>)}</defs><CartesianGrid stroke="rgba(100,145,165,.16)" vertical={false} /><XAxis dataKey="time" tickFormatter={formatTime} tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} minTickGap={38} /><YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} /><Tooltip labelFormatter={(label) => formatTime(Number(label))} contentStyle={tooltipStyle} /><Legend wrapperStyle={{ fontSize: 11 }} />{climateSeries.map((item) => <Area key={item.key} type="monotone" dataKey={item.key} name={item.label} stroke={item.color} strokeWidth={2} fill={`url(#climateFill-${item.key})`} dot={false} connectNulls />)}</AreaChart></ResponsiveContainer> : <EmptyChart loading={loading} />}
+      <div id="insights-panel" role="tabpanel" aria-labelledby={`insights-tab-${activeSlide.id}`} className="insights-panel">
+        {activeSlide.id === 'climate' && (
+          <div className="insight-slide climate-slide" key="climate">
+            <div className="utility-band">
+              {utilityReadings.map(({ icon: Icon, label, value, detail, tone, detailConfig }) => (
+                <button type="button" className={`utility-reading ${tone}`} key={label} onClick={() => setDetail(detailConfig)} aria-label={`Explain ${label}`}>
+                  <Icon size={17} aria-hidden="true" /><span>{label}</span><strong>{value}</strong><small>{detail}</small>
+                </button>
+              ))}
             </div>
-          </article>
-          <div className="room-grid">
-            {roomData.map((room) => (
-              <button className="room-card" key={room.name} onClick={() => setDetail(roomDetail(room))} aria-label={`Explain ${room.name} climate`}>
-                <h3>{room.name}</h3>
-                <div><span><Thermometer size={14} />{Number.isFinite(room.temperatureValue) ? `${formatNumber(room.temperatureValue, 1)}°` : '—'}</span><span><Droplets size={14} />{Number.isFinite(room.humidityValue) ? `${formatNumber(room.humidityValue)}%` : '—'}</span></div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {activeSlide.id === 'network' && (
-        <div className="insight-slide network-slide" key="network">
-          <article className="analytics-panel">
-            <PanelHeader icon={Wifi} title="Network throughput · 24 hours" subtitle="Gateway traffic converted to Mbps" value={`${formatNumber(download)}↓ / ${formatNumber(upload)}↑`} onExpand={() => setDetail(metrics[2].detailConfig)} />
-            <div className="chart-frame">
-              {networkData.length > 1 ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={networkData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}><defs><linearGradient id="downloadFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#39df8b" stopOpacity={.42} /><stop offset="95%" stopColor="#39df8b" stopOpacity={.02} /></linearGradient><linearGradient id="uploadFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#55a8ff" stopOpacity={.38} /><stop offset="95%" stopColor="#55a8ff" stopOpacity={.02} /></linearGradient></defs><CartesianGrid stroke="rgba(100,145,165,.16)" vertical={false} /><XAxis dataKey="time" tickFormatter={formatTime} tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} minTickGap={38} /><YAxis tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} /><Tooltip labelFormatter={(label) => formatTime(Number(label))} contentStyle={tooltipStyle} /><Legend wrapperStyle={{ fontSize: 10 }} /><Area type="monotone" dataKey="download" name="Download Mbps" stroke="#39df8b" fill="url(#downloadFill)" strokeWidth={2} connectNulls /><Area type="monotone" dataKey="upload" name="Upload Mbps" stroke="#55a8ff" fill="url(#uploadFill)" strokeWidth={2} connectNulls /></AreaChart></ResponsiveContainer> : <EmptyChart loading={loading} />}
-            </div>
-          </article>
-          <div className="slide-row two">
-            <article className="analytics-panel">
-              <PanelHeader icon={Zap} title="Energy comparison" subtitle="Current vs previous month" value={`${formatNumber(monthlyEnergy, 1)} kWh`} onExpand={() => setDetail(metrics[3].detailConfig)} />
-              <div className="chart-frame"><ResponsiveContainer width="100%" height="100%"><BarChart data={energyData} margin={{ top: 8, right: 5, left: -18, bottom: 0 }}><CartesianGrid stroke="rgba(100,145,165,.16)" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} /><YAxis tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} /><Tooltip contentStyle={tooltipStyle} formatter={(value) => `${formatNumber(Number(value), 2)} kWh`} /><Legend wrapperStyle={{ fontSize: 10 }} /><Bar dataKey="current" name="This month" fill="#ffc857" radius={[5, 5, 0, 0]} /><Bar dataKey="previous" name="Last month" fill="#3f6680" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></div>
-            </article>
-            <article className="analytics-panel">
-              <PanelHeader icon={Waves} title="Water softener salt" subtitle="30-day recorder history" value={`${formatNumber(salt)}%`} onExpand={() => setDetail(systems[6].detailConfig)} />
-              <div className="chart-frame">
-                {saltData.length > 1 ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={saltData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}><defs><linearGradient id="saltFill" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#32d5e2" stopOpacity={.42} /><stop offset="95%" stopColor="#32d5e2" stopOpacity={.03} /></linearGradient></defs><CartesianGrid stroke="rgba(100,145,165,.16)" vertical={false} /><XAxis dataKey="time" tickFormatter={(value) => new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' })} tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} minTickGap={30} /><YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: 'var(--muted)' }} axisLine={false} tickLine={false} /><Tooltip labelFormatter={(label) => new Date(Number(label)).toLocaleDateString()} contentStyle={tooltipStyle} /><Area type="stepAfter" dataKey="value" name="Salt %" stroke="#32d5e2" fill="url(#saltFill)" strokeWidth={2} /></AreaChart></ResponsiveContainer> : <EmptyChart loading={loading} />}
+            <article className="analytics-panel glass">
+              <PanelHeader icon={Thermometer} title="Room temperature · 24 hours" subtitle="Seven monitored spaces" value={`${formatNumber(outside)}° outside`} onExpand={() => setDetail(climatePanelDetail)} />
+              <div className="insights-chart-frame">
+                <ClimateChart data={climateData} loading={loading} />
               </div>
             </article>
+            <div className="room-grid">
+              {roomData.map((room) => (
+                <button type="button" className="room-card" key={room.name} onClick={() => setDetail(roomDetail(room))} aria-label={`Explain ${room.name} climate`}>
+                  <h3>{room.name}</h3>
+                  <div><span><Thermometer size={14} aria-hidden="true" />{Number.isFinite(room.temperatureValue) ? `${formatNumber(room.temperatureValue, 1)}°` : '—'}</span><span><Droplets size={14} aria-hidden="true" />{Number.isFinite(room.humidityValue) ? `${formatNumber(room.humidityValue)}%` : '—'}</span></div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeSlide.id === 'health' && (
-        <div className="insight-slide health-slide" key="health">
-          <div className="slide-row two">
-            <article className="analytics-panel">
-              <PanelHeader icon={BatteryCharging} title="Lowest batteries" subtitle={`${batteryData.length} devices nearest service`} value={`${formatNumber(dashboardBattery)}% tablet`} onExpand={() => setDetail(batteryPanelDetail)} />
-              <div className="chart-frame"><ResponsiveContainer width="100%" height="100%"><BarChart data={batteryData} layout="vertical" margin={{ top: 4, right: 18, left: 8, bottom: 0 }}><CartesianGrid stroke="rgba(100,145,165,.14)" horizontal={false} /><XAxis type="number" domain={[0, 100]} hide /><YAxis type="category" dataKey="name" width={94} tick={{ fontSize: 9, fill: 'var(--muted)' }} axisLine={false} tickLine={false} /><Tooltip contentStyle={tooltipStyle} formatter={(value) => `${value}%`} /><Bar dataKey="value" radius={[0, 5, 5, 0]}>{batteryData.map((entry) => <Cell key={entry.name} fill={entry.value <= 20 ? '#ff6469' : entry.value <= 40 ? '#ffc857' : '#55c982'} />)}</Bar></BarChart></ResponsiveContainer></div>
+        {activeSlide.id === 'network' && (
+          <div className="insight-slide network-slide" key="network">
+            <article className="analytics-panel glass">
+              <PanelHeader icon={Wifi} title="Network throughput · 24 hours" subtitle="Gateway traffic converted to Mbps" value={`${formatNumber(download)}↓ / ${formatNumber(upload)}↑`} onExpand={() => setDetail(metrics[2].detailConfig)} />
+              <div className="insights-chart-frame">
+                <NetworkChart data={networkData} loading={loading} />
+              </div>
             </article>
-            <article className="analytics-panel plant-panel">
-              <PanelHeader icon={Sprout} title="Plant moisture" subtitle="Live lawn sensor saturation" value={`${plantData.length} plants`} onExpand={() => setDetail(plantPanelDetail)} />
-              <div className="plant-chart-layout">
-                <div className="chart-frame">{plantData.length ? <ResponsiveContainer width="100%" height="100%"><RadialBarChart innerRadius="28%" outerRadius="100%" data={plantData} startAngle={180} endAngle={0}><RadialBar dataKey="value" background cornerRadius={6} /><Tooltip contentStyle={tooltipStyle} formatter={(value) => `${value}%`} /></RadialBarChart></ResponsiveContainer> : <EmptyChart loading={false} />}</div>
-                <div className="plant-readings">
-                  {plantData.map((plant, index) => (
-                    <button key={plant.name} onClick={() => setDetail(index === 0 ? systems[7].detailConfig : systems[8].detailConfig)} aria-label={`Explain ${plant.name} moisture`}>
-                      <span style={{ background: plant.fill }} />
-                      <p><strong>{plant.name}</strong><small>{formatNumber(plant.value)}% moisture</small></p>
-                      <em className={plant.value < 20 || plant.value > 90 ? 'alert' : ''}>{plant.value < 20 ? 'Dry' : plant.value > 90 ? 'Saturated' : 'Healthy'}</em>
-                    </button>
-                  ))}
+            <div className="slide-row two">
+              <article className="analytics-panel glass">
+                <PanelHeader icon={Zap} title="Energy comparison" subtitle="Current vs previous month" value={`${formatNumber(monthlyEnergy, 1)} kWh`} onExpand={() => setDetail(metrics[3].detailConfig)} />
+                <div className="insights-chart-frame"><EnergyChart data={energyData} /></div>
+              </article>
+              <article className="analytics-panel glass">
+                <PanelHeader icon={Waves} title="Water softener salt" subtitle="30-day recorder history" value={`${formatNumber(salt)}%`} onExpand={() => setDetail(systems[6].detailConfig)} />
+                <div className="insights-chart-frame">
+                  <SaltChart data={saltData} loading={loading} />
                 </div>
-              </div>
-            </article>
+              </article>
+            </div>
           </div>
-          <div className="system-grid">
-            {systems.map(({ icon: Icon, label, value, detail, tone, detailConfig }) => (
-              <button key={label} className={`system-card ${tone}`} onClick={() => setDetail(detailConfig)} aria-label={`Explain ${label}`}>
-                <span><Icon size={18} /></span>
-                <div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div>
-              </button>
-            ))}
+        )}
+
+        {activeSlide.id === 'health' && (
+          <div className="insight-slide health-slide" key="health">
+            <div className="slide-row two">
+              <article className="analytics-panel glass">
+                <PanelHeader icon={BatteryCharging} title="Lowest batteries" subtitle={`${batteryData.length} devices nearest service`} value={`${formatNumber(dashboardBattery)}% tablet`} onExpand={() => setDetail(batteryPanelDetail)} />
+                <div className="insights-chart-frame"><BatteryChart data={batteryData} /></div>
+              </article>
+              <article className="analytics-panel glass plant-panel">
+                <PanelHeader icon={Sprout} title="Plant moisture" subtitle="Live lawn sensor saturation" value={`${plantData.length} plants`} onExpand={() => setDetail(plantPanelDetail)} />
+                {/* Meters instead of the old radial bars: a plant's moisture is one number against a
+                    fixed 0-100 scale with a healthy band, which a straight track shows without
+                    bending the scale, and the number and status word are printed beside it. */}
+                {plantData.length ? (
+                  <div className="plant-readings">
+                    {plantData.map((plant, index) => {
+                      const status = plant.value < 20 ? 'Dry' : plant.value > 90 ? 'Saturated' : 'Healthy'
+                      return (
+                        <button type="button" key={plant.entityId} onClick={() => setDetail(index === 0 ? systems[7].detailConfig : systems[8].detailConfig)} aria-label={`Explain ${plant.name} moisture`}>
+                          <p><strong>{plant.name}</strong><small>{formatNumber(plant.value)}% moisture</small></p>
+                          <em className={status === 'Healthy' ? '' : 'alert'}>{status}</em>
+                          <span className="plant-meter glass-inset" role="meter" aria-label={`${plant.name} soil moisture`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(plant.value)}>
+                            <span className="plant-meter-band" aria-hidden="true" />
+                            <span className="plant-meter-fill" style={{ width: `${Math.max(0, Math.min(100, plant.value))}%` }} aria-hidden="true" />
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <EmptyState size="compact" icon={<Sprout />} title="No plant sensors" hint="Looks for humidity sensors named plant, soil, maple or magnolia" />
+                )}
+              </article>
+            </div>
+            <div className="system-grid">
+              {systems.map(({ icon: Icon, label, value, detail, tone, detailConfig }) => (
+                <button type="button" key={label} className={`system-card ${tone}`} onClick={() => setDetail(detailConfig)} aria-label={`Explain ${label}`}>
+                  <span aria-hidden="true"><Icon size={18} /></span>
+                  <div><p>{label}</p><strong>{value}</strong><small>{detail}</small></div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {detail && <InsightsDetail config={detail} onClose={() => setDetail(null)} />}
     </section>

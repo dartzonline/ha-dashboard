@@ -65,12 +65,18 @@ class HomeAssistantClient:
         summarising every device_tracker on the network.
         """
         start = datetime.now(timezone.utc) - timedelta(hours=hours)
+        # Home Assistant treats both flags as present-or-absent -- `no_attributes=false` still
+        # switched attributes *off*, so this was always attribute-free in practice. Every consumer
+        # (sparklines, timelines, the network/health insights) reads only `state` and
+        # `last_changed`/`last_updated`, and a 30-day series with attributes on every row is many
+        # times the size, so asking for them would be pure bandwidth. `minimal_response` on top
+        # trims the intermediate rows further (no entity_id/last_updated on unchanged rows).
         response = await self.client.get(
             f"/api/history/period/{start.isoformat()}",
             params={
                 "filter_entity_id": ",".join(entity_ids),
                 "minimal_response": "true",
-                "no_attributes": "false",
+                "no_attributes": "true",
             },
         )
         response.raise_for_status()

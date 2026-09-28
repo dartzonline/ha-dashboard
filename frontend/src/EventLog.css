@@ -1,26 +1,29 @@
-/* Slide-in activity drawer: a running log of state-change alerts, edge-docked
-   rather than the centered .detail-sheet modal pattern used elsewhere. */
+/* Slide-in activity drawer: a running log of state-change alerts, edge-docked on a wall panel
+   (it is a list you scan, not a form) and a bottom sheet on a phone like every other sheet. */
 .event-log-backdrop {
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(8, 8, 10, .58);
+  background: rgba(6, 8, 12, .55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   animation: event-log-backdrop-in .18s ease-out;
 }
 
 .event-log-drawer {
   position: fixed;
-  top: 0;
-  right: 0;
-  height: 100dvh;
-  width: min(380px, 100%);
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: min(400px, calc(100% - 20px));
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  box-shadow: -24px 0 60px rgba(0, 0, 0, .45);
-  animation: event-log-drawer-in .22s ease-out;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  animation: event-log-drawer-in .24s var(--ease);
 }
+/* The drawer is edge-docked here, so the handle only appears on the phone bottom sheet. */
+.event-log-drawer > .sheet-handle { display: none; }
 
 .event-log-header {
   flex: none;
@@ -28,127 +31,65 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 16px;
+  padding: 16px 14px 14px 20px;
   border-bottom: 1px solid var(--border);
 }
-
-.event-log-header h2 {
-  margin: 0;
-  font-size: 1.05rem;
-  color: var(--text);
-}
-
-.event-log-header > div {
-  display: grid;
-  gap: 2px;
-}
-
-.event-log-header > div > span {
-  color: var(--muted);
-  font-size: .7rem;
-}
-
-.event-log-header button {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border: 0;
-  border-radius: 50%;
-  color: var(--muted);
-  background: var(--surface-raised);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: color .16s ease, background .16s ease;
-}
-
-.event-log-header button:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--surface-raised) 60%, var(--accent-soft));
-}
+.event-log-header h2 { margin: 0; color: var(--text); font-size: 1.1rem; font-weight: 750; letter-spacing: -.01em; }
+.event-log-header > div { display: grid; gap: 2px; }
+.event-log-header > div > span { color: var(--muted); font-size: .72rem; }
 
 .event-log-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 8px 12px 24px;
+  overscroll-behavior: contain;
+  padding: 4px 12px 24px;
 }
 
-.event-log-empty {
-  height: 100%;
-  min-height: 240px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--muted);
-  font-size: .82rem;
-  text-align: center;
-}
-
-.event-log-group {
-  margin-top: 14px;
-}
-
+.event-log-group { margin-top: 14px; }
 .event-log-group h3 {
   position: sticky;
+  z-index: 1;
   top: 0;
   margin: 0 0 8px;
-  padding: 6px 4px;
+  padding: 6px 6px;
   color: var(--muted);
   font-size: .68rem;
-  font-weight: 600;
-  letter-spacing: .07em;
+  font-weight: 650;
+  letter-spacing: .08em;
   text-transform: uppercase;
-  background: linear-gradient(180deg, var(--surface) 70%, transparent);
+  background: linear-gradient(180deg, var(--surface-solid) 60%, transparent);
 }
 
-.event-log-group ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-}
+.event-log-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 
 .event-log-row {
-  min-height: 52px;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  --row-tone: var(--accent);
+  min-height: 56px;
+  padding: 10px 14px 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-sm);
   background: var(--surface-raised);
+  box-shadow: var(--glass-edge);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* Same tone language as the state-change toasts: red = opened / on / unlocked,
    green = closed / off / locked, accent = everything else. */
+.event-log-row.tone-success { --row-tone: var(--good); }
+.event-log-row.tone-critical { --row-tone: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, var(--glass-border)); }
 .event-log-row > i {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--row-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--row-tone) 20%, transparent);
 }
 
-.event-log-row.tone-success > i { background: var(--good); }
-.event-log-row.tone-critical > i { background: var(--danger); }
-.event-log-row.tone-info > i { background: var(--accent); }
-.event-log-row.tone-critical { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
-.event-log-row.tone-success { border-color: color-mix(in srgb, var(--good) 26%, var(--border)); }
-
-.event-log-row-main {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.event-log-row-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
+.event-log-row-main { min-width: 0; display: grid; gap: 2px; }
+.event-log-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .event-log-row-top strong {
   min-width: 0;
   color: var(--text);
@@ -157,14 +98,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.event-log-row-top time {
-  flex: none;
-  color: var(--muted);
-  font-size: .68rem;
-  font-family: var(--mono);
-}
-
+.event-log-row-top time { flex: none; color: var(--muted); font-size: .7rem; font-variant-numeric: tabular-nums; }
 .event-log-row-main > span {
   color: var(--muted);
   font-size: .74rem;
@@ -173,16 +107,21 @@
   text-overflow: ellipsis;
 }
 
-@keyframes event-log-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+@keyframes event-log-backdrop-in { from { opacity: 0; } }
+@keyframes event-log-drawer-in { from { opacity: 0; transform: translateX(24px); } }
+@keyframes event-log-sheet-in { from { opacity: 0; transform: translateY(24px); } }
 
-@keyframes event-log-drawer-in {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@media (max-width: 480px) {
-  .event-log-drawer { width: 100%; }
+@media (max-width: 760px) {
+  .event-log-drawer {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 86dvh;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation-name: event-log-sheet-in;
+  }
+  .event-log-drawer > .sheet-handle { display: block; }
 }

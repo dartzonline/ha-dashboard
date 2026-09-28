@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertTriangle, BatteryLow, CheckCircle2, DoorOpen, HardDriveDownload,
-  RefreshCw, ShieldAlert, Trash2, Wrench,
+  HeartPulse, RefreshCw, ShieldAlert, Trash2, Wrench,
 } from 'lucide-react'
-import { apiUrl } from './api'
+import { cachedJson, isAbortError } from './cachedFetch'
 import type { TileConfig } from './types'
+import { PageFrame } from './ui/PageFrame'
+import type { Tone } from './ui/PageFrame'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import './HealthView.css'
 
 interface AttentionItem {
@@ -57,55 +60,73 @@ const CATEGORY_LABEL: Record<string, string> = {
   update: 'Update',
 }
 
+const HEALTH_PATH = 'insights/health'
+/** This is state that changes on the order of hours, and the endpoint reads every entity in the house. */
+const HEALTH_TTL_MS = 300_000
+
+function attentionTitle(count: number) {
+  if (count === 0) return 'Nothing needs attention'
+  return `${count} thing${count === 1 ? ' needs' : 's need'} attention`
+}
+
 export function HealthView({ onExpand }: HealthViewProps) {
   const [payload, setPayload] = useState<HealthPayload | null>(null)
   const [failed, setFailed] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
-
-  const load = useCallback((signal?: AbortSignal) => {
-    fetch(apiUrl('insights/health'), { signal })
-      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('unavailable'))))
-      .then((data: HealthPayload) => { setPayload(data); setFailed(false) })
-      .catch((error: unknown) => {
-        if ((error as { name?: string }).name === 'AbortError') return
-        setFailed(true)
-      })
-  }, [])
+  // Bumped by Retry; re-running the effect forces a fresh read instead of the cached copy.
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     const abort = new AbortController()
-    load(abort.signal)
-    // Slow poll: this is state that changes on the order of hours, and the
-    // endpoint reads every entity in the house.
-    const timer = window.setInterval(() => load(), 300_000)
+    function load(force: boolean) {
+      // The first read is happy with a cached copy (the page re-mounts every rotation); the slow
+      // poll forces a refresh so a page left open on the wall does not go stale.
+      cachedJson<HealthPayload>(HEALTH_PATH, HEALTH_PATH, HEALTH_TTL_MS, { signal: abort.signal, force })
+        .then((data) => { setPayload(data); setFailed(false) })
+        .catch((error: unknown) => {
+          if (isAbortError(error)) return
+          setFailed(true)
+        })
+    }
+    load(retryKey > 0)
+    const timer = window.setInterval(() => load(true), HEALTH_TTL_MS)
     return () => { abort.abort(); window.clearInterval(timer) }
-  }, [load])
+  }, [retryKey])
 
+  const retry = () => { setFailed(false); setRetryKey((key) => key + 1) }
   const counts = payload?.counts
   const registry = payload?.registry
   const clear = payload !== null && payload.items.length === 0
+  const tone: Tone = !counts ? 'neutral'
+    : counts.critical > 0 ? 'danger'
+    : counts.warning > 0 ? 'warn'
+    : clear ? 'good' : 'neutral'
 
   return (
     <section className="health-view" aria-label="Home health">
-      <header>
-        <div>
-          {clear ? <CheckCircle2 size={17} /> : <AlertTriangle size={17} />}
-          <h2>{clear ? 'Nothing needs attention' : 'Needs attention'}</h2>
-        </div>
-        <span>
-          {failed ? 'Health check unavailable'
-            : counts ? `${counts.critical} critical · ${counts.warning} warning · ${counts.info} info`
-            : 'Checking…'}
-        </span>
-      </header>
+      <PageFrame
+        icon={payload ? (clear ? <CheckCircle2 /> : <AlertTriangle />) : <HeartPulse />}
+        title={payload ? attentionTitle(payload.items.length) : 'Home health'}
+        tone={tone}
+        meta={counts ? `${counts.critical} critical · ${counts.warning} warning · ${counts.info} info` : undefined}
+      />
+
+      {failed && (
+        <InlineError
+          message={payload ? 'Could not refresh the health check; showing the last result.' : 'Health check unavailable'}
+          onRetry={retry}
+        />
+      )}
+
+      {!payload && !failed && <LoadingState label="Checking home health" />}
 
       {payload && payload.items.length > 0 && (
-        <ul className="health-list">
+        <ul className="health-list glass">
           {payload.items.map((item) => {
             const Icon = CATEGORY_ICON[item.category] ?? AlertTriangle
             const clickable = Boolean(item.entityId)
             return (
-              <li key={`${item.category}-${item.title}-${item.entityId ?? ''}`} className={`tone-${item.severity}`}>
+              <li key={`${item.category}-${item.title}-${item.entityId ?? ''}`} className={`is-${item.severity}`}>
                 <button
                   type="button"
                   disabled={!clickable}
@@ -114,9 +135,11 @@ export function HealthView({ onExpand }: HealthViewProps) {
                     : undefined}
                   title={clickable ? `Open ${item.title}` : item.title}
                 >
-                  <Icon size={15} />
-                  <span className="health-title">{item.title}</span>
-                  <em>{item.detail}</em>
+                  <Icon size={16} aria-hidden="true" />
+                  <span className="health-copy">
+                    <span className="health-title">{item.title}</span>
+                    <em>{item.detail}</em>
+                  </span>
                   <small>{CATEGORY_LABEL[item.category] ?? item.category}</small>
                 </button>
               </li>
@@ -126,19 +149,22 @@ export function HealthView({ onExpand }: HealthViewProps) {
       )}
 
       {clear && (
-        <p className="health-clear">
-          <CheckCircle2 size={15} />
-          No failing backups, low batteries, spent consumables, active problems or frozen sensors.
-        </p>
+        <div className="health-clear glass">
+          <EmptyState
+            size="compact"
+            icon={<CheckCircle2 />}
+            title="All clear"
+            hint="No failing backups, low batteries, spent consumables, active problems or frozen sensors."
+          />
+        </div>
       )}
 
       {registry && (
-        <div className="health-registry">
-          <div className="health-registry-head">
-            <Trash2 size={15} />
-            <h3>Entity registry</h3>
+        <section className="health-registry glass" aria-label="Entity registry">
+          <header className="health-registry-head">
+            <h3><Trash2 size={14} aria-hidden="true" />Entity registry</h3>
             <span>{registry.live} live of {registry.total}</span>
-          </div>
+          </header>
 
           <div className="health-registry-figures">
             <div>
@@ -167,11 +193,17 @@ export function HealthView({ onExpand }: HealthViewProps) {
 
           {registry.duplicates.length > 0 && (
             <>
-              <button type="button" className="health-toggle" onClick={() => setShowCleanup((open) => !open)}>
+              <button
+                type="button"
+                className="health-toggle glass-pill"
+                aria-expanded={showCleanup}
+                aria-controls="health-dupes"
+                onClick={() => setShowCleanup((open) => !open)}
+              >
                 {showCleanup ? 'Hide' : 'Show'} {registry.duplicates.length} safe-to-delete duplicates
               </button>
               {showCleanup && (
-                <ul className="health-dupes">
+                <ul className="health-dupes" id="health-dupes">
                   {registry.duplicates.map((duplicate) => (
                     <li key={duplicate.entityId}>
                       <code className="is-dead">{duplicate.entityId}</code>
@@ -183,7 +215,7 @@ export function HealthView({ onExpand }: HealthViewProps) {
               )}
             </>
           )}
-        </div>
+        </section>
       )}
     </section>
   )
