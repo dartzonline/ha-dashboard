@@ -1,0 +1,16 @@
+/* Shared chart chrome (see chartKit.tsx). Kept tiny: recharts draws the marks, this only styles
+   the HTML around them. */
+.chart-tooltip { min-width: 120px; max-width: 260px; padding: 8px 10px; border-radius: var(--r-sm); color: var(--text); font-size: .72rem; line-height: 1.35; pointer-events: none; }
+.chart-tooltip-label { margin: 0 0 4px; color: var(--muted); font-weight: 650; }
+.chart-tooltip ul { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.chart-tooltip li { display: flex; align-items: center; gap: 6px; }
+.chart-tooltip-name { color: var(--muted); }
+.chart-tooltip strong { margin-left: auto; padding-left: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.chart-swatch { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--swatch); }
+
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: .7rem; font-weight: 600; }
+.chart-legend li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.chart-legend strong { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.chart-key { flex: 0 0 auto; background: var(--swatch); }
+.chart-key.is-line { width: 14px; height: 2px; border-radius: 1px; }
+.chart-key.is-bar { width: 9px; height: 9px; border-radius: 3px; }

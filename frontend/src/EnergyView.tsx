@@ -1,7 +1,11 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { CalendarDays, Check, Home, Pencil, Plug, Receipt, TrendingDown, TrendingUp, Zap } from 'lucide-react'
 import './EnergyView.css'
+import { GlassTooltip } from './chartKit'
+import { BAR_GAP, barProps, barTooltipCursor, chartMargin, gridProps, seriesColor, xAxisProps, yAxisProps } from './chartTheme'
+import { PageFrame } from './ui/PageFrame'
+import { EmptyState, LoadingState } from './ui/StateMessages'
 import { useEnergy } from './useEnergy'
 import type { HAEntity } from './types'
 
@@ -45,6 +49,48 @@ function formatKWh(value: number) {
   const maximumFractionDigits = Math.abs(value) < 10 ? 2 : 1
   return `${new Intl.NumberFormat(undefined, { maximumFractionDigits }).format(value)} kWh`
 }
+
+const kWhTick = (value: number | string) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(Number(value))
+
+// EnergyView re-renders on every WebSocket frame (it receives the whole entity map); the recharts
+// trees only need to when their memoised data actually changes.
+const DeviceChart = memo(function DeviceChart({ data, rotateLabels }: { data: ChartDatum[]; rotateLabels: boolean }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={chartMargin} barGap={BAR_GAP} barCategoryGap="28%">
+        <CartesianGrid {...gridProps} />
+        <XAxis
+          {...xAxisProps}
+          dataKey="name"
+          interval={0}
+          angle={rotateLabels ? -20 : 0}
+          textAnchor={rotateLabels ? 'end' : 'middle'}
+          height={rotateLabels ? 42 : 24}
+        />
+        <YAxis {...yAxisProps} tickFormatter={kWhTick} />
+        <Tooltip cursor={barTooltipCursor} content={<GlassTooltip valueFormat={(value) => formatKWh(value)} />} />
+        <Bar dataKey="kWh" name="This month" fill={seriesColor(0)} {...barProps} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+})
+
+const DailyChart = memo(function DailyChart({ data, ratePerKwh }: { data: { label: string; kWh: number; cost: number }[]; ratePerKwh: number }) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={chartMargin} barGap={BAR_GAP} barCategoryGap="22%">
+        <CartesianGrid {...gridProps} />
+        <XAxis {...xAxisProps} dataKey="label" interval="preserveStartEnd" minTickGap={12} />
+        <YAxis {...yAxisProps} tickFormatter={kWhTick} />
+        <Tooltip
+          cursor={barTooltipCursor}
+          content={<GlassTooltip valueFormat={(value) => `${formatKWh(value)} · ${formatMoney(value * ratePerKwh)}`} />}
+        />
+        <Bar dataKey="kWh" name="Used" fill={seriesColor(0)} {...barProps} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+})
 
 export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps) {
   const { devices, wholeHome, daily, loading, isEmpty } = useEnergy(entities)
@@ -146,10 +192,13 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
 
   if (isEmpty) {
     return (
-      <section className="energy-view energy-view-empty" aria-label="Energy usage">
-        <Plug size={28} />
-        <p>No energy sensors found yet.</p>
-        <span>Add a device_class: energy sensor in Home Assistant to see usage here.</span>
+      <section className="energy-view" aria-label="Energy usage">
+        <PageFrame icon={<Zap />} title="Energy usage" meta="No sensors found" />
+        <EmptyState
+          icon={<Plug />}
+          title="No energy sensors found yet"
+          hint="Looks for sensor.* entities with device_class: energy (kWh or Wh), such as *_energy_today, *_energy_this_month or a lifetime meter."
+        />
       </section>
     )
   }
@@ -158,14 +207,15 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
 
   return (
     <section className="energy-view" aria-label="Energy usage">
-      <header>
-        <div><Zap size={17} /><h3>Energy usage</h3></div>
-        <span>{devices.length} device{devices.length === 1 ? '' : 's'} tracked</span>
-      </header>
+      <PageFrame
+        icon={<Zap />}
+        title="Energy usage"
+        meta={`${devices.length} device${devices.length === 1 ? '' : 's'} tracked`}
+      />
 
-      <div className="energy-bill">
+      <div className="energy-bill glass">
         <div className="energy-bill-main">
-          <span className="energy-bill-icon"><Receipt size={20} /></span>
+          <span className="energy-bill-icon" aria-hidden="true"><Receipt size={20} /></span>
           <div>
             <span>Estimated bill so far</span>
             <strong>{bill ? formatMoney(bill.cost) : '--'}</strong>
@@ -195,17 +245,19 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
                   onChange={(event) => setRateDraft(event.target.value)}
                   onKeyDown={(event) => { if (event.key === 'Enter') void commitRate() }}
                 />
-                <button onClick={() => void commitRate()} title="Save rate" aria-label="Save rate"><Check size={15} /></button>
+                <button type="button" className="glass-pill" onClick={() => void commitRate()} title="Save rate" aria-label="Save rate"><Check size={16} /></button>
               </span>
             ) : (
               <button
+                type="button"
                 className="energy-rate-value"
                 onClick={() => { setRateDraft(String(ratePerKwh)); setEditingRate(true) }}
                 title="Edit the cost per kWh"
+                aria-label={`Rate ${formatMoney(ratePerKwh)} per kWh, edit`}
               >
                 <strong>{formatMoney(ratePerKwh)}</strong>
                 <small>/kWh</small>
-                <Pencil size={12} />
+                <Pencil size={13} aria-hidden="true" />
               </button>
             )}
           </div>
@@ -213,14 +265,14 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
       </div>
 
       {stats.length > 0 && (
-        <div className="energy-stats">
+        <div className="energy-stats glass">
           {stats.map((stat) => (
             <div key={stat.label}>
               <span>{stat.label}</span>
               <strong>
                 {stat.value}
-                {stat.trend === 'up' && <TrendingUp size={13} className="trend-up" />}
-                {stat.trend === 'down' && <TrendingDown size={13} className="trend-down" />}
+                {stat.trend === 'up' && <TrendingUp size={13} className="trend-up" aria-label="up" />}
+                {stat.trend === 'down' && <TrendingDown size={13} className="trend-down" aria-label="down" />}
               </strong>
             </div>
           ))}
@@ -228,80 +280,48 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
       )}
 
       <div className="energy-chart-row">
-      <div className="energy-chart">
-        <h4 className="energy-chart-title"><Zap size={14} />By device · this month</h4>
-        {chartData.length ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 8, right: 8, left: -25, bottom: 0 }} barCategoryGap="28%">
-              <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 11, fill: 'var(--muted)' }}
-                axisLine={false}
-                tickLine={false}
-                interval={0}
-                angle={rotateLabels ? -20 : 0}
-                textAnchor={rotateLabels ? 'end' : 'middle'}
-                height={rotateLabels ? 42 : 24}
-              />
-              <YAxis
-                tickFormatter={(value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(Number(value))}
-                tick={{ fontSize: 11, fill: 'var(--muted)' }}
-                width={54}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                formatter={(value) => formatKWh(Number(value))}
-                contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12 }}
-                cursor={{ fill: 'var(--chart-grid)' }}
-              />
-              <Bar dataKey="kWh" fill="var(--chart-line)" radius={[4, 4, 0, 0]} maxBarSize={40} />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className={`energy-chart-empty ${loading ? 'loading' : ''}`}>
-            <Zap size={22} />
-            <span>{loading ? 'Loading usage history' : 'No device breakdown available'}</span>
-          </div>
-        )}
-      </div>
-
-      <section className="energy-daily" aria-label="Daily usage trend">
-        <header>
-          <div><CalendarDays size={14} /><h4>Daily usage · last {DAILY_TREND_DAYS} days</h4></div>
-          <span>{dailyAverage === null ? 'No daily history yet' : `${formatKWh(dailyAverage)}/day · ${formatMoney(dailyAverage * ratePerKwh)}`}</span>
-        </header>
-        <div className="energy-daily-chart">
-          {dailyTrend.length > 1 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyTrend} margin={{ top: 6, right: 6, left: -26, bottom: 0 }} barCategoryGap="22%">
-                <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--muted)' }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={12} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} width={50} axisLine={false} tickLine={false} tickFormatter={(value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(Number(value))} />
-                <Tooltip
-                  formatter={(value) => [`${formatKWh(Number(value))} · ${formatMoney(Number(value) * ratePerKwh)}`, 'Used']}
-                  contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12 }}
-                  cursor={{ fill: 'var(--chart-grid)' }}
-                />
-                <Bar dataKey="kWh" fill="var(--warn)" radius={[4, 4, 0, 0]} maxBarSize={34} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="energy-chart-empty">
-              <CalendarDays size={20} />
-              <span>{loading ? 'Loading daily history' : 'A cumulative energy counter is needed for a daily trend'}</span>
+        <section className="energy-card glass" aria-label="Usage by device">
+          <header className="energy-card-head">
+            <h3><Zap size={14} aria-hidden="true" />By device · this month</h3>
+          </header>
+          {chartData.length ? (
+            <div className="energy-chart" data-swipe-ignore>
+              <DeviceChart data={chartData} rotateLabels={rotateLabels} />
             </div>
+          ) : loading ? (
+            <LoadingState size="compact" label="Loading usage history" />
+          ) : (
+            <EmptyState size="compact" icon={<Zap />} title="No device breakdown available" />
           )}
-        </div>
-      </section>
+        </section>
+
+        <section className="energy-card glass" aria-label="Daily usage trend">
+          <header className="energy-card-head">
+            <h3><CalendarDays size={14} aria-hidden="true" />Daily usage · last {DAILY_TREND_DAYS} days</h3>
+            {dailyAverage !== null && <span>{`${formatKWh(dailyAverage)}/day · ${formatMoney(dailyAverage * ratePerKwh)}`}</span>}
+          </header>
+          {dailyTrend.length > 1 ? (
+            <div className="energy-chart" data-swipe-ignore>
+              <DailyChart data={dailyTrend} ratePerKwh={ratePerKwh} />
+            </div>
+          ) : loading ? (
+            <LoadingState size="compact" label="Loading daily history" />
+          ) : (
+            <EmptyState
+              size="compact"
+              icon={<CalendarDays />}
+              title="No daily history yet"
+              hint="A cumulative energy counter or an *_energy_today sensor is needed for a daily trend."
+            />
+          )}
+        </section>
       </div>
 
       {wholeHome && (
-        <div className="energy-whole-home">
-          <Home size={14} />
-          <span>Whole-home meter — {formatKWh(wholeHome.currentPeriodKWh)} in the last 30 days</span>
-        </div>
+        <p className="energy-whole-home">
+          <Home size={14} aria-hidden="true" />
+          <span>Whole-home meter: {formatKWh(wholeHome.currentPeriodKWh)} in the last 30 days</span>
+        </p>
       )}
     </section>
   )

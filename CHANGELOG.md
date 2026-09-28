@@ -3,6 +3,60 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.15.0 - 2026-09-28: UI overhaul
+
+**A new look: liquid glass, tuned for reading across a room.** Every panel is now a pane of dark,
+lightly frosted glass over a softly lit background, with larger corner radii and one consistent
+header, empty, loading and error style on every page. The glass is a finish, not a see-through
+effect. Panes are mostly opaque, every piece of text sits on one, and all text colours clear WCAG
+AA contrast even over a bright photo backdrop. Disabled buttons now say so with colour rather than
+fading out. Older tablets that cannot blur fall back to solid panes automatically, as do devices
+set to reduce transparency. Charts share one colour set that stays distinguishable for colour-blind
+readers, with a legend and tooltip on each; the network chart no longer uses two y-axes. The
+Manrope font is now bundled, so a panel with no internet no longer waits on a font server.
+
+**The panel keeps itself up to date after an outage.** Previously a Wi-Fi blip or a Home Assistant
+restart left tiles showing whatever they said before, until each entity happened to change again.
+The panel now reloads every state when it reconnects, the backend tells it when its own link to
+Home Assistant comes back, and a silent connection is detected and restarted. A banner says when
+readings may be stale, and a separate one says when Home Assistant has rejected the backend's
+token, which reconnecting cannot fix. Health is re-checked every 30 seconds instead of once at
+startup, so Night Mode is no longer stuck disabled if Home Assistant was down when the panel loaded.
+
+**Kiosk behaviour.**
+- The page is kept in the address, so a kiosk reload returns to the same page and slide. A manual
+  rotation hold also survives a reload.
+- The tablet's Back button closes an open sheet instead of leaving the app.
+- Sheets close on Escape, keep keyboard focus inside them, and close themselves after two minutes
+  of no touch, so a brushed tile no longer parks the panel on a sheet forever.
+- Night Mode, Home Assistant updates, photo deletion and the network restart use tap-again-to-confirm
+  instead of the browser's confirm dialog, which some kiosk browsers suppress.
+- Every control is at least 44px, including the rotation button, slide pagers and thermostat
+  steppers. Swiping no longer changes page when the gesture started on a map, chart or scroll row.
+- The clock ticks on the minute instead of up to 30 seconds late, and the rotation chip shows a
+  live countdown.
+- Readings keep their units as written: kWh no longer turns into "KWh".
+
+**Less load on the backend and the flight APIs.** The Maintenance page no longer refetches in a
+tight loop while on screen. The service status panel no longer re-probes three services on every
+state change. Energy history is cached for 30 minutes instead of refetched on every rotation, and
+the header badge and the Flights page now share one flight poller that pauses when the screen is
+hidden. Network speed conversions were about 5% low and are fixed.
+
+**Backend hardening.** No login is added: the panel stays open on your LAN by design.
+- The service endpoint only accepts the device domains the dashboard uses. Anything else, such as
+  a restart or a shell command, is refused.
+- The media artwork proxy no longer sends the Home Assistant token to third-party image hosts like
+  Spotify's.
+- Adding a photo by web address refuses local and private network addresses.
+- Photo uploads are size- and pixel-checked before processing, so an oversized image can no longer
+  exhaust memory. Processing runs off the main loop, so live updates do not freeze during an
+  upload.
+- The photo library, dashboard layout and flight quota files are written atomically, and a damaged
+  photo index is rebuilt from the files on disk.
+- Setting `airlabs_daily_budget` or the energy rate to 0 now takes effect instead of being ignored.
+- Flight ETAs are sent as timestamps, so the panel shows them in its own timezone.
+
 ## 1.11.0 - 2026-08-23
 
 **Photos now appear behind the dashboard**, on the five pages quiet enough to carry one: Climate,

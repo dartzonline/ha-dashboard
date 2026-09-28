@@ -84,13 +84,13 @@ describe('AllRoutesMap', () => {
     expect(screen.getByText('BCN→DFW')).toBeTruthy()
   })
 
-  it('gives each route its own hue, cycling once six are in the air', () => {
+  it('gives each route its own hue, folding a seventh into "other" rather than reusing one', () => {
     stubSize()
     const routes = Array.from({ length: 7 }, (_, index) => route(`FL${index}`, LAX, AUS))
     render(<AllRoutesMap routes={routes} />)
 
     const tones = groups().map((group) => Array.from(group.classList).find((name) => name.startsWith('tone-')))
-    expect(tones).toEqual(['tone-0', 'tone-1', 'tone-2', 'tone-3', 'tone-4', 'tone-5', 'tone-0'])
+    expect(tones).toEqual(['tone-0', 'tone-1', 'tone-2', 'tone-3', 'tone-4', 'tone-5', 'tone-other'])
     // The label carries the same tone, so the number and the line it belongs to read as one thing.
     expect(document.querySelectorAll('.all-route-label.tone-1')).toHaveLength(1)
   })

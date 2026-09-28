@@ -1,6 +1,10 @@
 import { Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, Sun, Sunrise, Sunset, Umbrella, Wind, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { apiUrl } from './api'
+import { useDialog } from './ui/useDialog'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import { WeatherAtmosphere } from './WeatherAtmosphere'
 import { skyTheme } from './weatherTheme'
 import './CityWeatherPanel.css'
@@ -85,6 +89,9 @@ function clockLabel(value: string | null) {
 export function CityWeatherPanel({ city, country, timeZone, latitude, longitude, accent, onClose }: CityWeatherPanelProps) {
   const [data, setData] = useState<Payload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const titleId = useId()
+  const sheetRef = useDialog<HTMLElement>({ onClose })
 
   // No reset here: the caller keys this component by coordinates, so a different city mounts a fresh
   // instance rather than clearing state mid-effect.
@@ -100,7 +107,12 @@ export function CityWeatherPanel({ city, country, timeZone, latitude, longitude,
         setError(cause instanceof Error ? cause.message : 'Weather lookup failed')
       })
     return () => abort.abort()
-  }, [latitude, longitude])
+  }, [latitude, longitude, attempt])
+
+  function retry() {
+    setError(null)
+    setAttempt((current) => current + 1)
+  }
 
   // The upstream forecast starts at local midnight, so the slot matching this city's current hour
   // is where "next few hours" begins. Some engines (notably older WebViews on Fire tablets) format
@@ -115,31 +127,34 @@ export function CityWeatherPanel({ city, country, timeZone, latitude, longitude,
   // Themed from that city's own sky and its own clock, so 2 AM in Auckland looks like night here.
   const theme = skyTheme(data?.current.condition ?? 'cloudy', localHour)
 
-  return (
-    <div className="city-weather-backdrop" role="presentation" onClick={onClose}>
+  // Portalled to <body>: the page slide animates with a transform (which would re-anchor this
+  // fixed-position sheet to the slide) and the shell may mark the page `inert` behind a dialog.
+  return createPortal(
+    <div className="city-weather-backdrop" role="presentation" data-swipe-ignore onClick={onClose}>
       <section
-        className={`city-weather-sheet sky-surface ${theme.className}`}
+        ref={sheetRef}
+        className={`city-weather-sheet glass-strong sky-surface ${theme.className}`}
         role="dialog"
         aria-modal="true"
-        aria-label={`Weather in ${city}`}
-        style={{ '--marker-color': accent } as React.CSSProperties}
+        aria-labelledby={titleId}
+        style={{ '--marker-color': accent } as CSSProperties}
         onClick={(event) => event.stopPropagation()}
       >
         {data && <WeatherAtmosphere theme={theme} />}
-        <header>
+        <header className="on-glass-text">
           <div>
             <span>Weather now</span>
-            <h2>{city}</h2>
+            <h2 id={titleId}>{city}</h2>
             <small>{country}</small>
           </div>
-          <button onClick={onClose} title="Close city weather" aria-label="Close city weather"><X size={20} /></button>
+          <button type="button" className="glass-pill" data-autofocus onClick={onClose} aria-label="Close city weather"><X size={20} aria-hidden="true" /></button>
         </header>
 
-        {error && <p className="city-weather-error">{error}</p>}
-        {!data && !error && <p className="city-weather-loading">Loading {city} forecast…</p>}
+        {error && <InlineError message={error} onRetry={retry} />}
+        {!data && !error && <LoadingState size="compact" label={`Loading ${city} forecast`} />}
 
         {data && (
-          <>
+          <div className="city-weather-body on-glass-text">
             <div className="city-weather-now">
               <span className="city-weather-icon">{conditionIcon(data.current.condition, 40)}</span>
               <strong>{temperature(data.current.temperature)}</strong>
@@ -150,40 +165,48 @@ export function CityWeatherPanel({ city, country, timeZone, latitude, longitude,
             </div>
 
             <div className="city-weather-stats">
-              <div><Droplets size={15} /><strong>{data.current.humidity === null ? '--' : `${Math.round(data.current.humidity)}%`}</strong><span>Humidity</span></div>
-              <div><Wind size={15} /><strong>{data.current.windSpeed === null ? '--' : Math.round(data.current.windSpeed)}</strong><span>Wind</span></div>
-              <div><Umbrella size={15} /><strong>{today?.rainChance == null ? '--' : `${Math.round(today.rainChance)}%`}</strong><span>Rain today</span></div>
-              <div><Sunrise size={15} /><strong>{clockLabel(today?.sunrise ?? null)}</strong><span>Sunrise</span></div>
-              <div><Sunset size={15} /><strong>{clockLabel(today?.sunset ?? null)}</strong><span>Sunset</span></div>
+              <div><Droplets size={15} aria-hidden="true" /><strong>{data.current.humidity === null ? '--' : `${Math.round(data.current.humidity)}%`}</strong><span>Humidity</span></div>
+              <div><Wind size={15} aria-hidden="true" /><strong>{data.current.windSpeed === null ? '--' : Math.round(data.current.windSpeed)}</strong><span>Wind</span></div>
+              <div><Umbrella size={15} aria-hidden="true" /><strong>{today?.rainChance == null ? '--' : `${Math.round(today.rainChance)}%`}</strong><span>Rain today</span></div>
+              <div><Sunrise size={15} aria-hidden="true" /><strong>{clockLabel(today?.sunrise ?? null)}</strong><span>Sunrise</span></div>
+              <div><Sunset size={15} aria-hidden="true" /><strong>{clockLabel(today?.sunset ?? null)}</strong><span>Sunset</span></div>
             </div>
 
             <h3>Next hours</h3>
-            <div className="city-weather-hours">
-              {hours.length === 0 && <p className="city-weather-loading">No hourly detail available.</p>}
-              {hours.map((hour) => (
-                <article key={hour.time}>
-                  <span>{hourLabel(hour.time)}</span>
-                  {conditionIcon(hour.condition, 17)}
-                  <strong>{temperature(hour.temperature)}</strong>
-                  <small>{hour.rainChance === null ? '--' : `${Math.round(hour.rainChance)}%`}</small>
-                </article>
-              ))}
-            </div>
+            {hours.length === 0
+              ? <EmptyState size="compact" title="No hourly detail available" />
+              : (
+                <div className="city-weather-hours">
+                  {hours.map((hour) => (
+                    <article key={hour.time}>
+                      <span>{hourLabel(hour.time)}</span>
+                      {conditionIcon(hour.condition, 17)}
+                      <strong>{temperature(hour.temperature)}</strong>
+                      <small>{hour.rainChance === null ? '--' : `${Math.round(hour.rainChance)}%`}</small>
+                    </article>
+                  ))}
+                </div>
+              )}
 
             <h3>Next days</h3>
-            <div className="city-weather-days">
-              {days.map((day) => (
-                <article key={day.date}>
-                  <span>{dayLabel(day.date)}</span>
-                  {conditionIcon(day.condition, 17)}
-                  <strong>{temperature(day.temperatureMax)}</strong>
-                  <small>{temperature(day.temperatureMin)}</small>
-                </article>
-              ))}
-            </div>
-          </>
+            {days.length === 0
+              ? <EmptyState size="compact" title="No daily forecast available" />
+              : (
+                <div className="city-weather-days">
+                  {days.map((day) => (
+                    <article key={day.date}>
+                      <span>{dayLabel(day.date)}</span>
+                      {conditionIcon(day.condition, 17)}
+                      <strong>{temperature(day.temperatureMax)}</strong>
+                      <small>{temperature(day.temperatureMin)}</small>
+                    </article>
+                  ))}
+                </div>
+              )}
+          </div>
         )}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }

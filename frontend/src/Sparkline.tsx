@@ -10,7 +10,9 @@ interface SparklineProps {
   height?: number
 }
 
-/** Inline 24-hour trend: 2px line, ~10% area wash, end-dot with a surface ring. Decorative — the tile text carries the value. */
+/** Inline 24-hour trend: 2px line in the first series colour, ~10% area wash, end-dot ringed in the
+ *  solid surface colour (the tile itself is translucent, so a translucent ring would show the line
+ *  through it). Decorative — the tile text carries the value. */
 export function Sparkline({ points, height: fallbackHeight = 34 }: SparklineProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ width: 0, height: 0 })
@@ -62,9 +64,9 @@ export function Sparkline({ points, height: fallbackHeight = 34 }: SparklineProp
     <div ref={containerRef} className="tile-spark" aria-hidden="true">
       {drawable && (
         <svg width={width} height={height}>
-          <path d={areaPath} fill="var(--chart-line)" fillOpacity=".12" />
-          <path d={linePath} fill="none" stroke="var(--chart-line)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx={endX} cy={endY} r="4" fill="var(--chart-line)" stroke="var(--surface)" strokeWidth="2" />
+          <path d={areaPath} fill="var(--chart-1)" fillOpacity=".12" />
+          <path d={linePath} fill="none" stroke="var(--chart-1)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx={endX} cy={endY} r="4" fill="var(--chart-1)" stroke="var(--surface-solid)" strokeWidth="2" />
         </svg>
       )}
     </div>

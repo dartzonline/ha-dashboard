@@ -168,8 +168,15 @@ export function useServiceStatus(
           : { id: 'ha', label: 'Home Assistant', state: 'down', detail: 'Bridge cannot reach Home Assistant' },
   ]
 
+  // Only the two numbers matter to the probes below. Depending on the `entities` Map itself made
+  // `refresh` a new function on every WebSocket tick, and the effect under it refetched four
+  // upstreams each time -- while the panel was open, that was several requests a second.
+  const coordinates = homeCoordinates(entities)
+  const latitude = coordinates?.latitude ?? null
+  const longitude = coordinates?.longitude ?? null
+
   const refresh = useCallback(async () => {
-    const coordinates = homeCoordinates(entities)
+    const coordinates = latitude !== null && longitude !== null ? { latitude, longitude } : null
     const [flights, weatherOk, radarOk] = await Promise.all([
       fetch(apiUrl('flights/status')).then((response) => (response.ok ? response.json() : null)).catch(() => null),
       coordinates
@@ -196,7 +203,7 @@ export function useServiceStatus(
       },
     ])
     setCheckedAt(new Date())
-  }, [entities])
+  }, [latitude, longitude])
 
   useEffect(() => {
     if (!enabled) return

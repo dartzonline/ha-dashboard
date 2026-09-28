@@ -3,6 +3,9 @@ import {
   ChevronLeft, ChevronRight, Image as ImageIcon, Link2, Trash2, Upload,
 } from 'lucide-react'
 import { apiUrl } from './api'
+import { PageFrame } from './ui/PageFrame'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
+import { useTwoTapConfirm } from './ui/useTwoTapConfirm'
 import './PhotosView.css'
 
 export interface Photo {
@@ -17,6 +20,28 @@ export interface Photo {
   addedAt: string
   sourceUrl: string | null
   position?: number
+}
+
+/**
+ * Delete needs a second tap ("Tap again") rather than `window.confirm`, which kiosk WebViews can
+ * suppress outright. One per thumbnail, so arming one photo never arms another.
+ */
+function RemoveButton({ photo, disabled, onConfirm }: { photo: Photo; disabled: boolean; onConfirm: () => void }) {
+  const { armed, request } = useTwoTapConfirm()
+  const name = photo.originalName ?? 'photo'
+  return (
+    <button
+      type="button"
+      className={`is-danger ${armed ? 'is-armed' : ''}`.trim()}
+      onClick={() => { if (request()) onConfirm() }}
+      disabled={disabled}
+      title={armed ? 'Tap again to remove' : 'Remove'}
+      aria-label={armed ? `Tap again to remove ${name}` : `Remove ${name}`}
+    >
+      <Trash2 size={18} aria-hidden="true" />
+      {armed && <span>Tap again</span>}
+    </button>
+  )
 }
 
 function megabytes(bytes: number | undefined) {
@@ -118,8 +143,6 @@ export function PhotosView() {
   }
 
   async function remove(photo: Photo) {
-    const label = photo.originalName ?? 'this photo'
-    if (!window.confirm(`Remove ${label}? This cannot be undone.`)) return
     setBusy(true)
     try {
       await fetch(apiUrl(`photos/${photo.id}`), { method: 'DELETE' })
@@ -157,6 +180,8 @@ export function PhotosView() {
 
   const total = photos?.reduce((sum, photo) => sum + photo.sizeBytes, 0) ?? 0
 
+  const loadError = loadFailed ? 'Could not load the photo library.' : null
+
   return (
     <section
       className={`photos-view ${dragging ? 'is-dragging' : ''}`.trim()}
@@ -169,93 +194,94 @@ export function PhotosView() {
         void addFiles(event.dataTransfer.files)
       }}
     >
-      <header>
-        <div>
-          <ImageIcon size={17} />
-          <h2>Photos</h2>
+      <PageFrame
+        className="has-pane"
+        eyebrow="Library"
+        title={photos === null ? (loadFailed ? 'Photo library' : 'Loading photos') : `${photos.length} photo${photos.length === 1 ? '' : 's'}`}
+        icon={<ImageIcon />}
+        meta={total ? `${megabytes(total)} on the panel` : undefined}
+      >
+        <div className="photos-drop glass">
+          <div className="photos-add">
+            <button type="button" className="photos-pick" onClick={() => fileInput.current?.click()} disabled={busy}>
+              <Upload size={18} aria-hidden="true" />
+              {busy ? 'Working…' : 'Choose photos'}
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(event) => {
+                if (event.target.files) void addFiles(event.target.files)
+                // Cleared so picking the same file twice in a row still fires a change event.
+                event.target.value = ''
+              }}
+            />
+            <div className="photos-url glass-inset">
+              <Link2 size={16} aria-hidden="true" />
+              <input
+                type="url"
+                value={url}
+                placeholder="…or paste an image address"
+                aria-label="Image address"
+                onChange={(event) => setUrl(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') void addFromUrl() }}
+                disabled={busy}
+              />
+              <button type="button" onClick={() => void addFromUrl()} disabled={busy || !url.trim()}>Add</button>
+            </div>
+          </div>
+          <p className="photos-hint">
+            Drag pictures anywhere onto this page to add them. Each one is rotated upright, scaled to fit
+            the panel and compressed on the way in, so the originals on your phone stay untouched.
+          </p>
         </div>
-        <span>
-          {photos === null ? 'Loading…' : `${photos.length} photo${photos.length === 1 ? '' : 's'}${total ? ` · ${megabytes(total)}` : ''}`}
-        </span>
-      </header>
 
-      <div className="photos-add">
-        <button type="button" className="photos-pick" onClick={() => fileInput.current?.click()} disabled={busy}>
-          <Upload size={15} />
-          {busy ? 'Working…' : 'Choose photos'}
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/*"
-          multiple
-          hidden
-          onChange={(event) => {
-            if (event.target.files) void addFiles(event.target.files)
-            // Cleared so picking the same file twice in a row still fires a change event.
-            event.target.value = ''
-          }}
-        />
-        <div className="photos-url">
-          <Link2 size={15} />
-          <input
-            type="url"
-            value={url}
-            placeholder="…or paste an image address"
-            onChange={(event) => setUrl(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') void addFromUrl() }}
-            disabled={busy}
+        {(error ?? loadError) && (
+          <InlineError className="photos-message glass" message={error ?? loadError} onRetry={error ? undefined : () => load()} />
+        )}
+        {notice && !error && <p className="photos-notice glass" role="status">{notice}</p>}
+
+        {photos === null && !loadFailed && <LoadingState label="Loading photos" />}
+
+        {photos !== null && photos.length === 0 && (
+          <EmptyState
+            icon={<ImageIcon />}
+            title="No photos yet"
+            hint="Add a few and they will appear here, then behind the quieter pages."
           />
-          <button type="button" onClick={() => void addFromUrl()} disabled={busy || !url.trim()}>Add</button>
-        </div>
-      </div>
+        )}
 
-      <p className="photos-hint">
-        Drag pictures anywhere onto this page to add them. Each one is rotated upright, scaled to fit
-        the panel and compressed on the way in, so the originals on your phone stay untouched.
-      </p>
-
-      {(error ?? (loadFailed ? 'Could not load the photo library.' : null)) && (
-        <p className="photos-error" role="alert">{error ?? 'Could not load the photo library.'}</p>
-      )}
-      {notice && !error && <p className="photos-notice" role="status">{notice}</p>}
-
-      {photos !== null && photos.length === 0 && (
-        <div className="photos-empty">
-          <ImageIcon size={30} />
-          <p>No photos yet. Add a few and they will appear here.</p>
-        </div>
-      )}
-
-      {photos !== null && photos.length > 0 && (
-        <ul className="photos-grid">
-          {photos.map((photo, index) => (
-            <li key={photo.id}>
-              <img src={apiUrl(`photos/${photo.id}/thumb`)} alt={photo.originalName ?? 'Photo'} loading="lazy" />
-              <div className="photos-meta">
-                <strong>{photo.originalName ?? 'Untitled'}</strong>
-                <small>
-                  {photo.width && photo.height ? `${photo.width}×${photo.height}` : ''}
-                  {photo.originalBytes && photo.originalBytes > photo.sizeBytes
-                    ? ` · ${megabytes(photo.sizeBytes)} (from ${megabytes(photo.originalBytes)})`
-                    : ` · ${megabytes(photo.sizeBytes)}`}
-                </small>
-              </div>
-              <div className="photos-actions">
-                <button type="button" onClick={() => void move(index, -1)} disabled={index === 0} title="Move earlier" aria-label={`Move ${photo.originalName ?? 'photo'} earlier`}>
-                  <ChevronLeft size={15} />
-                </button>
-                <button type="button" onClick={() => void move(index, 1)} disabled={index === photos.length - 1} title="Move later" aria-label={`Move ${photo.originalName ?? 'photo'} later`}>
-                  <ChevronRight size={15} />
-                </button>
-                <button type="button" className="is-danger" onClick={() => void remove(photo)} title="Remove" aria-label={`Remove ${photo.originalName ?? 'photo'}`}>
-                  <Trash2 size={15} />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+        {photos !== null && photos.length > 0 && (
+          <ul className="photos-grid">
+            {photos.map((photo, index) => (
+              <li key={photo.id}>
+                <img src={apiUrl(`photos/${photo.id}/thumb`)} alt={photo.originalName ?? 'Photo'} loading="lazy" />
+                <div className="photos-meta">
+                  <strong>{photo.originalName ?? 'Untitled'}</strong>
+                  <small>
+                    {photo.width && photo.height ? `${photo.width}×${photo.height}` : ''}
+                    {photo.originalBytes && photo.originalBytes > photo.sizeBytes
+                      ? ` · ${megabytes(photo.sizeBytes)} (from ${megabytes(photo.originalBytes)})`
+                      : ` · ${megabytes(photo.sizeBytes)}`}
+                  </small>
+                </div>
+                <div className="photos-actions">
+                  <button type="button" onClick={() => void move(index, -1)} disabled={index === 0} title="Move earlier" aria-label={`Move ${photo.originalName ?? 'photo'} earlier`}>
+                    <ChevronLeft size={18} aria-hidden="true" />
+                  </button>
+                  <button type="button" onClick={() => void move(index, 1)} disabled={index === photos.length - 1} title="Move later" aria-label={`Move ${photo.originalName ?? 'photo'} later`}>
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </button>
+                  <RemoveButton photo={photo} disabled={busy} onConfirm={() => void remove(photo)} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </PageFrame>
     </section>
   )
 }

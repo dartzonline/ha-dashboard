@@ -1,85 +1,62 @@
+/* The WAN sensor's history block inside the entity sheet. The sheet is already a glass pane, so
+   the blocks in here are flat wells rather than more glass stacked on glass. */
 .network-detail {
   margin-top: 16px;
-  padding: 12px 12px 10px;
-  border-radius: 10px;
-  background: var(--surface-raised);
-}
-
-.network-detail > header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding-bottom: 10px;
+  flex-direction: column;
+  gap: var(--gap);
 }
 
-.network-detail > header > div { display: flex; align-items: center; gap: 7px; color: var(--muted); }
-.network-detail h3 { margin: 0; color: var(--text); font-size: .88rem; font-weight: 650; }
-.network-detail > header > span { color: var(--muted); font-size: .68rem; }
+.network-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.network-detail-head h3 { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--text); font-size: .8rem; font-weight: 700; }
+.network-detail-head h3 svg { color: var(--muted); }
+.network-detail-head > span { color: var(--muted); font-size: .74rem; font-weight: 550; }
 
 .network-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 7px;
-  margin-bottom: 10px;
+  gap: var(--gap);
 }
 
 .network-summary > div {
   min-width: 0;
-  padding: 9px 10px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
   background: var(--surface);
-  border-left: 3px solid var(--border);
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
 
-.network-summary span { color: var(--muted); display: flex; align-items: center; gap: 5px; font-size: .64rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-.network-summary strong { font-size: 1rem; white-space: nowrap; }
-.network-summary small { color: var(--muted); font-size: .68rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.network-summary .tone-down { border-left-color: var(--chart-line); }
-.network-summary .tone-down span { color: var(--accent); }
-.network-summary .tone-up { border-left-color: var(--warn); }
-.network-summary .tone-up span { color: var(--warn); }
-.network-summary .tone-devices { border-left-color: var(--good); }
-.network-summary .tone-devices span { color: var(--good); }
+.network-summary span { color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .7rem; font-weight: 650; }
+.network-summary strong { color: var(--text); font-size: 1rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.network-summary small { color: var(--muted); font-size: .72rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Uptime block: the figures, then a proportional timeline of the observed
-   window so a cluster of drops reads as a pattern rather than a list. */
+   window so a cluster of drops reads as a pattern rather than a list. The
+   status colour rides the icon and its word, never the whole pane. */
 .network-uptime {
-  margin-bottom: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
   background: var(--surface);
-  border-left: 3px solid var(--good);
 }
 
-.network-uptime.tone-degraded { border-left-color: var(--warn); }
-.network-uptime.tone-down { border-left-color: var(--bad, #e5484d); }
+.network-uptime-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+.network-uptime-head > span { display: flex; align-items: center; gap: 6px; color: var(--good); font-size: .8rem; font-weight: 700; }
+.network-uptime.is-degraded .network-uptime-head > span { color: var(--warn); }
+.network-uptime.is-down .network-uptime-head > span { color: var(--danger); }
+.network-uptime-head > small { color: var(--muted); font-size: .72rem; font-weight: 550; white-space: nowrap; }
 
-.network-uptime-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.network-uptime-head > span {
-  display: flex; align-items: center; gap: 5px;
-  color: var(--good); font-size: .64rem; font-weight: 600;
-  text-transform: uppercase; letter-spacing: .06em;
-}
-.network-uptime.tone-degraded .network-uptime-head > span { color: var(--warn); }
-.network-uptime.tone-down .network-uptime-head > span { color: var(--bad, #e5484d); }
-.network-uptime-head > small { color: var(--muted); font-size: .62rem; white-space: nowrap; }
-
-.network-uptime-figures { display: flex; flex-wrap: wrap; gap: 16px; margin: 6px 0 8px; }
-.network-uptime-figures > div { display: grid; gap: 1px; }
-.network-uptime-figures strong { font-size: 1rem; line-height: 1.1; }
-.network-uptime-figures small { color: var(--muted); font-size: .62rem; text-transform: uppercase; letter-spacing: .05em; }
+.network-uptime-figures { display: flex; flex-wrap: wrap; gap: 18px; margin: 8px 0 10px; }
+.network-uptime-figures > div { display: grid; gap: 2px; }
+.network-uptime-figures strong { color: var(--text); font-size: 1.05rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.network-uptime-figures small { color: var(--muted); font-size: .72rem; font-weight: 550; }
 
 /* Marks are absolutely positioned by time, so a 30-second drop in a 24-hour
    window stays findable instead of collapsing to nothing. */
 .network-uptime-track {
   position: relative;
   height: 8px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--good) 22%, transparent);
+  border-radius: var(--r-pill);
   overflow: hidden;
 }
 .network-uptime-track i {
@@ -89,20 +66,28 @@
   min-width: 2px;
   background: var(--warn);
 }
-.network-uptime-track i.is-blip { background: color-mix(in srgb, var(--warn) 65%, transparent); }
-.network-uptime-track i.is-ongoing { background: var(--bad, #e5484d); }
+.network-uptime-track i.is-blip { background: color-mix(in srgb, var(--warn) 60%, transparent); }
+.network-uptime-track i.is-ongoing { background: var(--danger); }
 
-.network-uptime-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; }
-.network-uptime-list li { display: flex; align-items: baseline; gap: 8px; font-size: .68rem; }
+.network-uptime-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; }
+.network-uptime-list li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: .76rem; border-top: 1px solid var(--border); }
+.network-uptime-list li:first-child { border-top: 0; }
 .network-uptime-list span { color: var(--text); min-width: 92px; }
 .network-uptime-list em { color: var(--warn); font-style: normal; font-weight: 650; }
-.network-uptime-list small { color: var(--muted); font-size: .62rem; margin-left: auto; }
+.network-uptime-list small { color: var(--muted); font-size: .72rem; margin-left: auto; }
 
-.network-uptime-clean { margin: 8px 0 0; color: var(--muted); font-size: .66rem; }
+.network-uptime-clean { margin: 10px 0 0; color: var(--muted); font-size: .74rem; }
 
-.network-chart { height: 230px; border-top: 1px solid var(--border); padding-top: 6px; }
-.network-chart-empty { height: 100%; display: grid; place-items: center; color: var(--muted); font-size: .74rem; }
+/* Throughput chart plus the devices strip beneath it, shared with the Network page. */
+.network-throughput { display: flex; flex-direction: column; gap: 8px; min-height: 0; height: 100%; }
+.network-throughput-plot { flex: 1 1 auto; min-height: 140px; }
+.network-devices-strip { flex: 0 0 auto; display: grid; gap: 4px; }
+.network-devices-head { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: .7rem; font-weight: 600; }
+.network-devices-head strong { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+.network-devices-plot { height: 84px; }
+
+.network-chart { height: 320px; padding-top: 10px; border-top: 1px solid var(--border); }
 
 @media (max-width: 680px) {
-  .network-chart { height: 200px; }
+  .network-chart { height: 280px; }
 }

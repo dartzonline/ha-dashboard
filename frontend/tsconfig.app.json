@@ -16,7 +16,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Linting. TypeScript 6 defaults `strict` to true; stated here so nobody mistakes it for off. */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

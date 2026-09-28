@@ -2,9 +2,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FlightsView } from './FlightsView'
 import type { HAEntity } from './types'
+import { resetFlightBoard } from './useFlightBoard'
 
 afterEach(() => {
   cleanup()
+  resetFlightBoard()
   vi.unstubAllGlobals()
 })
 
@@ -123,6 +125,17 @@ describe('Track page', () => {
       Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
       Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight')
     }
+  })
+
+  it('shows the backend\'s absolute ETA in the local zone on the card, ahead of its prose', async () => {
+    const etaAt = '2026-08-03T23:20:00Z'
+    const expected = new Date(etaAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    mockTrack([flight('SWA771', { etaAt, minutesLeft: 84 })])
+    render(<FlightsView entities={NO_ENTITIES} slide={1} onSelectSlide={() => {}} />)
+
+    await waitFor(() => expect(document.querySelector('.track-card')).toBeTruthy())
+    expect(document.querySelector('.track-eta')?.textContent).toBe(`ETA ${expected} · 84 min left`)
+    expect(screen.queryByText('ETA ~6:20 PM · 84 min left')).toBeNull()
   })
 
   it('falls back to the showcase when a tracked flight has no plottable route', async () => {

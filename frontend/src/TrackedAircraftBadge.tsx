@@ -3,52 +3,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AirlineLogo } from './AirlineLogo'
 import { aircraftFamily } from './aircraftSilhouettes'
 import type { AircraftFamily } from './aircraftSilhouettes'
-import { apiUrl } from './api'
-import { AIRCRAFT_ART, arrivalVerdict, artKeyForAircraft, clockOf } from './flightBadge'
-import type { TrackSchedule } from './flightBadge'
+import { AIRCRAFT_ART, arrivalVerdict, artKeyForAircraft, clockOf, etaClock } from './flightBadge'
 import { FLIGHTS_RADAR_SLIDE, FLIGHTS_TRACK_SLIDE } from './flightsSlides'
 import type { HAEntity } from './types'
+import { useFlightBoard } from './useFlightBoard'
+import type { Aircraft, TrackEntry } from './useFlightBoard'
 import { homeCoordinates } from './useServiceStatus'
 import './TrackedAircraftBadge.css'
 
-interface TrackRoute {
-  fromCode: string | null
-  fromCity: string | null
-  toCode: string | null
-  toCity: string | null
-}
-
-interface NearbyAircraft {
-  callsign: string | null
-  airline: string | null
-  airlineCode: string | null
-  type: string | null
-  kind: string | null
-  fromCode: string | null
-  toCode: string | null
-  altitudeFt: number | null
-  distanceKm: number | null
-}
-
-interface TrackEntry {
-  query: string | null
-  mode: 'track' | 'landed' | 'await' | null
-  flight: NearbyAircraft | null
-  route: TrackRoute | null
-  schedule?: TrackSchedule
-  /** 0..1 along the great-circle route, from the backend's own progress maths. */
-  progress?: number
-  /** Live time-to-run from ground speed, e.g. "in 42 min"; the only ETA when no schedule exists. */
-  etaLine?: string | null
-}
-
-/** The first pinned flight stays flattened at the top level; `flights` carries all of them. */
-interface TrackResponse extends TrackEntry {
-  flights?: TrackEntry[]
-}
-
 /** One slot in the rotation: either a pinned flight or the nearest airliner overhead. */
-type Reading = { kind: 'tracked'; entry: TrackEntry } | { kind: 'nearest'; aircraft: NearbyAircraft }
+type Reading = { kind: 'tracked'; entry: TrackEntry } | { kind: 'nearest'; aircraft: Aircraft }
 
 /**
  * Rendered as real inline SVG rather than a CSS mask: a mask silently degrades to a solid coloured
@@ -83,7 +47,7 @@ function PackAircraftIcon({ type, size, className }: { type: string | null | und
  */
 const PASSENGER_FAMILIES = new Set<AircraftFamily>(['narrowbody', 'widebody', 'quadjet', 'regionaljet'])
 
-function isPassengerJet(aircraft: NearbyAircraft) {
+function isPassengerJet(aircraft: Aircraft) {
   return PASSENGER_FAMILIES.has(aircraftFamily(aircraft.type))
 }
 
@@ -98,66 +62,15 @@ const SWIPE_PX = 40
  * A symbol rather than a caption says which kind is showing, keeping the space for the flight itself.
  */
 export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Map<string, HAEntity>; onOpenFlights?: (slide: number) => void }) {
-  const [track, setTrack] = useState<TrackResponse | null>(null)
-  const [nearest, setNearest] = useState<NearbyAircraft | null>(null)
   const [step, setStep] = useState(0)
   // Declared with the other hooks rather than beside the swipe handlers below, which sit after this
   // component's early return for an empty sky.
   const swipe = useRef<{ x: number; y: number } | null>(null)
   const swiped = useRef(false)
-  const coordinates = homeCoordinates(entities)
-  const latitude = coordinates?.latitude ?? null
-  const longitude = coordinates?.longitude ?? null
-
-  useEffect(() => {
-    let cancelled = false
-
-    function load() {
-      fetch(apiUrl('flights/track'))
-        .then(async (response) => {
-          if (!response.ok) throw new Error('Track endpoint unavailable')
-          const payload: TrackResponse = await response.json()
-          if (!cancelled) setTrack(payload)
-        })
-        .catch(() => {
-          // Keep the last known badge state; the next poll retries.
-        })
-    }
-
-    load()
-    // Each poll costs one upstream lookup per pinned flight, so this is deliberately slower than
-    // the banner's 30s rotation -- the flight on screen changes far more often than its data does.
-    const timer = window.setInterval(load, 30_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (latitude === null || longitude === null) return
-    let cancelled = false
-
-    function load() {
-      // The backend caches this query for 60s, so polling faster would only burn OpenSky quota.
-      fetch(apiUrl(`flights/nearby?latitude=${latitude}&longitude=${longitude}&limit=25`))
-        .then(async (response) => {
-          if (!response.ok) throw new Error('Nearby endpoint unavailable')
-          const payload: { aircraft?: NearbyAircraft[] } = await response.json()
-          if (cancelled) return
-          // Already distance-sorted upstream, so the first passenger jet is the closest one.
-          setNearest((payload.aircraft ?? []).find(isPassengerJet) ?? null)
-        })
-        .catch(() => {})
-    }
-
-    load()
-    const timer = window.setInterval(load, 30_000)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [latitude, longitude])
+  // The same poller the Flights page uses, so the two never double up on the metered upstreams.
+  const { track, nearby } = useFlightBoard(homeCoordinates(entities))
+  // Already distance-sorted upstream, so the first passenger jet is the closest one.
+  const nearest = useMemo(() => (nearby?.aircraft ?? []).find(isPassengerJet) ?? null, [nearby])
 
   const readings = useMemo<Reading[]>(() => {
     // Older backends only sent the flattened first flight; treat that as a one-entry list.
@@ -219,7 +132,7 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
   if (!callsign) {
     return (
       <div
-        className={`flight-banner is-idle ${onOpenFlights ? 'is-linked' : ''}`.trim()}
+        className={`flight-banner glass-pill is-idle ${onOpenFlights ? 'is-linked' : ''}`.trim()}
         title={onOpenFlights ? 'No tracked flight and no passenger jet overhead — open the radar' : 'No tracked flight and no passenger jet overhead'}
         onClick={onOpenFlights ? () => onOpenFlights(FLIGHTS_RADAR_SLIDE) : undefined}
         onKeyDown={onOpenFlights ? (event) => {
@@ -245,7 +158,9 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
   const tone = entry ? (entry.mode === 'track' ? 'good' : entry.mode === 'landed' ? 'accent' : 'muted') : 'accent'
 
   const progress = Math.max(0, Math.min(1, entry?.progress ?? 0))
-  const eta = clockOf(entry?.schedule?.arrEstimated ?? entry?.schedule?.arrScheduled)
+  // The schedule's estimate first, then the backend's live ETA rendered in this tablet's zone, then
+  // its prose (composed in the backend's zone, which is why it comes last).
+  const eta = clockOf(entry?.schedule?.arrEstimated ?? entry?.schedule?.arrScheduled) ?? etaClock(entry)
   const verdict = entry ? arrivalVerdict(entry.schedule) : null
   const arrival = eta ? `Arrives ${eta}` : entry?.etaLine ?? null
   const distance = overhead?.distanceKm != null ? `${Math.round(overhead.distanceKm)} km` : null
@@ -258,7 +173,11 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
 
   return (
     <div
-      className={`flight-banner tone-${tone} ${isTracked ? 'is-tracking' : 'is-nearest'} ${onOpenFlights ? 'is-linked' : ''}`.trim()}
+      // `banner-tone-*` rather than the shared `tone-*`: the shared class tints the whole pane, and
+      // the pill in the topbar spends its one accent on the silhouette instead.
+      className={`flight-banner glass-pill banner-tone-${tone} ${isTracked ? 'is-tracking' : 'is-nearest'} ${onOpenFlights ? 'is-linked' : ''}`.trim()}
+      // The banner has its own sideways swipe between flights, which must not also turn the page.
+      data-swipe-ignore={readings.length > 1 ? true : undefined}
       title={`${isTracked ? `Tracking ${callsign}` : `Nearest passenger jet overhead: ${callsign}${type ? ` · ${type}` : ''}`} — ${destination}${readings.length > 1 ? ' · swipe for the next flight' : ''}`}
       onPointerDown={onPointerDown}
       onPointerUp={onPointerUp}
@@ -293,8 +212,8 @@ export function TrackedAircraftBadge({ entities, onOpenFlights }: { entities: Ma
         {isTracked ? (
           <div className="flight-progress">
             <span className="flight-port">{from ?? '—'}</span>
-            <span className="flight-track" role="presentation">
-              <span className="flight-track-fill" style={{ width: `${progress * 100}%` }} />
+            <span className="flight-track glass-inset" role="presentation">
+              <span className="flight-track-fill" style={{ transform: `scaleX(${progress})` }} />
               <span className="flight-track-dot" style={{ left: `${progress * 100}%` }} />
             </span>
             <span className="flight-port">{to ?? '—'}</span>

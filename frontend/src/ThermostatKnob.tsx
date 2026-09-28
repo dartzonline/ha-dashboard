@@ -118,28 +118,22 @@ export function ThermostatKnob({ entity, pending, size = 'tile', onSet }: Thermo
           if (['ArrowDown', 'ArrowLeft'].includes(event.key)) { event.preventDefault(); commit(display - step) }
         }}
       >
-        <defs>
-          <linearGradient id={`thermoTrack-${size}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#1b3040" />
-            <stop offset="100%" stopColor="#16242f" />
-          </linearGradient>
-          <linearGradient id={`thermoFill-${mode}-${size}`} x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0%" stopColor={mode === 'heating' ? '#ff8a4c' : mode === 'cooling' ? '#2bb9ff' : '#3fd6c8'} />
-            <stop offset="100%" stopColor={mode === 'heating' ? '#ffd166' : mode === 'cooling' ? '#7de3ff' : '#8ef0d3'} />
-          </linearGradient>
-        </defs>
-        <path d={arcPath(startAngle, startAngle + sweep)} className="thermo-track" stroke={`url(#thermoTrack-${size})`} />
-        <path d={arcPath(startAngle, progressAngle)} className="thermo-progress" stroke={`url(#thermoFill-${mode}-${size})`} />
+        {/* The glass face: a frosted disc inside the ring, so the dial reads as one object on the tile. */}
+        <circle cx="50" cy="50" r="31" className="thermo-face" />
+        <path d={arcPath(startAngle, startAngle + sweep)} className="thermo-track" />
+        <path d={arcPath(startAngle, progressAngle)} className="thermo-progress" />
         <circle cx={knobPoint.x} cy={knobPoint.y} r="5.4" className="thermo-handle" />
       </svg>
       <div className="thermo-readout">
+        {/* Dropped at tile size by CSS: the arc colour already says heating/cooling there, and the
+            word crowded the target number out of a 118px dial. */}
         <span className="thermo-mode"><ModeIcon size={size === 'large' ? 16 : 13} aria-hidden="true" />{mode === 'idle' ? 'Idle' : mode.replace(/^./, (letter) => letter.toUpperCase())}</span>
         <strong>{Number.isFinite(display) ? Math.round(display) : '--'}<i>°</i></strong>
         <small>{Number.isFinite(current) ? `Now ${Math.round(current)}°` : 'No reading'}{Number.isFinite(humidity) ? ` · ${Math.round(humidity)}%` : ''}</small>
       </div>
       <div className="thermo-steppers">
-        <button onClick={(event) => { event.stopPropagation(); commit(display - step) }} disabled={disabled} title="Lower target temperature" aria-label="Lower target temperature"><Minus size={size === 'large' ? 18 : 15} /></button>
-        <button onClick={(event) => { event.stopPropagation(); commit(display + step) }} disabled={disabled} title="Raise target temperature" aria-label="Raise target temperature"><Plus size={size === 'large' ? 18 : 15} /></button>
+        <button type="button" className="thermo-step" onClick={(event) => { event.stopPropagation(); commit(display - step) }} disabled={disabled} title="Lower target temperature" aria-label="Lower target temperature"><Minus size={18} aria-hidden="true" /></button>
+        <button type="button" className="thermo-step" onClick={(event) => { event.stopPropagation(); commit(display + step) }} disabled={disabled} title="Raise target temperature" aria-label="Raise target temperature"><Plus size={18} aria-hidden="true" /></button>
       </div>
     </div>
   )

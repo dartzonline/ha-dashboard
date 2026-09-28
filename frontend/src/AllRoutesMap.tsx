@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { MapPinned, PlaneTakeoff } from 'lucide-react'
 import { buildFlightLine, project, unwrap } from './routeGeometry'
 import type { Point } from './routeGeometry'
+import { EmptyState } from './ui/StateMessages'
 import './AllRoutesMap.css'
 
 export interface MapRoute {
@@ -23,6 +25,13 @@ const FIT_X = 0.8
 const FIT_Y = 0.7
 /** Fewer samples than the single-route map: several arcs are drawn at once and none is the subject. */
 const ARC_SAMPLES = 48
+/** Series hues available (--chart-1..6). The backend caps pins at six, but a seventh route folds
+    into the neutral "other" tone rather than reusing a hue that already means another flight. */
+const SERIES_MAX = 6
+
+function toneClass(order: number) {
+  return order < SERIES_MAX ? `tone-${order}` : 'tone-other'
+}
 
 function tileUrl(zoom: number, x: number, y: number) {
   return `https://a.basemaps.cartocdn.com/dark_all/${zoom}/${x}/${y}.png`
@@ -192,16 +201,18 @@ export function AllRoutesMap({ routes }: { routes: MapRoute[] }) {
 
   if (drawable.length === 0) {
     return (
-      <div className="all-routes-map is-empty" ref={ref}>
-        <p className="all-routes-empty">
-          {routes.length > 0 ? 'Waiting on coordinates for the tracked flights' : 'No flights tracked yet'}
-        </p>
+      <div className="all-routes-map is-empty" ref={ref} data-swipe-ignore>
+        <EmptyState
+          icon={routes.length > 0 ? <MapPinned /> : <PlaneTakeoff />}
+          title={routes.length > 0 ? 'Waiting on coordinates for the tracked flights' : 'No flights tracked yet'}
+        />
       </div>
     )
   }
 
   return (
-    <div className="all-routes-map" ref={ref}>
+    // A map is its own gesture surface: a drag across it must never also turn the page.
+    <div className="all-routes-map" ref={ref} data-swipe-ignore>
       {geometry && (
         <div className="all-routes-tiles" aria-hidden="true">
           {geometry.tiles.map((tile) => (
@@ -218,7 +229,7 @@ export function AllRoutesMap({ routes }: { routes: MapRoute[] }) {
           aria-label={`All tracked flights: ${geometry.lines.map((line) => `${line.callsign} ${line.fromCode ?? '?'} to ${line.toCode ?? '?'}`).join('; ')}`}
         >
           {geometry.lines.map((line) => (
-            <g key={line.key} className={`all-route tone-${line.order % 6} ${line.isLanded ? 'is-landed' : ''}`.trim()}>
+            <g key={line.key} className={`all-route ${toneClass(line.order)} ${line.isLanded ? 'is-landed' : ''}`.trim()}>
               <path className="all-route-remaining" d={line.remaining} />
               <path className="all-route-flown" d={line.flown} />
               <circle className="all-route-end" cx={line.start.x} cy={line.start.y} r="4" />
@@ -236,7 +247,7 @@ export function AllRoutesMap({ routes }: { routes: MapRoute[] }) {
       {geometry && geometry.lines.map((line) => (
         <span
           key={line.key}
-          className={`all-route-label tone-${line.order % 6} ${line.isLanded ? 'is-landed' : ''}`.trim()}
+          className={`all-route-label ${toneClass(line.order)} ${line.isLanded ? 'is-landed' : ''}`.trim()}
           style={{ left: line.label.x, top: line.label.y }}
         >
           <strong>{line.callsign}</strong>

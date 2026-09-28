@@ -28,6 +28,9 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from .atomic import write_text_atomic
+from .bounded_cache import BoundedCache
+
 # ---------------------------------------------------------------------------
 # Keyless ADS-B feeds
 # ---------------------------------------------------------------------------
@@ -330,7 +333,7 @@ async def trace_points(
 ADSB_LOL_ROUTE_URL = "https://api.adsb.lol/api/0/route/{callsign}"
 
 # key: callsign -> (fetched_at, (origin, dest) | None)
-_route_cache: dict[str, tuple[float, tuple[dict[str, Any], dict[str, Any]] | None]] = {}
+_route_cache: BoundedCache[str, tuple[float, tuple[dict[str, Any], dict[str, Any]] | None]] = BoundedCache(maxsize=2048)
 ROUTE_TTL = 3600.0
 ROUTE_MISS_TTL = 900.0
 
@@ -427,7 +430,9 @@ class Budget:
     def _save(self) -> None:
         try:
             _BUDGET_DIR.mkdir(parents=True, exist_ok=True)
-            _BUDGET_PATH.write_text(json.dumps({"day": self._day, "counts": self._counts}))
+            # Atomic: a torn write here would read back as "no quota spent today" on the next
+            # start, which is the one moment (a crash loop) a metered quota most needs protecting.
+            write_text_atomic(_BUDGET_PATH, json.dumps({"day": self._day, "counts": self._counts}))
         except OSError:
             # A read-only or missing volume must not take the flight board down with it; the
             # budget simply falls back to being per-process.

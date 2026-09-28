@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
-import { apiUrl } from './api'
+import { apiUrl, responseError } from './api'
+import { cachedJson, peekCached } from './cachedFetch'
 import { classify, deviceIdsOwningDomain } from './entityClassifier'
 import type { RegistrySnapshot, TileProposal } from './entityClassifier'
 import type { DashboardConfigResponse, DashboardSection, HAEntity } from './types'
 
 /**
  * Registry metadata changes only when devices are added or renamed in Home Assistant, and the
- * backend caches it for five minutes anyway -- so this mirrors useSparkline's module-level cache
- * with in-flight dedupe, and the Configure panel re-opening costs nothing.
+ * backend caches it for five minutes anyway -- so it lives in the shared JSON cache, and the
+ * Configure panel re-opening costs nothing. A refused registry (no permission, HA offline) is an
+ * error, which the cache never stores, so nothing is ever classified against an empty snapshot.
  */
-const registryCache: { snapshot: RegistrySnapshot | null; fetchedAt: number } = { snapshot: null, fetchedAt: 0 }
+const REGISTRY_KEY = 'registry'
 const CACHE_TTL_MS = 5 * 60_000
-let registryInflight: Promise<RegistrySnapshot | null> | null = null
 
 /** The dismissed list is small and written back here, so it is cached for the session rather than by TTL. */
 let ignoredCache: string[] | null = null
@@ -27,23 +28,7 @@ export function primeIgnoredEntityIds(entityIds: string[]) {
 }
 
 function fetchRegistry(): Promise<RegistrySnapshot | null> {
-  if (registryCache.snapshot && Date.now() - registryCache.fetchedAt < CACHE_TTL_MS) return Promise.resolve(registryCache.snapshot)
-  if (registryInflight) return registryInflight
-  const request = fetch(apiUrl('registry'))
-    .then((response) => (response.ok ? (response.json() as Promise<RegistrySnapshot>) : null))
-    .then((snapshot) => {
-      // A registry the WebSocket refused (no permission, HA offline) must not be cached as "empty",
-      // or every entity would look like it has no metadata and diagnostic noise would be proposed.
-      if (snapshot) {
-        registryCache.snapshot = snapshot
-        registryCache.fetchedAt = Date.now()
-      }
-      return snapshot
-    })
-    .catch(() => null)
-    .finally(() => { registryInflight = null })
-  registryInflight = request
-  return request
+  return cachedJson<RegistrySnapshot>(REGISTRY_KEY, REGISTRY_KEY, CACHE_TTL_MS).catch(() => null)
 }
 
 function fetchIgnored(): Promise<string[]> {
@@ -79,9 +64,9 @@ export interface EntityDiscovery {
  * only this slice leaves sections and Night Mode's allowlist untouched on the server.
  */
 export function useEntityDiscovery(entities: Map<string, HAEntity>, sections: DashboardSection[]): EntityDiscovery {
-  const [registry, setRegistry] = useState<RegistrySnapshot | null>(registryCache.snapshot)
+  const [registry, setRegistry] = useState<RegistrySnapshot | null>(() => peekCached<RegistrySnapshot>(REGISTRY_KEY, CACHE_TTL_MS) ?? null)
   const [ignored, setIgnored] = useState<string[]>(() => ignoredCache ?? [])
-  const [loading, setLoading] = useState(!registryCache.snapshot || !ignoredCache)
+  const [loading, setLoading] = useState(registry === null || !ignoredCache)
 
   useEffect(() => {
     let stopped = false
@@ -96,15 +81,30 @@ export function useEntityDiscovery(entities: Map<string, HAEntity>, sections: Da
   }, [])
 
   async function dismiss(entityId: string) {
-    const next = ignored.includes(entityId) ? ignored : [...ignored, entityId]
+    const previous = ignoredCache ?? ignored
+    if (previous.includes(entityId)) return
+    const next = [...previous, entityId]
+    // Optimistic so the row disappears under the finger; rolled back if the server disagrees, or
+    // the tray would hide a device the backend will keep proposing after the next reload.
     setIgnored(next)
     ignoredCache = next
-    const response = await fetch(apiUrl('config'), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ignoredEntityIds: next }),
-    })
-    if (!response.ok) throw new Error('Could not save the dismissed device')
+    try {
+      const response = await fetch(apiUrl('config'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ignoredEntityIds: next }),
+      })
+      if (!response.ok) throw await responseError(response, 'Could not save the dismissed device')
+      const data: DashboardConfigResponse | null = await response.json().catch(() => null)
+      if (data && Array.isArray(data.ignoredEntityIds)) {
+        ignoredCache = data.ignoredEntityIds
+        setIgnored(data.ignoredEntityIds)
+      }
+    } catch (error) {
+      ignoredCache = previous
+      setIgnored(previous)
+      throw error
+    }
   }
 
   const placed = new Set<string>(ignored)

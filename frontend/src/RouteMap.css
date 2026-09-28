@@ -1,12 +1,14 @@
 /* The route as a map rather than a progress bar: real tiles, the great circle drawn across them,
-   and the aircraft on the part of it already flown. Origin and destination take the app's own
-   accent and warn tones so the two ends read as a matched pair rather than generic map pins. */
+   and the aircraft on the part of it already flown. The flown line and the aircraft take the first
+   series hue (the same one the progress bars use); origin takes the accent and destination the
+   second series hue, so the two ends read as a matched pair rather than generic map pins. Status
+   tints stay off the map: a route line is not a verdict. */
 .route-map {
   position: relative;
   min-height: 0;
   height: 100%;
-  border-radius: 12px;
-  background: #0a0b0f;
+  border-radius: var(--r-md);
+  background: var(--surface-solid);
   overflow: hidden;
   isolation: isolate;
 }
@@ -37,7 +39,7 @@
 /* Ahead of the aircraft: dashed and quiet. Behind it: solid and lit. */
 .route-remaining {
   fill: none;
-  stroke: color-mix(in srgb, var(--accent) 62%, transparent);
+  stroke: color-mix(in srgb, var(--chart-1) 62%, transparent);
   stroke-width: 2;
   stroke-dasharray: 5 7;
   stroke-linecap: round;
@@ -46,23 +48,23 @@
 
 .route-flown {
   fill: none;
-  stroke: var(--good);
+  stroke: var(--chart-1);
   stroke-width: 2.6;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--good) 55%, transparent));
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--chart-1) 55%, transparent));
 }
 
 .route-end-halo { fill: color-mix(in srgb, currentColor 22%, transparent); stroke: color-mix(in srgb, currentColor 55%, transparent); stroke-width: 1; }
-.route-end-dot { fill: currentColor; stroke: #05070d; stroke-width: 1.6; }
+.route-end-dot { fill: currentColor; stroke: var(--canvas); stroke-width: 1.6; }
 .route-end-origin { color: var(--accent); }
-.route-end-destination { color: var(--warn); }
+.route-end-destination { color: var(--chart-2); }
 
-.route-aircraft { color: var(--good); }
+.route-aircraft { color: var(--chart-1); }
 .route-aircraft.is-estimated { color: var(--muted); }
 .route-aircraft-halo { fill: color-mix(in srgb, currentColor 18%, transparent); }
 .route-aircraft.is-live .route-aircraft-halo { animation: route-pulse 2.4s ease-out infinite; transform-origin: center; }
-.route-aircraft-glyph { fill: currentColor; stroke: #05070d; stroke-width: 1.1; }
+.route-aircraft-glyph { fill: currentColor; stroke: var(--canvas); stroke-width: 1.1; }
 
 @keyframes route-pulse {
   from { opacity: .75; transform: scale(.55); }
@@ -70,72 +72,62 @@
 }
 
 /* Endpoint labels sit outside the SVG so they keep normal text rendering and can wrap-proof
-   themselves; they are anchored to the same projected pixel as their dot. */
+   themselves; they are anchored to the same projected pixel as their dot. The hue lives on the
+   chip's edge, not its text, so the code stays legible whatever the end's colour. */
 .route-chip {
   position: absolute;
   z-index: 3;
-  padding: 4px 9px;
-  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, var(--border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--canvas) 82%, transparent);
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--chip-color) 55%, var(--glass-border));
+  border-radius: var(--r-sm);
+  background-color: var(--glass-bg-strong);
   display: grid;
   gap: 1px;
   white-space: nowrap;
   pointer-events: none;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  box-shadow: var(--glass-edge), 0 4px 14px rgba(0, 0, 0, .45);
 }
 
-.route-chip strong { color: var(--chip-color); font: 750 .8rem var(--mono); letter-spacing: .02em; }
-.route-chip small { color: var(--muted); font-size: .6rem; max-width: 118px; overflow: hidden; text-overflow: ellipsis; }
+.route-chip strong { color: var(--text); font: 750 .8rem var(--mono); letter-spacing: .02em; }
+.route-chip small { color: var(--muted); font-size: .68rem; max-width: 118px; overflow: hidden; text-overflow: ellipsis; }
 
 /* Origin below its dot, destination above: two ends of a short route cannot collide. */
 .route-chip-origin { --chip-color: var(--accent); transform: translate(-50%, 16px); }
-.route-chip-destination { --chip-color: var(--warn); transform: translate(-50%, calc(-100% - 16px)); }
+.route-chip-destination { --chip-color: var(--chart-2); transform: translate(-50%, calc(-100% - 16px)); }
 
-.route-map-callsign {
+/* Overlaid pills: glass so the map shows through them, strong enough to read over bright tiles. */
+.route-map-callsign, .route-map-caption {
   position: absolute;
-  left: 12px;
-  top: 11px;
+  top: 12px;
   z-index: 4;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text);
-  background: color-mix(in srgb, var(--canvas) 84%, transparent);
-  font: 750 .78rem var(--mono);
-  backdrop-filter: blur(8px);
+  padding: 5px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  background-color: var(--glass-bg-strong);
+  background-image: var(--glass-highlight);
+  box-shadow: var(--glass-edge);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
+.route-map-callsign { left: 12px; color: var(--text); font: 750 .78rem var(--mono); }
+.route-map-caption { right: 12px; color: var(--muted); font-size: .72rem; font-weight: 650; }
 
-.route-map-caption {
-  position: absolute;
-  right: 12px;
-  top: 11px;
-  z-index: 4;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--canvas) 84%, transparent);
-  font-size: .66rem;
-  font-weight: 650;
-  backdrop-filter: blur(8px);
-}
+.route-map-credit { position: absolute; right: 10px; bottom: 8px; z-index: 4; color: color-mix(in srgb, var(--muted) 80%, transparent); font-size: .55rem; text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
 
-.route-map-credit { position: absolute; right: 9px; bottom: 7px; z-index: 4; color: color-mix(in srgb, var(--muted) 80%, transparent); font-size: .52rem; text-shadow: 0 1px 3px #000; }
-
+/* The shared empty state, centred over whatever tiles (if any) are behind it. */
 .route-map-empty {
   position: absolute;
   inset: 0;
   z-index: 4;
-  margin: 0;
-  color: var(--muted);
   display: grid;
   place-items: center;
-  font-size: .78rem;
-  text-align: center;
+  padding: 16px;
 }
 
 @media (max-width: 860px) {
   .route-chip small { display: none; }
 }
+
+/* Attribution never sits on raw map tiles: a small near-opaque backing keeps it legible over bright
+   imagery without competing with the data. */
+.route-map-credit { padding: 1px 7px; border-radius: 6px; background: var(--glass-bg-strong); color: var(--muted); font-size: .6rem; text-shadow: none; }

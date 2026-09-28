@@ -1,0 +1,41 @@
+.page-frame { display: flex; flex-direction: column; min-height: 0; gap: var(--gap); }
+.page-frame-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; min-height: 48px; }
+.page-frame-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.page-frame-icon { flex: 0 0 40px; width: 40px; height: 40px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--muted); background: var(--surface-raised); box-shadow: var(--glass-edge); }
+.page-frame-icon svg { width: 20px; height: 20px; }
+.page-frame.tone-good .page-frame-icon { color: var(--good); background: var(--good-soft); }
+.page-frame.tone-warn .page-frame-icon { color: var(--warn); background: var(--warn-soft); }
+.page-frame.tone-danger .page-frame-icon { color: var(--danger); background: var(--danger-soft); }
+.page-frame.tone-accent .page-frame-icon { color: var(--accent-strong); background: var(--accent-soft); }
+.page-frame-eyebrow { display: block; margin-bottom: 2px; color: var(--muted); font-size: .7rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
+.page-frame-head h2 { margin: 0; font-size: 1.15rem; font-weight: 750; letter-spacing: -.01em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-frame.tone-danger .page-frame-head h2 { color: var(--danger); }
+.page-frame.tone-warn .page-frame-head h2 { color: var(--warn); }
+.page-frame-side { display: flex; align-items: center; gap: 12px; margin-left: auto; min-width: 0; }
+.page-frame-meta { margin: 0; color: var(--muted); font-size: .78rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-frame-actions { display: flex; align-items: center; gap: 6px; }
+
+/* The tone classes on .page-frame itself are only for the icon/title; the frame is not a pane. */
+.page-frame.tone-accent, .page-frame.tone-good, .page-frame.tone-warn, .page-frame.tone-danger { background: none; border: 0; }
+
+.glass-card { border-radius: var(--r-md); padding: 14px 16px; color: var(--text); text-align: left; }
+.glass-card.glass-strong { border-radius: var(--r-lg); }
+button.glass-card:not(:disabled):hover { border-color: var(--border-strong); }
+
+@media (max-width: 699px) {
+  .page-frame-head h2 { white-space: normal; }
+  .page-frame-side { margin-left: 0; flex: 1 1 100%; justify-content: space-between; }
+}
+
+/* Every page heading sits on a pane of its own: on a wall panel no text is left on the bare canvas
+   wash or a photo backdrop. Unblurred on purpose -- it is one more layer on pages that already
+   carry a dozen blurred tiles -- so it leans on the strong tint for legibility instead. The old
+   opt-in `has-pane` class still matches, so existing callers need no change. */
+.page-frame > .page-frame-head {
+  padding: 6px 10px 6px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  background-image: var(--glass-highlight);
+  background-color: var(--glass-bg-strong);
+  box-shadow: var(--glass-edge);
+}

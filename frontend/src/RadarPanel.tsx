@@ -1,5 +1,7 @@
-import { Pause, Play, Radar as RadarIcon, Sun } from 'lucide-react'
+import { MapPinOff, Pause, Play, Radar as RadarIcon, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { cachedJson, isAbortError, peekCached } from './cachedFetch'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import './RadarPanel.css'
 
 interface RadarFrame {
@@ -12,9 +14,10 @@ interface RadarPayload {
   frames: RadarFrame[]
 }
 
-/** RainViewer publishes a fresh weather-maps.json roughly every 10 minutes, so a short module-wide cache avoids refetching every time this slide is revisited during rotation. Mirrors the cache/inflight idiom in useSparkline.ts. */
-const cache: { payload: RadarPayload | null; fetchedAt: number } = { payload: null, fetchedAt: 0 }
-let inflight: Promise<RadarPayload | null> | null = null
+/** RainViewer publishes a fresh weather-maps.json roughly every 10 minutes, so the shared JSON cache
+    keeps this slide from refetching every time rotation brings it back. Only the frame index is
+    cached; the tiles themselves are images the browser's HTTP cache already handles. */
+const RADAR_CACHE_KEY = 'rainviewer:weather-maps'
 const CACHE_TTL_MS = 5 * 60_000
 const FRAME_COUNT = 8
 const FRAME_INTERVAL_MS = 700
@@ -54,23 +57,15 @@ function parseFrames(payload: unknown): RadarPayload | null {
   return { host, frames }
 }
 
-function fetchRadarFrames(): Promise<RadarPayload | null> {
-  if (cache.payload && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return Promise.resolve(cache.payload)
-  if (inflight) return inflight
-  const request = fetch('https://api.rainviewer.com/public/weather-maps.json')
-    .then((response) => (response.ok ? response.json() : null))
-    .then((data: unknown) => {
-      const parsed = parseFrames(data)
-      if (parsed) {
-        cache.payload = parsed
-        cache.fetchedAt = Date.now()
-      }
-      return parsed
-    })
-    .catch(() => null)
-    .finally(() => { inflight = null })
-  inflight = request
-  return request
+/** Throws rather than resolving null, so an empty or broken index is never cached as the answer. */
+function fetchRadarFrames(options: { signal?: AbortSignal; force?: boolean }): Promise<RadarPayload> {
+  return cachedJson<RadarPayload>(RADAR_CACHE_KEY, async () => {
+    const response = await fetch('https://api.rainviewer.com/public/weather-maps.json')
+    if (!response.ok) throw new Error(`RainViewer unavailable (${response.status})`)
+    const parsed = parseFrames(await response.json())
+    if (!parsed) throw new Error('RainViewer returned no radar frames')
+    return parsed
+  }, CACHE_TTL_MS, options)
 }
 
 /**
@@ -160,26 +155,31 @@ function planTiles(width: number, height: number, latitude: number, longitude: n
 }
 
 export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
-  const [payload, setPayload] = useState<RadarPayload | null>(cache.payload)
+  const [payload, setPayload] = useState<RadarPayload | null>(() => peekCached<RadarPayload>(RADAR_CACHE_KEY) ?? null)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const [frameIndex, setFrameIndex] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const scopeRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    let stopped = false
-    fetchRadarFrames().then((result) => {
-      if (stopped) return
-      if (result) {
+    const abort = new AbortController()
+    fetchRadarFrames({ signal: abort.signal, force: attempt > 0 })
+      .then((result) => {
         setPayload(result)
         setLoadFailed(false)
-      } else {
-        setLoadFailed(true)
-      }
-    })
-    return () => { stopped = true }
-  }, [])
+      })
+      .catch((error: unknown) => {
+        if (!isAbortError(error)) setLoadFailed(true)
+      })
+    return () => abort.abort()
+  }, [attempt])
+
+  function retry() {
+    setLoadFailed(false)
+    setAttempt((current) => current + 1)
+  }
 
   // The tile grid is sized from the rendered box, so the radar fills whatever rectangle the
   // weather panel gives it instead of being letterboxed into a square.
@@ -218,11 +218,8 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
     ? planTiles(size.width, size.height, latitude, longitude, PRECIP_ZOOM, PRECIP_SCALE)
     : []
 
-  const statusLabel = !hasLocation
-    ? 'Waiting for home location'
-    : currentFrame
-      ? `As of ${formatFrameClock(currentFrame.time)}`
-      : loadFailed ? 'Radar unavailable' : 'Loading radar...'
+  // Loading and failure are drawn over the map itself, so the heading only carries the frame time.
+  const statusLabel = hasLocation && currentFrame ? `As of ${formatFrameClock(currentFrame.time)}` : null
 
   // With nothing falling anywhere nearby, an empty radar loop is just a dark map. The same panel
   // then reports the things that actually matter on a dry day.
@@ -241,10 +238,10 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
     : []
 
   return (
-    <section className="weather-panel radar-panel" aria-label="Precipitation radar">
-      <header className="weather-panel-heading compact">
-        <strong>{quiet ? 'Radar clear' : 'Precipitation radar'}</strong>
-        <span>{statusLabel}</span>
+    <section className="weather-panel radar-panel" aria-label="Precipitation radar" data-swipe-ignore>
+      <header className="weather-panel-heading">
+        <h3>{quiet ? 'Radar clear' : 'Precipitation radar'}</h3>
+        {statusLabel && <span>{statusLabel}</span>}
       </header>
       <div className="radar-scope" ref={scopeRef}>
         {tiles.length > 0 && (
@@ -280,14 +277,18 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
           <span className="radar-home-dot" />
         </div>
         {(!currentFrame || !hasLocation) && (
-          <div className="radar-loading">
-            {!hasLocation ? 'Home coordinates are not available yet' : loadFailed ? 'Radar data unavailable' : 'Loading radar frames…'}
+          <div className="radar-overlay">
+            {!hasLocation
+              ? <EmptyState size="compact" icon={<MapPinOff />} title="Home location not available" hint="Looks for latitude and longitude on the weather.* entity or on zone.home" />
+              : loadFailed
+                ? <InlineError message="Radar data unavailable" onRetry={retry} />
+                : <LoadingState size="compact" label="Loading radar frames" />}
           </div>
         )}
-        <span className="radar-attribution">© OpenStreetMap · CARTO</span>
+        <span className="radar-attribution on-glass-text">© OpenStreetMap · CARTO</span>
       </div>
       {quiet && (
-        <div className="radar-quiet" role="status">
+        <div className="radar-quiet tone-good" role="status">
           <p className="radar-quiet-lead">
             <Sun size={16} aria-hidden="true" />
             No precipitation in range or in the next 24 hours
@@ -308,15 +309,15 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
       <div className="radar-controls">
         <button
           type="button"
-          className="radar-play-toggle"
+          className="radar-play-toggle glass-pill"
           onClick={() => setPlaying((current) => !current)}
           disabled={frames.length < 2}
           title={playing ? 'Pause radar animation' : 'Play radar animation'}
         >
-          {playing ? <Pause size={14} /> : <Play size={14} />}
+          {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
           <span>{playing ? 'Pause' : 'Play'}</span>
         </button>
-        <div className="radar-frame-dots" aria-label="Radar animation frames">
+        <div className="radar-frame-dots" role="img" aria-label={frames.length ? `Frame ${displayIndex + 1} of ${frames.length}` : 'No radar frames'}>
           {frames.map((frame, index) => (
             <span key={frame.time} className={index === displayIndex ? 'is-active' : ''} />
           ))}

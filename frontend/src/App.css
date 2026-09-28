@@ -1,727 +1,527 @@
-.command-center { min-height: 100svh; display: grid; grid-template-columns: 224px minmax(0, 1fr); border: 0; box-shadow: none; outline: 0; }
-/* State-change toasts are the deliberate exception to the calm direction: they exist to interrupt,
-   so they are the loudest thing on the panel. Identity is carried by a solid tone-coloured icon
-   chip, a thick tone edge and a tone-tinted surface — three agreeing signals, so the meaning
-   survives both a glance from across the room and the after-sunset dim in AutoDim.css.
-   `critical` = something opened / unlocked / turned on / faulted. `success` = closed / locked /
-   off / docked. `info` = everything else. */
-.alert-stack { position: fixed; z-index: 50; top: 16px; left: 50%; width: min(560px, calc(100% - 32px)); display: grid; gap: 10px; transform: translateX(-50%); pointer-events: none; }
+/* ============================================================================
+   App shell: topbar, nav rail, banners, alerts, the Home strips, tile grid and
+   the shared detail sheet.
+
+   Three blocks only: base rules, `max-width: 760px` (phone: bottom tab bar,
+   page scrolls with the body) and `min-width: 761px` (wall panel: viewport-
+   locked shell, pages fill their height). Earlier capped queries such as
+   `max-width: 1440px` missed a Fire HD 10 in landscape (~1443 CSS px) and left
+   it on phone-sized rules; type now scales from the fluid root size in
+   index.css, so nothing here needs a width band.
+
+   Readability first: every line of text sits on a pane (glass, glass-strong or
+   a raised surface inside one), tone tints are a wash of at most ~18% plus an
+   edge or icon change, and nothing fades text with opacity.
+   ============================================================================ */
+
+/* ---------- Shell -------------------------------------------------------- */
+/* `position: relative` so the auto-dim overlay (AutoDim.css) and the fixed layers below share
+   one root; nothing here sets a filter or transform, which would trap `position: fixed`. */
+.command-center { position: relative; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); }
+
+main { position: relative; width: 100%; max-width: 1600px; min-width: 0; margin: 0 auto; padding: 10px clamp(10px, 2vw, 28px) 24px; display: flex; flex-direction: column; }
+/* Everything in main sits above the photo backdrop, which is z-index 0 inside this same context.
+   Each child therefore becomes its own stacking context, so the topbar needs a higher layer than
+   its siblings or anything it opens would slide under the page. */
+main > *:not(.photo-backdrop) { position: relative; z-index: 1; }
+main > .topbar { position: sticky; top: 8px; z-index: 5; }
+.page-slide { flex: 1 1 auto; min-height: 0; animation: page-in .32s var(--ease); }
+
+/* Weather and Flights are full-bleed: the header floats over the map as its own pane. */
+main.is-fixed-view { max-width: none; padding: 0; overflow: hidden; }
+main.is-fixed-view > .topbar { position: absolute; z-index: 10; top: 10px; left: clamp(10px, 2vw, 24px); right: clamp(10px, 2vw, 24px); }
+/* Just under the floating header: its height is the date + title stack (~2.5rem) plus padding. */
+main.is-fixed-view > .shell-banners { position: absolute; z-index: 9; top: calc(40px + 2.6rem); left: clamp(10px, 2vw, 24px); right: clamp(10px, 2vw, 24px); }
+main.is-fixed-view .page-slide { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; margin: 0; }
+/* Card views fill the viewport too, but keep the header in flow so nothing slides under it. */
+main.is-tall-view { max-width: none; overflow: hidden; }
+
+/* ---------- Topbar ------------------------------------------------------- */
+/* Three explicit columns rather than space-between. A flex row centred the flight banner in
+   whatever space the title and clock left over, so it slid sideways by however wide the page name
+   was. Symmetric 1fr side columns pin it to the true centre; the items are placed by column, so
+   when the banner hides itself on a narrow panel the clock still lands on the right edge. */
+.topbar {
+  min-height: 68px;
+  padding: 8px 10px 8px 8px;
+  border-radius: var(--r-lg);
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+.page-title { grid-column: 1; justify-self: start; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.topbar > .flight-banner { grid-column: 2; justify-self: center; }
+.clock-block { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 14px; }
+
+.nav-toggle, .topbar-chip {
+  flex: 0 0 auto;
+  min-width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-pill);
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: var(--glass-edge);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.nav-toggle { width: 48px; height: 48px; border-radius: var(--r-sm); }
+.nav-toggle:hover, .topbar-chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); }
+
+.date { margin: 0; color: var(--muted); font-size: .72rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
+h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; letter-spacing: -.02em; }
+
+/* A real <button>, not styled text: it opens World time, the same way the flight banner opens
+   Flights. The clock is the hero of the header: the largest, heaviest thing on the panel. */
+.clock-time {
+  min-height: var(--tap);
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  color: var(--text-strong);
+  background: transparent;
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.clock-time:hover { color: var(--accent-strong); }
+
+.topbar-utilities { display: flex; align-items: center; gap: 6px; }
+.rotation-status { padding: 0 12px; }
+/* The label swings between "14s", "Held" and "Paused"; a fixed slot keeps the header's centre
+   column (and the flight banner in it) from stepping sideways as it counts. */
+.rotation-status span { min-width: 3.4em; font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.rotation-status.is-running { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border)); background-color: color-mix(in srgb, var(--accent) 16%, var(--surface-raised)); }
+.rotation-status.is-running svg { animation: rotate-status 5s linear infinite; }
+
+/* ---------- Banners ------------------------------------------------------ */
+.shell-banners { margin-top: 10px; display: grid; gap: 8px; justify-items: stretch; }
+.status-banner {
+  min-height: 52px;
+  padding: 10px 16px;
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font-size: .86rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.status-banner.tone-warn { background-color: color-mix(in srgb, var(--warn) 14%, var(--glass-bg-strong)); }
+.status-banner.tone-danger { background-color: color-mix(in srgb, var(--danger) 16%, var(--glass-bg-strong)); }
+.status-banner.tone-warn > svg { flex: none; color: var(--warn); }
+.status-banner.tone-danger > svg { flex: none; color: var(--danger); }
+.reconnecting-pill { justify-self: start; min-height: 36px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-size: .76rem; font-weight: 650; }
+.reconnecting-pill svg { color: var(--warn); }
+
+/* ---------- State-change alerts ----------------------------------------- */
+/* Toasts are the deliberate exception to the calm direction: they exist to interrupt, so they
+   carry a solid tone-coloured icon chip, a tone edge and a tone wash -- three agreeing signals, so
+   the meaning survives a glance from across the room and the after-sunset dim. They stack at the
+   bottom centre, clear of the header the eye reads first. `critical` = something opened /
+   unlocked / turned on / faulted. `success` = closed / locked / off / docked. `info` = the rest. */
+.alert-stack { position: fixed; z-index: 50; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; width: min(560px, calc(100% - 32px)); display: grid; gap: 10px; transform: translateX(-50%); pointer-events: none; }
 .state-alert {
   --tone: var(--accent);
   --tone-ink: var(--accent-ink);
-  --tone-bg: var(--accent-soft);
-  width: 100%; min-height: 84px; padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--tone) 46%, var(--border));
-  border-left: 6px solid var(--tone);
-  border-radius: 12px; color: var(--text);
-  background: color-mix(in srgb, var(--surface) 58%, var(--tone-bg));
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .34), 0 18px 44px rgba(0, 0, 0, .42);
+  width: 100%; min-height: 80px; padding: 14px 16px 14px 18px;
+  border-color: color-mix(in srgb, var(--tone) 45%, var(--glass-border));
+  border-radius: var(--r-md);
+  color: var(--text);
+  background-color: color-mix(in srgb, var(--tone) 14%, var(--glass-bg-strong));
+  box-shadow: inset 4px 0 0 var(--tone), var(--glass-edge), 0 18px 44px rgba(0, 0, 0, .42);
   display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 14px;
-  text-align: left; font: inherit; cursor: pointer; pointer-events: auto; animation: alert-in .24s ease-out;
+  text-align: left; pointer-events: auto; animation: alert-in .24s var(--ease);
 }
 .state-alert > span { width: 46px; height: 46px; border-radius: 50%; color: var(--tone-ink); background: var(--tone); display: grid; place-items: center; }
 .state-alert > span svg { width: 24px; height: 24px; }
 .state-alert div { min-width: 0; }
 .state-alert strong { display: block; color: var(--tone); font-size: 1.06rem; font-weight: 750; line-height: 1.15; letter-spacing: -.015em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.state-alert p { margin: 4px 0 0; color: var(--text); font-size: .86rem; font-weight: 500; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state-alert p { margin: 4px 0 0; color: var(--text); font-size: .86rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .state-alert > svg { width: 22px; height: 22px; color: var(--muted); }
-.state-alert.critical { --tone: var(--danger); --tone-ink: var(--danger-ink); --tone-bg: var(--danger-soft); }
-.state-alert.success { --tone: var(--good); --tone-ink: var(--good-ink); --tone-bg: var(--good-soft); }
-.state-alert.info { --tone: var(--accent); --tone-ink: var(--accent-ink); --tone-bg: var(--accent-soft); }
-/* z-index, because the photo backdrop inside main is a fixed element that would otherwise paint
-   over the sidebar: both are positioned, and main comes later in the DOM. */
-.sidebar { position: sticky; z-index: 2; top: 0; height: 100svh; padding: 18px 12px; border-right: 1px solid var(--border); background: var(--rail); display: flex; flex-direction: column; }
-.command-center.immersive-mode { grid-template-columns: 0 minmax(0, 1fr); }
-.command-center.immersive-mode .sidebar { display: none; }
-.brand { height: 58px; display: flex; align-items: center; gap: 12px; padding: 0 10px; color: var(--rail-active); font-weight: 700; font-size: .95rem; }
-.brand-mark { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; color: var(--canvas); background: var(--rail-active); box-shadow: none; }
-nav { display: grid; gap: 5px; margin-top: 24px; }
-nav button, .settings-button { min-height: 48px; padding: 0 13px; border: 0; border-radius: 8px; background: transparent; color: var(--rail-text); display: flex; align-items: center; gap: 13px; text-align: left; font: inherit; font-weight: 650; cursor: pointer; transition: background .16s ease, color .16s ease; }
-nav button:hover, nav button.active { background: rgba(255, 255, 255, .06); color: var(--rail-active); }
-nav button.active { font-weight: 800; }
-.settings-button { margin-top: auto; }
-.settings-button:hover { background: rgba(255, 255, 255, .06); color: var(--rail-active); }
-main { position: relative; width: min(100%, 1440px); min-width: 0; margin: 0 auto; padding: 24px clamp(22px, 4vw, 58px) 56px; }
-/* Everything in main sits above the photo backdrop, which is z-index 0 inside this same context. */
-main > *:not(.photo-backdrop) { position: relative; z-index: 1; }
-main.is-fixed-view { width: 100%; max-width: none; padding: 0; }
-main.is-fixed-view .topbar { position: absolute; top: 0; left: 0; right: 0; padding: 12px clamp(16px, 4vw, 32px); background: linear-gradient(to bottom, rgba(8, 8, 10, .95), transparent); z-index: 10; border: 0; }
-main.is-fixed-view .moments-strip { display: none; }
-main.is-fixed-view .utility-stack { display: none; }
-/* Card views fill the viewport too, but keep the header in flow so nothing slides under it. */
-main.is-tall-view { width: 100%; max-width: none; height: 100svh; padding: 10px clamp(16px, 3vw, 32px) 14px; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 4px; overflow: hidden; }
-main.is-tall-view .topbar { min-height: 58px; }
-main.is-tall-view .moments-strip, main.is-tall-view .utility-stack { display: none; }
-/* Three columns rather than space-between. A flex row centres the flight banner in whatever space
-   the title and clock leave over, so the banner slid sideways by however wide the page name
-   happened to be — "Flights" and "Home" put it in visibly different places, and on narrower panels
-   it drifted into the clock. Symmetric 1fr side columns pin it to the true centre of the header at
-   every width, and the middle column can still shrink before anything overflows. */
-.topbar { min-height: 76px; display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr); align-items: center; gap: 16px; }
-.topbar > .flight-banner { justify-self: center; }
-.page-title { justify-self: start; flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; }
-/* Below the width where the banner hides itself the header is a two-column layout again;
-   left in three, the clock would sit in the middle column instead of the right edge. */
-@media (max-width: 860px) { .topbar { grid-template-columns: minmax(0, 1fr) auto; } }
-/* Activity log and the rotation timer are corner furniture, not headline items. */
-.topbar-utilities { display: flex; align-items: center; gap: 5px; margin-left: 4px; opacity: .62; transition: opacity .2s ease; }
-.topbar-utilities:hover, .topbar-utilities:focus-within { opacity: 1; }
-.topbar-utilities .nav-toggle { width: 28px; height: 28px; }
-.date, .section-heading span { margin: 0; color: var(--muted); font-size: .74rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
-h1 { margin: 4px 0 0; font-size: 1.75rem; line-height: 1.1; font-weight: 700; }
-.clock-block { justify-self: end; flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
-/* A real <button>, not styled text: it opens World time, the same way the flight banner already
-   opens Flights. Reset once here; every other .clock-time rule only ever adjusts size/weight. */
-.clock-time { border: 0; background: transparent; font: inherit; color: inherit; padding: 0; cursor: pointer; border-radius: 6px; }
-.clock-time:hover, .clock-time:focus-visible { color: var(--accent); }
-.clock-time:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-.clock-block > .clock-time { min-width: 0; color: var(--text); font-size: 2.15rem; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.clock-block span { min-width: 84px; height: 30px; padding: 0 10px; border-radius: 15px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: .7rem; font-weight: 800; text-transform: uppercase; }
-.rotation-status { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--surface); display: flex; align-items: center; gap: 6px; font: inherit; cursor: pointer; }
-/* The label swings between "20s", "2/5" and "Paused", and the header's centre column is measured
-   off this corner: a fixed slot keeps the flight banner from stepping sideways when it changes. */
-.rotation-status span { min-width: 46px; width: auto; height: auto; padding: 0; border-radius: 0; font-size: .62rem; font-variant-numeric: tabular-nums; text-align: center; }
-.rotation-status.is-running { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 32%, transparent); background: var(--accent-soft); }
-.rotation-status.is-running svg { animation: rotate-status 5s linear infinite; }
-.clock-block i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-.status-banner { margin-top: 12px; min-height: 52px; padding: 10px 16px; border: 1px solid color-mix(in srgb, var(--warn) 32%, var(--border)); border-radius: 8px; display: flex; align-items: center; gap: 11px; color: var(--warn); background: var(--warn-soft); font-size: .9rem; }
-.overview { padding-top: 30px; }
-.page-slide { animation: page-in .32s ease-out; }
-main.is-fixed-view .page-slide { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; margin: 0; }
-.view-loading { min-height: 280px; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 10px; }
-.section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 16px; }
-.section-heading h2 { margin: 3px 0 0; font-size: 1.2rem; font-weight: 700; }
-.section-heading p { margin: 0; color: var(--muted); font-size: .8rem; }
-.entity-grid { display: grid; grid-template-columns: repeat(3, minmax(210px, 1fr)); gap: 14px; }
-.entity-tile { min-height: 132px; position: relative; padding: 16px; border: 1px solid transparent; border-radius: 8px; background: var(--surface); display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; box-shadow: var(--shadow); cursor: pointer; touch-action: manipulation; user-select: none; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
-.entity-tile:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
-.entity-tile:active { transform: scale(.985); background: var(--surface-raised); }
-.entity-tile:focus-visible { outline: 3px solid color-mix(in srgb, var(--accent) 34%, transparent); outline-offset: 2px; }
-.entity-tile.is-active { border-color: color-mix(in srgb, var(--accent) 34%, transparent); background: color-mix(in srgb, var(--surface) 74%, var(--accent-soft)); }
-.entity-tile.is-light-on { border-color: color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--surface) 80%, var(--warn-soft)); box-shadow: var(--shadow); }
-.entity-tile.is-light-on .tile-icon { color: #2a2010; background: var(--warn); box-shadow: none; }
-.entity-tile.is-hazard { border-color: color-mix(in srgb, var(--danger) 52%, transparent); background: color-mix(in srgb, var(--surface) 82%, var(--danger-soft)); box-shadow: var(--shadow); }
-.entity-tile.is-hazard .tile-icon { color: var(--danger-ink); background: var(--danger); }
-.entity-tile.is-hazard .tile-heading p { color: var(--danger); font-weight: 700; }
-.entity-tile.is-unavailable { box-shadow: none; border-color: var(--border); background: color-mix(in srgb, var(--surface) 76%, var(--canvas)); }
-.tile-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
-.tile-icon { flex: 0 0 44px; height: 44px; border-radius: 50%; background: var(--surface-raised); color: var(--muted); display: grid; place-items: center; transition: color .16s ease, background .16s ease; }
-.is-active .tile-icon { background: var(--accent); color: var(--accent-ink); }
-.tile-heading > div { min-width: 0; }
-.tile-heading h3 { margin: 0 0 4px; font-size: .92rem; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-heading p { margin: 0; max-width: 190px; color: var(--muted); font-size: .79rem; text-transform: capitalize; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.toggle { position: absolute; right: 16px; bottom: 15px; width: 44px; height: 26px; padding: 3px; border: 0; border-radius: 13px; background: var(--surface-raised); cursor: pointer; }
-.toggle span { display: block; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); box-shadow: 0 1px 2px rgba(0, 0, 0, .16); transition: transform .18s ease, background .18s ease; }
-.toggle.is-on { background: var(--accent); }
-.toggle.is-on span { transform: translateX(18px); background: var(--accent-ink); }
-.action-row { display: flex; gap: 8px; justify-content: flex-end; }
-.icon-action, .step-button { width: 38px; height: 36px; border: 0; border-radius: 8px; background: var(--surface-raised); color: var(--text); display: grid; place-items: center; cursor: pointer; }
-.icon-action:hover, .step-button:hover { background: var(--accent-soft); color: var(--accent-strong); }
-.icon-action.danger:hover { background: var(--danger-soft); color: var(--danger); }
-.thermostat-control { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
-.thermostat-control strong { min-width: 42px; text-align: center; font-size: 1.05rem; }
-.tile-error { margin: 8px 0 0; color: var(--danger); font-size: .7rem; }
-.pending-bar { position: absolute; bottom: 0; left: 0; width: 45%; height: 3px; border-radius: 3px; background: var(--accent); animation: loading 1s ease-in-out infinite alternate; }
-.detail-backdrop { position: fixed; z-index: 30; inset: 0; padding: 24px; background: rgba(8, 8, 10, .64); display: grid; place-items: center; animation: backdrop-in .18s ease-out; }
-.detail-sheet { width: min(520px, 100%); max-height: min(720px, calc(100svh - 48px)); padding: 22px; border-radius: 8px; background: var(--surface); color: var(--text); box-shadow: 0 24px 60px rgba(0, 0, 0, .5); overflow: auto; animation: sheet-in .2s ease-out; }
-.sheet-handle { display: none; }
-.detail-sheet header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
-.detail-icon { width: 48px; height: 48px; border-radius: 50%; color: var(--accent-ink); background: var(--accent); display: grid; place-items: center; }
-.detail-sheet header p { margin: 0 0 3px; color: var(--muted); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; }
-.detail-sheet header h2 { margin: 0; font-size: 1.15rem; }
-.detail-sheet header button { width: 40px; height: 40px; border: 0; border-radius: 50%; color: var(--muted); background: var(--surface-raised); display: grid; place-items: center; cursor: pointer; }
-.detail-state { min-height: 112px; padding: 20px 2px; display: flex; flex-direction: column; justify-content: center; }
-.detail-state span { color: var(--muted); font-size: .72rem; font-weight: 700; text-transform: uppercase; }
-.detail-state strong { margin-top: 4px; font-size: 2rem; font-weight: 750; text-transform: capitalize; overflow-wrap: anywhere; }
-.detail-controls { padding: 0 0 20px; }
-.detail-action-grid { display: grid; gap: 10px; }
-.detail-action-grid.two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.detail-action-grid.three-column { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.detail-action { min-height: 52px; padding: 0 16px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-raised); display: flex; align-items: center; justify-content: center; gap: 9px; font-weight: 750; cursor: pointer; }
-.detail-action:hover { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 36%, transparent); background: var(--accent-soft); }
-.detail-action.primary { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
-.detail-action.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); background: var(--danger-soft); }
-.detail-action.full-width { width: 100%; }
-.detail-action-grid.media-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.brightness-control { margin-top: 12px; padding: 15px 16px 13px; border-radius: 8px; background: var(--surface-raised); }
-.brightness-control > div:first-child { display: flex; align-items: center; justify-content: space-between; }
-.brightness-control > div:first-child span { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .78rem; font-weight: 700; }
-.brightness-control > div:first-child strong { font-size: .85rem; }
-.brightness-control input[type='range'] { width: 100%; height: 38px; margin: 8px 0 5px; accent-color: var(--accent); cursor: pointer; }
-.brightness-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.brightness-presets button { min-height: 42px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); font-weight: 750; cursor: pointer; }
-.brightness-presets button:hover { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 36%, transparent); }
-.temperature-stepper { min-height: 82px; padding: 10px; border-radius: 8px; background: var(--surface-raised); display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; gap: 10px; }
-.temperature-stepper button { height: 52px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface); font-size: 1.35rem; cursor: pointer; }
-.temperature-stepper div { text-align: center; }
-.temperature-stepper span { display: block; color: var(--muted); font-size: .68rem; text-transform: uppercase; }
-.temperature-stepper strong { display: block; margin-top: 2px; font-size: 1.25rem; }
-.mode-buttons { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
-.mode-buttons button { min-height: 42px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); background: var(--surface-raised); text-transform: capitalize; cursor: pointer; }
-.mode-buttons button.active { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
-.detail-error { margin: -8px 0 16px; padding: 10px 12px; border-radius: 8px; color: var(--danger); background: var(--danger-soft); font-size: .76rem; }
-.detail-progress { height: 3px; margin: -8px 0 16px; border-radius: 2px; background: linear-gradient(90deg, var(--accent) 35%, var(--accent-soft) 35%); background-size: 200% 100%; animation: command-progress 1s linear infinite; overflow: hidden; font-size: 0; }
-.history-loading { min-height: 220px; margin-bottom: 16px; border-radius: 8px; color: var(--muted); background: var(--surface-raised); display: flex; align-items: center; justify-content: center; gap: 8px; font-size: .75rem; }
-.detail-subheading { margin: 0 0 8px; font-size: .78rem; }
-.attribute-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.attribute-grid > div { min-height: 68px; padding: 11px 12px; border-radius: 8px; background: var(--surface-raised); display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-.attribute-grid span { color: var(--muted); font-size: .65rem; text-transform: capitalize; }
-.attribute-grid strong { margin-top: 3px; font-size: .8rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.attribute-grid > p { color: var(--muted); font-size: .8rem; }
-.detail-sheet footer { margin-top: 18px; color: var(--muted); font-size: .7rem; }
-button:disabled { opacity: .45; cursor: not-allowed; }
-@keyframes loading { to { transform: translateX(125%); } }
-@keyframes backdrop-in { from { opacity: 0; } }
-@keyframes sheet-in { from { opacity: 0; transform: translateY(14px) scale(.985); } }
-@keyframes alert-in { from { opacity: 0; transform: translateY(-12px); } }
-@keyframes page-in { from { opacity: 0; transform: translateX(18px); } }
-@keyframes rotate-status { to { transform: rotate(360deg); } }
-@keyframes command-progress { to { background-position: -200% 0; } }
-@media (min-width: 1100px) and (max-width: 1366px) and (orientation: landscape) {
-  .command-center { grid-template-columns: 196px minmax(0, 1fr); }
-  .sidebar { padding: 14px 10px; }
-  .brand { height: 52px; padding: 0 8px; gap: 10px; font-size: .88rem; }
-  .brand-mark { width: 36px; height: 36px; }
-  nav { margin-top: 16px; gap: 4px; }
-  nav button, .settings-button { min-height: 51px; padding: 0 12px; gap: 12px; }
-  main { padding: 14px 28px 24px; }
-  .topbar { min-height: 76px; }
-  .clock-block > .clock-time { min-width: 148px; font-size: 2.45rem; }
-  .overview { padding-top: 18px; }
-  .section-heading { margin-bottom: 12px; }
-  .entity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .entity-tile { min-height: 180px; padding: 18px; }
-  .tile-icon { flex-basis: 48px; height: 48px; }
-  .tile-heading h3 { font-size: .98rem; }
-  .tile-heading p { font-size: .82rem; }
-  .toggle { right: 18px; bottom: 18px; width: 48px; height: 28px; }
-  .toggle span { width: 22px; height: 22px; }
-  .toggle.is-on span { transform: translateX(20px); }
-  .icon-action, .step-button { width: 44px; height: 42px; }
-  .detail-sheet { width: min(600px, calc(100% - 48px)); }
-}
-@media (max-width: 1040px) { .command-center { grid-template-columns: 86px minmax(0, 1fr); } .brand > span:last-child, nav button span, .settings-button span { display: none; } .brand, nav button, .settings-button { justify-content: center; } .entity-grid { grid-template-columns: repeat(2, minmax(200px, 1fr)); } }
-@media (max-width: 680px) {
-  .command-center { display: block; padding-bottom: 76px; }
-  .sidebar { position: fixed; z-index: 10; top: auto; bottom: 0; width: 100%; height: 70px; padding: 5px 8px max(5px, env(safe-area-inset-bottom)); border: 0; border-top: 1px solid var(--border); box-shadow: 0 -3px 14px rgba(0, 0, 0, .28); }
-  .brand, .settings-button { display: none; }
-  nav { height: 100%; margin: 0; display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-  nav button { min-width: 0; min-height: 0; padding: 5px 1px; border-radius: 8px; flex-direction: column; justify-content: center; gap: 3px; font-size: .6rem; }
-  nav button span { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; }
-  nav button svg { width: 19px; height: 19px; }
-  main { padding: 12px 12px 28px; }
-  .topbar { min-height: 70px; }
-  .date { font-size: .63rem; }
-  h1 { font-size: 1.3rem; }
-  .clock-block { gap: 7px; }
-  .clock-block .clock-time { font-size: .95rem; }
-  .clock-block span { min-width: 24px; width: 24px; height: 24px; padding: 0; font-size: 0; }
-  .rotation-status { width: 28px; height: 28px; padding: 0; justify-content: center; }
-  .rotation-status span { display: none; }
-  .clock-block i { width: 8px; height: 8px; }
-  .alert-stack { top: max(8px, env(safe-area-inset-top)); width: calc(100% - 20px); }
-  /* Still the loudest thing on screen, just sized for a phone. */
-  .state-alert { min-height: 72px; padding: 11px 13px; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 11px; }
-  .state-alert > span { width: 40px; height: 40px; }
-  .state-alert > span svg { width: 21px; height: 21px; }
-  .state-alert strong { font-size: .95rem; }
-  .state-alert p { font-size: .78rem; }
-  .status-banner { margin-top: 8px; min-height: 44px; font-size: .75rem; }
-  .overview { padding-top: 24px; }
-  .section-heading { margin-bottom: 12px; }
-  .section-heading h2 { font-size: 1.05rem; }
-  .section-heading p { display: none; }
-  .entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-  .entity-tile { min-height: 142px; padding: 13px; }
-  .entity-tile:hover { transform: none; }
-  .tile-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
-  .tile-icon { flex-basis: 40px; width: 40px; height: 40px; }
-  .tile-icon svg { width: 21px; height: 21px; }
-  .tile-heading h3 { font-size: .82rem; }
-  .tile-heading p { max-width: 132px; font-size: .7rem; }
-  .toggle { right: 12px; bottom: 12px; }
-  .action-row, .thermostat-control { margin-top: 9px; }
-  .icon-action, .step-button { width: 32px; height: 31px; }
-  .vacuum-actions { justify-content: space-between; }
-  .detail-backdrop { inset: auto 0 0; width: 100%; height: 100dvh; padding: 0; place-items: end center; }
-  .detail-sheet { position: absolute; inset: auto 0 0; width: 100%; max-height: min(82dvh, 680px); padding: 8px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: 8px 8px 0 0; }
-  .sheet-handle { width: 42px; height: 4px; margin: 2px auto 10px; border-radius: 2px; background: var(--border); display: block; }
-  .detail-state { min-height: 96px; }
-  .detail-state strong { font-size: 1.65rem; }
-}
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+.state-alert.critical { --tone: var(--danger); --tone-ink: var(--danger-ink); }
+.state-alert.success { --tone: var(--good); --tone-ink: var(--good-ink); }
+.state-alert.info { --tone: var(--accent); --tone-ink: var(--accent-ink); }
 
-/* Calm command-center treatment: hierarchy comes from type and space, not from borders and glow. */
-.command-center { grid-template-columns: 196px minmax(0, 1fr); }
-.sidebar { padding: 14px 10px; border-right-color: var(--border); background: var(--rail); box-shadow: none; }
-.brand { color: var(--text); font-size: .88rem; font-weight: 700; letter-spacing: -.01em; text-transform: none; }
-.brand-mark { border: 1px solid var(--border); border-radius: 11px; color: var(--accent-strong); background: var(--accent-soft); box-shadow: none; }
-nav { gap: 3px; margin-top: 18px; }
-nav button, .settings-button { min-height: 44px; border: 1px solid transparent; border-radius: 9px; font-size: .8rem; font-weight: 600; letter-spacing: 0; }
-nav button:hover { border-color: transparent; background: rgba(255, 255, 255, .045); }
-/* One quiet marker for "you are here": a filled row, not an outline plus a gradient plus a bar. */
-nav button.active { border-color: transparent; color: var(--rail-active); background: rgba(255, 255, 255, .085); box-shadow: none; }
-main { max-width: 1600px; padding: 20px clamp(18px, 3vw, 44px) 48px; }
-.topbar { min-height: 74px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-.date, .section-heading span { color: var(--muted); font-size: .66rem; font-weight: 600; letter-spacing: .1em; }
-h1 { font-size: 1.62rem; font-weight: 700; letter-spacing: -.025em; }
-.clock-block > .clock-time { font: 750 1.9rem var(--mono); letter-spacing: -.06em; }
-.clock-block span, .rotation-status { border-radius: 8px; }
-.rotation-status { border-color: var(--border); background: var(--surface); }
-.rotation-status.is-running { box-shadow: none; }
-.status-banner { border-radius: 10px; }
-.overview { padding-top: 24px; }
-.section-heading { padding: 0 2px 10px; border-bottom: 1px solid var(--border); }
-.section-heading h2 { font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
-.entity-grid { grid-template-columns: repeat(3, minmax(210px, 1fr)); gap: 10px; }
-/* Flat surfaces, one hairline, one natural shadow. The gradients made every tile read as a
-   bevelled instrument bezel. */
-.entity-tile { min-height: 122px; border-color: var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
-.entity-tile:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); box-shadow: 0 2px 4px rgba(0, 0, 0, .3), 0 14px 30px rgba(0, 0, 0, .3); }
-.entity-tile.is-unavailable { border-color: var(--border); opacity: .58; }
-.entity-tile.is-active { border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: color-mix(in srgb, var(--surface) 74%, var(--accent-soft)); }
-.entity-tile.is-light-on { border-color: color-mix(in srgb, var(--warn) 55%, transparent); background: color-mix(in srgb, var(--surface) 80%, var(--warn-soft)); }
-.tile-icon { border: 0; color: var(--muted); background: var(--surface-raised); }
-/* Solid accent chip is the one place the accent fills a shape — it marks "this thing is on". */
-.is-active .tile-icon { color: var(--accent-ink); background: var(--accent); box-shadow: none; }
-.tile-heading h3 { font-size: .84rem; font-weight: 650; letter-spacing: 0; text-transform: none; }
-.tile-heading p { font-size: .74rem; }
-.toggle, .icon-action, .step-button { border: 1px solid var(--border); background: var(--surface-raised); }
-.detail-sheet { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
-.detail-action, .brightness-control, .temperature-stepper, .attribute-grid > div { border-radius: 10px; }
-@media (max-width: 1040px) { .command-center { grid-template-columns: 82px minmax(0, 1fr); } }
-@media (max-width: 680px) {
-  .command-center { display: block; }
-  .sidebar { background: color-mix(in srgb, var(--rail) 94%, transparent); backdrop-filter: blur(14px); }
-  nav { display: flex; overflow-x: auto; scrollbar-width: none; }
-  nav::-webkit-scrollbar { display: none; }
-  nav button { flex: 0 0 62px; border-radius: 9px; }
-  nav button.active { box-shadow: inset 0 2px var(--accent); }
-  main { padding: 10px 10px 26px; }
-  .topbar { min-height: 66px; }
-  .entity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .entity-tile { min-height: 136px; }
+/* ---------- Nav rail ----------------------------------------------------- */
+/* Hidden on load and slid over the content when opened. z-index keeps it above main's fixed photo
+   backdrop, which would otherwise paint over it (both positioned, main later in the DOM). */
+.sidebar {
+  position: fixed; z-index: 40; top: 0; left: 0; width: 248px; height: 100svh; padding: 16px 12px;
+  border-left: 0; border-radius: 0 var(--r-xl) var(--r-xl) 0;
+  display: flex; flex-direction: column;
+  transform: translateX(-104%); transition: transform .24s var(--ease);
+  box-shadow: var(--glass-edge), 18px 0 48px rgba(0, 0, 0, .42);
 }
-
-/* Live utility rail and actionable HA status below the primary clock header. */
-.utility-stack { margin-top: 10px; display: grid; gap: 7px; }
-.utility-rail { display: grid; grid-template-columns: 1.05fr 1.08fr 1.12fr 1.12fr 1fr; gap: 7px; }
-.utility-cell { min-width: 0; min-height: 58px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); display: flex; align-items: center; gap: 10px; text-align: left; cursor: pointer; box-shadow: none; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.utility-cell:hover { transform: translateY(-1px); border-color: color-mix(in srgb, currentColor 35%, var(--border)); background: var(--surface-raised); }
-.utility-cell.is-current { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--surface) 74%, var(--accent-soft)); box-shadow: none; }
-.utility-icon { flex: 0 0 30px; height: 30px; border-radius: 50%; color: currentColor; background: color-mix(in srgb, currentColor 13%, transparent); display: grid; place-items: center; }
-.utility-copy { min-width: 0; display: grid; gap: 2px; }
-.utility-copy strong { overflow: hidden; font-size: .72rem; font-weight: 650; line-height: 1.15; letter-spacing: 0; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
-.utility-copy small { overflow: hidden; color: var(--muted); font-size: .58rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-.utility-cell.tone-accent { color: var(--accent); }
-.utility-cell.tone-good { color: var(--good); }
-.utility-cell.tone-warn, .utility-cell.tone-weather { color: var(--warn); }
-.utility-cell.tone-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, var(--border)); background: color-mix(in srgb, var(--surface) 80%, var(--danger-soft)); }
-.utility-cell.tone-muted { color: var(--muted); }
-/* The tone tints the glyph, not the sentence: three of six cells are "accent" at any moment, and
-   colouring their titles was what made the rail read as a status board rather than a summary. */
-.utility-copy strong { color: var(--text); }
-.utility-cell.tone-danger .utility-copy strong { color: var(--danger); }
-.attention-strip { min-width: 0; min-height: 42px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 9px; color: var(--good); background: var(--surface); display: grid; grid-template-columns: 26px auto minmax(0, 1fr); align-items: center; gap: 8px; text-align: left; cursor: pointer; }
-.attention-strip > span { width: 26px; height: 26px; border-radius: 50%; background: color-mix(in srgb, currentColor 14%, transparent); display: grid; place-items: center; }
-.attention-strip strong { font-size: .71rem; font-weight: 650; letter-spacing: 0; text-transform: none; white-space: nowrap; }
-.attention-strip small { overflow: hidden; color: var(--muted); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
-.attention-strip.has-issues { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--surface) 76%, var(--danger-soft)); }
-.attention-strip.has-issues small { color: color-mix(in srgb, var(--danger) 55%, var(--muted)); }
-@media (max-width: 1040px) {
-  .utility-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .utility-cell:nth-child(4), .utility-cell:nth-child(5) { grid-column: span 1; }
-}
-@media (max-width: 680px) {
-  .utility-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .utility-cell { min-height: 54px; padding-inline: 9px; }
-  .utility-cell:last-child { grid-column: 1 / -1; }
-  .attention-strip { grid-template-columns: 26px minmax(0, 1fr); }
-  .attention-strip strong { overflow: hidden; text-overflow: ellipsis; }
-  .attention-strip small { grid-column: 1 / -1; white-space: normal; }
-}
-
-/* Guarded global routines. Night Mode always asks for confirmation before calling the backend. */
-.moments-strip { margin-top: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); display: grid; grid-template-columns: 132px minmax(240px, 440px); align-items: center; gap: 10px; }
-.moments-heading { display: grid; gap: 2px; }
-.moments-heading span { color: var(--muted); font-size: .6rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-.moments-heading strong { font-size: .74rem; letter-spacing: 0; }
-.night-mode-moment { min-width: 0; min-height: 52px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 9px; text-align: left; cursor: pointer; transition: transform .16s ease, border-color .16s ease, background .16s ease; }
-.night-mode-moment:hover:not(:disabled) { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--surface-raised); }
-.moment-icon { width: 34px; height: 34px; border-radius: 50%; color: var(--accent-strong); background: var(--accent-soft); display: grid; place-items: center; }
-.moment-copy { min-width: 0; display: grid; gap: 2px; }
-.moment-copy strong { font-size: .76rem; font-weight: 650; letter-spacing: 0; text-transform: none; }
-.moment-copy small { overflow: hidden; color: var(--muted); font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
-.night-mode-moment.is-pending .moment-icon { animation: night-pulse 1s ease-in-out infinite alternate; }
-.night-mode-moment.is-success { color: var(--good); border-color: color-mix(in srgb, var(--good) 55%, var(--border)); background: color-mix(in srgb, var(--surface) 76%, var(--good-soft)); }
-.night-mode-moment.is-error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 58%, var(--border)); background: color-mix(in srgb, var(--surface) 76%, var(--danger-soft)); }
-/* Pending feedback without a glow: the icon simply breathes. */
-@keyframes night-pulse { to { opacity: .45; } }
-@media (max-width: 680px) {
-  .moments-strip { grid-template-columns: 1fr; padding: 8px; }
-  .moments-heading { display: none; }
-  .night-mode-moment { width: 100%; }
-}
-
-/* Viewport-locked shell so slide-based views (Insights) fit fully without scrolling. */
-main { height: 100svh; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
-main.is-fixed-view { overflow: hidden; }
-.page-slide { flex: 1 1 auto; min-height: 0; }
-@media (max-width: 760px) {
-  main, main.is-fixed-view { height: auto; overflow: visible; }
-  .page-slide { flex: none; min-height: 0; }
-}
-
-/* Navigation is hidden on load and slides over the content when opened. */
-.command-center { grid-template-columns: minmax(0, 1fr); }
-.sidebar { position: fixed; z-index: 40; top: 0; left: 0; width: 232px; height: 100svh; transform: translateX(-100%); transition: transform .22s ease; box-shadow: 18px 0 48px rgba(0, 0, 0, .42); }
 .sidebar.is-open { transform: none; }
-.sidebar-scrim { position: fixed; z-index: 35; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(8, 8, 10, .6); cursor: pointer; animation: backdrop-in .18s ease-out; }
-.nav-toggle { flex: 0 0 auto; width: 44px; height: 44px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); display: grid; place-items: center; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease; }
-.nav-toggle:hover { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: var(--accent-soft); }
-.sidebar .brand > span:last-child, .sidebar nav button span, .sidebar .settings-button span { display: inline; }
-.sidebar .brand, .sidebar nav button, .sidebar .settings-button { justify-content: flex-start; }
+.sidebar-scrim {
+  position: fixed; z-index: 35; inset: 0; width: 100%; height: 100%; padding: 0; border: 0;
+  background: rgba(6, 8, 12, .45);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: backdrop-in .18s ease-out;
+}
+.sidebar-scrim:active { transform: none; }
+.brand { height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 8px; color: var(--text); font-size: .9rem; font-weight: 750; letter-spacing: -.01em; }
+.brand-mark { width: 40px; height: 40px; border: 1px solid var(--glass-border); border-radius: var(--r-sm); display: grid; place-items: center; color: var(--accent-strong); background: var(--glass-highlight), var(--surface-raised); box-shadow: var(--glass-edge); }
+.sidebar nav { display: grid; gap: 4px; margin-top: 14px; overflow-y: auto; overscroll-behavior: contain; }
+.sidebar nav button, .settings-button {
+  position: relative; min-height: 48px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--r-sm);
+  color: var(--rail-text); background: transparent; display: flex; align-items: center; gap: 13px;
+  text-align: left; font-size: .82rem; font-weight: 650;
+}
+.sidebar nav button:hover, .settings-button:not(:disabled):hover { color: var(--rail-active); background: var(--surface-raised); }
+/* One marker for "you are here": a soft accent pane plus a short accent bar at its edge. */
+.sidebar nav button.active { color: var(--rail-active); font-weight: 750; border-color: color-mix(in srgb, var(--accent) 30%, transparent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.sidebar nav button.active::before { content: ''; position: absolute; left: 4px; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--accent); }
+.settings-button { margin-top: auto; }
 
-/* Six live cells now share the banner, including connected-device counts. */
-/* Six equal columns cannot hold these labels at wall-panel type sizes, so the rail wraps to as many
-   rows as it needs and each cell keeps a width its title actually fits in. */
-.utility-rail { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.utility-copy small { animation: utility-swap .32s ease-out; }
+/* ---------- Home: moments strip ---------------------------------------- */
+/* Guarded global routines. Night Mode always takes a second tap before calling the backend. */
+.moments-strip { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.night-mode-moment, .thermostat-quick {
+  min-width: 0; min-height: 60px; padding: 8px 14px 8px 10px; border-radius: var(--r-md); color: var(--text);
+  display: grid; align-items: center; gap: 12px; text-align: left;
+}
+.night-mode-moment { grid-template-columns: 40px minmax(0, 1fr) auto; }
+.thermostat-quick { grid-template-columns: 40px minmax(0, 1fr); }
+.moment-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
+.moment-copy { min-width: 0; display: grid; gap: 2px; }
+.moment-copy strong { font-size: .86rem; font-weight: 700; }
+.moment-copy small { overflow: hidden; color: var(--muted); font-size: .74rem; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Night Mode: a deep indigo-to-violet wash over the pane, the moon in a frosted disc. */
+.night-mode-moment {
+  border-color: color-mix(in srgb, #8f87e8 36%, var(--glass-border));
+  background-image: var(--glass-highlight), linear-gradient(120deg, color-mix(in srgb, #4d52c8 26%, transparent), color-mix(in srgb, #8b5bd0 20%, transparent));
+}
+.night-mode-moment .moment-icon { color: #e3deff; background: color-mix(in srgb, #c9c3ff 20%, var(--surface-raised)); box-shadow: var(--glass-edge), 0 0 0 1px color-mix(in srgb, #c9c3ff 26%, transparent); }
+.night-mode-moment > svg { color: #c9c3ff; }
+.night-mode-moment.is-armed { border-color: var(--warn); background-image: var(--glass-highlight); background-color: color-mix(in srgb, var(--warn) 16%, var(--glass-bg)); }
+.night-mode-moment.is-armed strong, .night-mode-moment.is-armed > svg { color: var(--warn); }
+.night-mode-moment.is-armed .moment-icon { color: var(--warn-ink); background: var(--warn); }
+.night-mode-moment.is-pending .moment-icon { animation: night-pulse 1s ease-in-out infinite alternate; }
+.night-mode-moment.is-success { border-color: color-mix(in srgb, var(--good) 50%, var(--glass-border)); }
+.night-mode-moment.is-success strong { color: var(--good); }
+.night-mode-moment.is-error { border-color: color-mix(in srgb, var(--danger) 55%, var(--glass-border)); background-image: var(--glass-highlight); background-color: color-mix(in srgb, var(--danger) 14%, var(--glass-bg)); }
+.night-mode-moment.is-error strong { color: var(--danger); }
+.night-mode-moment:disabled strong, .night-mode-moment:disabled > svg { color: var(--muted); }
+/* Pending feedback without a glow: the disc simply breathes. */
+@keyframes night-pulse { to { opacity: .45; } }
+
+.thermostat-quick { background-color: color-mix(in srgb, var(--warn) 10%, var(--glass-bg)); border-color: color-mix(in srgb, var(--warn) 30%, var(--glass-border)); }
+.thermostat-quick .moment-icon { color: var(--warn); background: color-mix(in srgb, var(--warn) 18%, var(--surface-raised)); box-shadow: var(--glass-edge); }
+.thermostat-quick .moment-copy strong { font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.05; }
+
+/* ---------- Home: utility rail + attention strip ------------------------ */
+.utility-stack { margin-top: 8px; display: grid; gap: 8px; }
+/* Up to six cells in one row, wrapping to fewer when a cell's title would not fit. One rail row,
+   not two: a second row costs ~70px that the tile grid needs on 1280x800 panels. */
+.utility-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(8.5rem, calc((100% - 5 * 8px) / 6)), 1fr)); gap: 8px; }
+.utility-cell {
+  --cell-tone: var(--accent);
+  min-width: 0; min-height: 62px; padding: 8px 12px 8px 9px; border-radius: var(--r-md); color: var(--text);
+  display: flex; align-items: center; gap: 10px; text-align: left;
+}
+.utility-cell:hover { border-color: color-mix(in srgb, var(--cell-tone) 40%, var(--glass-border)); }
+.utility-cell.is-current { border-color: color-mix(in srgb, var(--accent) 50%, var(--glass-border)); }
+.utility-cell.is-good { --cell-tone: var(--good); }
+.utility-cell.is-warn, .utility-cell.is-weather { --cell-tone: var(--warn); }
+.utility-cell.is-danger { --cell-tone: var(--danger); }
+.utility-cell.is-muted { --cell-tone: var(--muted); }
+.utility-icon { flex: 0 0 34px; height: 34px; border-radius: 50%; color: var(--cell-tone); background: color-mix(in srgb, var(--cell-tone) 16%, var(--surface-raised)); display: grid; place-items: center; }
+.utility-copy { min-width: 0; display: grid; gap: 2px; }
+/* The tone tints the glyph, not the sentence: colouring every title made the rail read as a
+   status board rather than a summary. */
+.utility-copy strong { overflow: hidden; color: var(--text); font-size: .8rem; font-weight: 700; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
+.utility-cell.is-danger .utility-copy strong { color: var(--danger); }
+.utility-copy small { overflow: hidden; color: var(--muted); font-size: .7rem; font-weight: 550; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; animation: utility-swap .32s ease-out; }
 @keyframes utility-swap { from { opacity: 0; transform: translateY(-4px); } }
 
-/* Readability scaling for Fire tablets and similar mid-size touch screens. */
-@media (min-width: 700px) and (max-width: 1440px) {
-  main { padding: 18px clamp(16px, 2.4vw, 32px) 36px; }
-  .nav-toggle { width: 48px; height: 48px; }
-  .utility-cell { min-height: 66px; }
-  .utility-copy strong { font-size: .76rem; }
-  .utility-copy small { font-size: .66rem; }
-  .attention-strip { min-height: 50px; }
-  .attention-strip strong { font-size: .74rem; }
-  .attention-strip small { font-size: .68rem; }
-  .night-mode-moment { min-height: 60px; }
-  .moment-copy strong { font-size: .8rem; }
-  .moment-copy small { font-size: .68rem; }
-  .clock-block > .clock-time { font-size: 2.1rem; }
-  .tile-heading h3 { font-size: .88rem; }
-  .tile-heading p { font-size: .8rem; }
-  .entity-tile { min-height: 138px; }
-  .icon-action, .step-button { width: 44px; height: 42px; }
+.attention-strip {
+  min-width: 0; min-height: 48px; padding: 7px 14px 7px 10px; border-radius: var(--r-md); color: var(--good);
+  display: grid; grid-template-columns: 30px auto minmax(0, 1fr); align-items: center; gap: 10px; text-align: left;
 }
-@media (min-width: 700px) and (max-width: 1440px) and (orientation: landscape) {
-  .utility-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .entity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-@media (max-width: 760px) {
-  .sidebar { position: fixed; z-index: 40; top: auto; bottom: 0; width: 100%; height: 70px; transform: none; box-shadow: 0 -3px 14px rgba(0, 0, 0, .32); }
-  .sidebar .brand, .sidebar .settings-button { display: none; }
-  .sidebar nav button span { display: block; }
-  .sidebar nav button { justify-content: center; }
-  .sidebar-scrim { display: none; }
-  .nav-toggle { display: none; }
-  .utility-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
+.attention-strip > span { width: 30px; height: 30px; border-radius: 50%; background: color-mix(in srgb, currentColor 16%, var(--surface-raised)); display: grid; place-items: center; }
+.attention-strip strong { color: var(--text); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.attention-strip small { overflow: hidden; color: var(--muted); font-size: .74rem; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.attention-strip.has-issues { color: var(--danger); }
+.attention-strip.has-issues strong { color: var(--danger); }
 
-/* Tighter spacing across the board to maximise usable content. */
-main { padding: 10px clamp(10px, 2vw, 28px) 24px; }
-.topbar { min-height: 58px; padding-bottom: 4px; }
-h1 { font-size: 1.4rem; margin-top: 2px; }
-.overview { padding-top: 12px; }
-.section-heading { margin-bottom: 8px; padding-bottom: 6px; }
-.entity-grid { gap: 8px; }
-.entity-tile { min-height: 116px; padding: 12px; }
-.utility-stack { margin-top: 6px; gap: 5px; }
-.utility-rail { gap: 5px; }
-.utility-cell { min-height: 52px; padding: 6px 10px; }
-.attention-strip { min-height: 36px; padding: 5px 10px; }
-
-/* Moments strip: two buttons side by side (Night Mode + Thermostat quick-access). */
-.moments-strip { margin-top: 6px; padding: 0; border: none; border-radius: 0; background: none; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.moments-heading { display: none; }
-.thermostat-quick { min-height: 50px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface); display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; text-align: left; cursor: pointer; transition: transform .16s ease, border-color .16s ease; }
-.thermostat-quick:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
-.thermostat-quick .moment-icon.thermo-accent { color: var(--warn); background: var(--warn-soft); }
-.thermostat-quick .moment-copy strong { font: 750 1.15rem var(--mono); letter-spacing: -.02em; }
-.thermostat-quick .moment-copy small { color: var(--muted); }
-.night-mode-moment { min-height: 50px; }
-@media (max-width: 680px) {
-  .moments-strip { grid-template-columns: 1fr 1fr; }
-}
-
-/* Climate hero: standalone dial that owns the centre of the climate page. */
-.climate-hero { display: grid; justify-items: center; padding: 8px 0 4px; }
+/* ---------- Tile pages -------------------------------------------------- */
+.overview { padding-top: 10px; }
+.overview .page-frame-side, .overview .page-frame-actions { min-width: 0; }
+/* Presence rides the header's action slot: it scrolls sideways inside it rather than widening it. */
+.overview .page-frame-actions { flex: 0 1 auto; overflow: hidden; }
+/* Climate hero: the standalone dial that owns the centre of the climate page. */
+.climate-hero { display: grid; justify-items: center; padding: 12px 0 8px; border-radius: var(--r-lg); }
 .climate-hero .thermo-knob.size-large { width: 240px; }
-@media (max-width: 760px) { .climate-hero .thermo-knob.size-large { width: 180px; } }
 
-/* Sidebar auto-dismisses after a few seconds, so it just needs to be quick to scan. */
-.sidebar nav { gap: 4px; margin-top: 12px; }
-.sidebar nav button { min-height: 40px; }
+.entity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-/* Restrained finish: the accent marks state, the surfaces stay quiet. */
-.sidebar {
-  background: var(--rail);
-  box-shadow: 18px 0 42px rgba(0, 0, 0, .34);
-}
-
-.brand-mark {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
-  color: var(--accent-strong);
-  background: var(--accent-soft);
-}
-
-nav button.active {
-  border-color: transparent;
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
-  box-shadow: none;
-}
-
+/* Each tile is a pane. `--tile-bg` is the pane colour the tone washes mix into, so a backdrop
+   page can swap in the stronger pane without re-stating every tint. */
 .entity-tile {
-  background: var(--surface);
+  --tile-bg: var(--glass-bg);
+  position: relative; min-height: 136px; padding: 14px 16px; border-radius: var(--r-md);
+  background-color: var(--tile-bg);
+  display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  transition: transform .12s var(--ease), border-color .16s ease, background-color .16s ease;
 }
+main:has(.photo-backdrop) .entity-tile { --tile-bg: var(--glass-bg-strong); }
+.entity-tile:has(> .tile-open:active) { transform: scale(.985); }
+.entity-tile:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--glass-border)); }
 
-.entity-tile:hover {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
-}
+/* The full-size tap / long-press target. Transparent, under the content; the tile's controls sit
+   above it (z-index 2) as siblings, never inside it. */
+.tile-open { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; }
+.tile-open:active { transform: none; }
+.tile-open:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.tile-heading, .tile-spark, .tile-error, .pending-bar { position: relative; z-index: 1; pointer-events: none; }
+.tile-control { position: relative; z-index: 2; }
 
+.tile-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.tile-heading > div { min-width: 0; }
+.tile-icon { flex: 0 0 44px; height: 44px; border: 1px solid var(--glass-border); border-radius: 50%; color: var(--muted); background: var(--glass-highlight), var(--surface-raised); box-shadow: var(--glass-edge); display: grid; place-items: center; transition: color .16s ease, background-color .16s ease; }
+.tile-heading h3 { margin: 0 0 4px; color: var(--muted); font-size: .74rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-heading p { margin: 0; color: var(--text); font-size: 1.1rem; font-weight: 750; line-height: 1.1; letter-spacing: -.01em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* Tone states: a wash of the tone on the pane, a matching edge, a soft inner glow and a filled
+   icon. None of them changes the pane's opacity. */
 .entity-tile.is-active {
-  background: color-mix(in srgb, var(--surface) 74%, var(--accent-soft));
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
+  background-color: color-mix(in srgb, var(--accent) 12%, var(--tile-bg));
+  box-shadow: var(--glass-edge), inset 0 0 28px color-mix(in srgb, var(--accent) 14%, transparent), var(--glass-shadow);
 }
-
+.entity-tile.is-active .tile-icon { color: var(--accent-ink); border-color: transparent; background: var(--accent); }
 .entity-tile.is-light-on {
-  border-color: color-mix(in srgb, var(--warn) 52%, transparent);
-  background: color-mix(in srgb, var(--surface) 78%, var(--warn-soft));
+  border-color: color-mix(in srgb, var(--warn) 50%, var(--glass-border));
+  background-color: color-mix(in srgb, var(--warn) 14%, var(--tile-bg));
+  box-shadow: var(--glass-edge), inset 0 0 28px color-mix(in srgb, var(--warn) 16%, transparent), var(--glass-shadow);
 }
-
-.tile-icon {
-  background: var(--surface-raised);
+.entity-tile.is-light-on .tile-icon { color: var(--warn-ink); border-color: transparent; background: var(--warn); }
+.entity-tile.is-hazard {
+  border-color: color-mix(in srgb, var(--danger) 52%, var(--glass-border));
+  background-color: color-mix(in srgb, var(--danger) 14%, var(--tile-bg));
+  box-shadow: var(--glass-edge), inset 0 0 28px color-mix(in srgb, var(--danger) 14%, transparent), var(--glass-shadow);
 }
-
-.moments-strip {
-  margin-top: 8px;
-}
-
-.night-mode-moment {
-  border-color: var(--border);
-  color: var(--text);
-  background: var(--surface);
-}
-
-.night-mode-moment:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: var(--surface-raised);
-}
-
-.moment-icon {
-  color: var(--accent-strong);
-  background: var(--accent-soft);
-}
-
-.thermostat-quick {
-  border-color: var(--border);
-  color: var(--text);
-  background: var(--surface);
-}
-
-.thermostat-quick:hover {
-  border-color: color-mix(in srgb, var(--warn) 50%, var(--border));
-}
-
-.thermostat-quick .moment-icon.thermo-accent {
-  color: var(--warn);
-  background: var(--warn-soft);
-}
-
-.weather-view {
-  padding-bottom: 4px;
-}
-
-@media (min-width: 1200px) and (max-width: 1400px) and (orientation: landscape) {
-  main {
-    max-width: 100%;
-    margin: 0;
-    padding: 8px 14px 16px;
-  }
-
-  .topbar {
-    min-height: 54px;
-  }
-
-  .clock-block > .clock-time {
-    font-size: 1.85rem;
-  }
-
-  .moments-strip {
-    gap: 5px;
-  }
-
-  .night-mode-moment,
-  .thermostat-quick {
-    min-height: 46px;
-    padding: 6px 9px;
-  }
-
-  .utility-cell {
-    min-height: 50px;
-    padding: 6px 9px;
-  }
-
-  .utility-copy strong {
-    font-size: .66rem;
-  }
-
-  .utility-copy small {
-    font-size: .56rem;
-  }
-
-  .overview {
-    padding-top: 8px;
-  }
-
-  .section-heading {
-    margin-bottom: 6px;
-    padding-bottom: 5px;
-  }
-
-  .entity-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-  }
-
-  .entity-tile {
-    min-height: 108px;
-    padding: 10px;
-  }
-
-  .tile-heading {
-    gap: 10px;
-  }
-
-  .tile-heading h3 {
-    font-size: .76rem;
-  }
-
-  .tile-heading p {
-    font-size: .69rem;
-  }
-
-  .toggle {
-    right: 10px;
-    bottom: 10px;
-  }
-}
-
-/* Unified accent: dark ink on solid-accent surfaces (white text fails contrast on the accent). */
-.is-active .tile-icon { color: var(--accent-ink); }
-.detail-icon { color: var(--accent-ink); }
-.detail-action.primary { color: var(--accent-ink); }
-.detail-action.primary:hover { color: var(--accent-ink); }
-.mode-buttons button.active { color: var(--accent-ink); }
-.entity-tile.is-hazard .tile-icon { color: var(--danger-ink); }
-.toggle.is-on span { background: var(--accent-ink); }
-nav button.active { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.entity-tile.is-hazard .tile-icon { color: var(--danger-ink); border-color: transparent; background: var(--danger); }
+.entity-tile.is-hazard .tile-heading p { color: var(--danger); }
+/* Unavailable is said with colour and a dashed edge only. Fading the tile with opacity let the
+   photo backdrop bleed straight through it. */
+.entity-tile.is-unavailable { border-style: dashed; border-color: var(--border-strong); }
+.entity-tile.is-unavailable .tile-heading p { color: var(--muted); font-weight: 650; }
+.entity-tile.is-unavailable .tile-icon { color: var(--muted); }
 
 /* Inline 24-hour sparkline at the foot of sensor tiles. */
 .tile-spark { height: 34px; margin-top: 10px; }
 .tile-spark svg { display: block; }
-.entity-tile:has(.tile-spark) { min-height: 148px; }
 
-/* Touch-first: hover transforms are pointer-only, pressed states carry the feedback. */
-@media (hover: none) {
-  .entity-tile:hover, .utility-cell:hover, .security-rows button:hover,
-  .thermostat-quick:hover, .night-mode-moment:hover:not(:disabled) { transform: none; }
+/* 44px hit area around a 52x30 pill. */
+.toggle { position: absolute; z-index: 2; right: 8px; bottom: 6px; width: 64px; height: var(--tap); padding: 0; border: 0; background: transparent; display: grid; place-items: center; }
+.toggle-track { width: 52px; height: 30px; padding: 3px; border: 1px solid var(--glass-border); border-radius: var(--r-pill); background: var(--surface-raised); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .35); display: block; transition: background-color .18s ease; }
+.toggle-knob { display: block; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .18s var(--ease), background-color .18s ease; }
+.toggle.is-on .toggle-track { border-color: transparent; background: var(--accent); }
+.toggle.is-on .toggle-knob { transform: translateX(22px); background: var(--accent-ink); }
+
+.action-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.icon-action { width: var(--tap); height: var(--tap); padding: 0; border: 1px solid var(--glass-border); border-radius: var(--r-sm); color: var(--text); background: var(--surface-raised); box-shadow: var(--glass-edge); display: grid; place-items: center; }
+.icon-action:not(:disabled):hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); }
+.icon-action.danger { color: var(--danger); }
+.tile-error { margin: 8px 0 0; color: var(--danger); font-size: .72rem; font-weight: 600; }
+.pending-bar { position: absolute; bottom: 0; left: 0; width: 45%; height: 3px; border-radius: 3px; background: var(--accent); animation: loading 1s ease-in-out infinite alternate; }
+
+/* On photo-backdrop pages the header line and the topbar take the stronger pane, and their text a
+   hairline shadow, so the first things read stay legible whatever the picture is doing. */
+main:has(.photo-backdrop) > .topbar { background-color: var(--glass-bg-strong); }
+main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head { text-shadow: 0 1px 2px rgba(0, 0, 0, .55); }
+
+/* ---------- Detail sheet (shared by every sheet) ------------------------ */
+.detail-backdrop {
+  position: fixed; z-index: 30; inset: 0; padding: 24px;
+  background: rgba(6, 8, 12, .55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  display: grid; place-items: center; animation: backdrop-in .18s ease-out;
 }
-.utility-cell:active, .attention-strip:active, .night-mode-moment:active:not(:disabled),
-.thermostat-quick:active, .detail-action:active, .security-rows button:active,
-.mode-buttons button:active, .config-tabs button:active { transform: scale(.97); }
-.icon-action:active, .step-button:active, .toggle:active { transform: scale(.92); }
-.icon-action, .step-button { min-width: 44px; min-height: 42px; }
+/* The pane colour is set here as well as by .glass-strong so sheets that do not carry the class
+   (Insights detail) match. Its own blur is dropped: the backdrop behind it is already blurred,
+   and a second backdrop-filter on a large scrolling pane is a real cost on a Fire tablet. */
+.detail-sheet {
+  width: min(560px, 100%); max-height: min(760px, calc(100svh - 48px)); padding: 8px 22px 22px;
+  border: 1px solid var(--glass-border); border-radius: var(--r-lg); color: var(--text);
+  background-image: var(--glass-highlight); background-color: var(--glass-bg-strong);
+  box-shadow: var(--glass-edge), 0 24px 60px rgba(0, 0, 0, .5);
+  overflow: auto; overscroll-behavior: contain; animation: sheet-in .22s var(--ease);
+}
+.detail-backdrop > .detail-sheet { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.sheet-handle { width: 44px; height: 5px; margin: 4px auto 12px; border-radius: var(--r-pill); background: var(--border-strong); }
+.detail-sheet > header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 13px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.detail-icon { width: 48px; height: 48px; border-radius: 50%; color: var(--accent-ink); background: var(--accent); display: grid; place-items: center; }
+.detail-icon.is-danger { color: var(--danger-ink); background: var(--danger); }
+.detail-icon.is-good { color: var(--good-ink); background: var(--good); }
+.detail-sheet > header p { margin: 0 0 3px; color: var(--muted); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; }
+.detail-sheet > header h2 { margin: 0; font-size: 1.2rem; font-weight: 750; letter-spacing: -.01em; }
+.sheet-close { width: var(--tap); height: var(--tap); padding: 0; border: 1px solid var(--glass-border); border-radius: 50%; color: var(--text); background: var(--surface-raised); box-shadow: var(--glass-edge); display: grid; place-items: center; }
+.detail-state { min-height: 108px; padding: 18px 2px; display: flex; flex-direction: column; justify-content: center; }
+.detail-state span { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.detail-state strong { margin-top: 4px; font-size: 2.1rem; font-weight: 800; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.detail-controls { padding: 0 0 20px; }
+.detail-action-grid { display: grid; gap: 10px; }
+.detail-action-grid.two-column { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-action-grid.three-column, .detail-action-grid.media-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Action buttons are glass-look pills; only the primary action fills with the accent. */
+.detail-action {
+  min-height: 52px; padding: 0 18px; border: 1px solid var(--glass-border); border-radius: var(--r-pill);
+  color: var(--text); background: var(--glass-highlight), var(--surface-raised); box-shadow: var(--glass-edge);
+  display: flex; align-items: center; justify-content: center; gap: 9px; font-weight: 700;
+}
+.detail-action:not(:disabled):hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); }
+.detail-action.primary { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+.detail-action.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--glass-border)); background: color-mix(in srgb, var(--danger) 14%, var(--surface-raised)); }
+.detail-action.is-armed { color: var(--warn-ink); border-color: var(--warn); background: var(--warn); }
+.detail-action.full-width { width: 100%; }
+
+.brightness-control { margin-top: 12px; padding: 14px 16px; border-radius: var(--r-md); }
+.brightness-control > div:first-child { display: flex; align-items: center; justify-content: space-between; }
+.brightness-control > div:first-child span { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: .78rem; font-weight: 700; }
+.brightness-control > div:first-child strong { font-size: .9rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.brightness-control input[type='range'] { width: 100%; height: var(--tap); margin: 6px 0 4px; accent-color: var(--accent); cursor: pointer; }
+.brightness-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.brightness-presets button { border: 1px solid var(--glass-border); border-radius: var(--r-pill); color: var(--text); background: var(--surface-raised); font-weight: 700; }
+
+/* Segmented control: one recessed track, the selected segment raised on it. */
+.mode-buttons { margin-top: 10px; padding: 4px; border-radius: var(--r-lg); display: flex; flex-wrap: wrap; gap: 4px; }
+.mode-buttons button { flex: 1 1 auto; padding: 0 16px; border: 1px solid transparent; border-radius: var(--r-pill); color: var(--muted); background: transparent; font-weight: 650; }
+.mode-buttons button.active { color: var(--text-strong); border-color: var(--glass-border); background: color-mix(in srgb, var(--accent) 24%, var(--surface-raised)); box-shadow: var(--glass-edge); }
+
+.detail-error { margin: 0 0 16px; padding: 10px 14px; border-radius: var(--r-sm); color: var(--danger); background: var(--danger-soft); font-size: .78rem; font-weight: 600; }
+.detail-progress { height: 3px; margin: -8px 0 16px; border-radius: 2px; background: linear-gradient(90deg, var(--accent) 35%, var(--accent-soft) 35%); background-size: 200% 100%; animation: command-progress 1s linear infinite; overflow: hidden; font-size: 0; }
+.detail-subheading { margin: 4px 0 8px; color: var(--muted); font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.attribute-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.attribute-grid > div { min-height: 64px; padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: var(--r-sm); background: var(--surface-raised); display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.attribute-grid span { color: var(--muted); font-size: .68rem; font-weight: 600; }
+.attribute-grid strong { margin-top: 3px; font-size: .82rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.attribute-grid > p { color: var(--muted); font-size: .8rem; }
+.detail-sheet > footer { margin-top: 18px; color: var(--muted); font-size: .72rem; }
+
+@keyframes loading { to { transform: translateX(125%); } }
+@keyframes backdrop-in { from { opacity: 0; } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(14px) scale(.985); } }
+@keyframes alert-in { from { opacity: 0; transform: translateY(12px); } }
+@keyframes page-in { from { opacity: 0; transform: translateX(18px); } }
+@keyframes rotate-status { to { transform: rotate(360deg); } }
+@keyframes command-progress { to { background-position: -200% 0; } }
+
+.weather-view { padding-bottom: 4px; }
 
 /* ============================================================================
-   Wall-display pass.
-   Read from across the room, not from a desk: every page fills its height
-   instead of trailing off into a dead band, and each tile leads with its
-   value rather than its label. Sizes here are unconditional above the phone
-   breakpoint so no panel width can fall between the old capped media queries.
+   Phone: the nav rail becomes a bottom tab bar and the page scrolls with the body.
+   ============================================================================ */
+@media (max-width: 760px) {
+  .command-center { padding-bottom: 76px; }
+  main { padding: 8px 10px 26px; }
+  /* The page scrolls with the body here, so a full-bleed view must not clip its own overflow. */
+  main.is-fixed-view { overflow: visible; }
+  main > .topbar { top: max(6px, env(safe-area-inset-top)); }
+  main.is-fixed-view > .topbar { top: 8px; left: 8px; right: 8px; }
+  main.is-fixed-view > .shell-banners { top: 80px; left: 8px; right: 8px; }
+
+  .topbar { min-height: 60px; padding: 6px 8px 6px 14px; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .clock-block { grid-column: 2; gap: 8px; }
+  .nav-toggle { display: none; }
+  .date { font-size: .64rem; }
+  h1 { font-size: 1.25rem; }
+  .clock-time { font-size: 1.35rem; }
+  .rotation-status { padding: 0; width: var(--tap); }
+  .rotation-status span { display: none; }
+
+  .sidebar {
+    top: auto; bottom: 0; width: 100%; height: calc(70px + env(safe-area-inset-bottom)); padding: 5px 8px max(5px, env(safe-area-inset-bottom));
+    border-radius: var(--r-lg) var(--r-lg) 0 0; transform: none; box-shadow: var(--glass-edge), 0 -3px 14px rgba(0, 0, 0, .32);
+  }
+  .sidebar .brand, .sidebar .settings-button, .sidebar-scrim { display: none; }
+  .sidebar nav { height: 100%; margin: 0; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .sidebar nav::-webkit-scrollbar { display: none; }
+  .sidebar nav button { flex: 0 0 64px; min-height: 0; padding: 5px 1px; flex-direction: column; justify-content: center; gap: 3px; font-size: .62rem; text-align: center; }
+  .sidebar nav button span { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sidebar nav button.active::before { left: 18px; right: 18px; top: 2px; bottom: auto; width: auto; height: 3px; }
+
+  /* Above the tab bar, still the loudest thing on screen, just sized for a phone. */
+  .alert-stack { bottom: calc(82px + env(safe-area-inset-bottom)); width: calc(100% - 20px); }
+  .state-alert { min-height: 68px; padding: 11px 13px 11px 15px; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 11px; }
+  .state-alert > span { width: 40px; height: 40px; }
+  .state-alert > span svg { width: 21px; height: 21px; }
+  .state-alert strong { font-size: .95rem; }
+  .state-alert p { font-size: .8rem; }
+
+  .status-banner { min-height: 44px; font-size: .78rem; }
+  .utility-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .utility-cell { min-height: 56px; padding-inline: 9px; }
+  .attention-strip { grid-template-columns: 30px minmax(0, 1fr); }
+  .attention-strip strong { overflow: hidden; text-overflow: ellipsis; }
+  .attention-strip small { grid-column: 1 / -1; white-space: normal; }
+  .night-mode-moment, .thermostat-quick { min-height: 56px; }
+
+  .overview { padding-top: 12px; }
+  .entity-grid { gap: 9px; }
+  .entity-tile { min-height: 142px; padding: 13px; }
+  .tile-heading { align-items: flex-start; flex-direction: column; gap: 9px; }
+  .tile-icon { flex-basis: 40px; width: 40px; height: 40px; }
+  .tile-icon svg { width: 21px; height: 21px; }
+  .tile-heading h3 { font-size: .7rem; }
+  .tile-heading p { font-size: 1rem; }
+  .vacuum-actions { justify-content: space-between; }
+  .climate-hero .thermo-knob.size-large { width: 180px; }
+
+  .detail-backdrop { padding: 0; place-items: end center; }
+  .detail-sheet { position: absolute; inset: auto 0 0; width: 100%; max-height: min(86dvh, 720px); padding: 6px 16px calc(18px + env(safe-area-inset-bottom)); border-bottom: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .detail-state { min-height: 92px; }
+  .detail-state strong { font-size: 1.7rem; }
+}
+
+/* ============================================================================
+   Wall panel: read from across the room, not from a desk. The shell is locked
+   to the viewport, every page fills its height instead of trailing off into a
+   dead band, and each tile leads with its value rather than its label.
    ============================================================================ */
 @media (min-width: 761px) {
-  /* Pages own the full shell height, so the tile grid can stretch into it. */
+  main { height: 100svh; overflow-x: hidden; overflow-y: auto; }
   .page-slide { display: flex; flex-direction: column; }
   .page-slide > * { flex: 1 1 auto; min-height: 0; }
-  .overview { padding-top: 10px; display: flex; flex-direction: column; }
-  .entity-grid { flex: 1 1 auto; align-content: stretch; grid-auto-rows: minmax(104px, 1fr); gap: 10px; }
-  .entity-tile, .entity-tile:has(.tile-spark) { min-height: 104px; padding: 14px 16px; }
 
-  /* Presence sits on the section heading line instead of owning a band of its own. */
-  .section-heading { align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 10px; }
-  .section-heading > div:first-child { flex: 0 0 auto; }
-  .section-heading .presence-row { flex: 0 1 auto; margin: 0 0 0 auto; padding: 0; }
-  /* The heading's eyebrow styling must not leak into the presence chips it now hosts. */
-  .section-heading .presence-copy strong { color: var(--text); font-size: .8rem; letter-spacing: normal; text-transform: none; }
-  .section-heading .presence-copy small { font-size: .72rem; letter-spacing: normal; text-transform: none; }
-  .section-heading > p { flex: 0 0 auto; font-size: .78rem; }
-  .date, .section-heading span { font-size: .72rem; }
-  .section-heading h2 { font-size: 1.15rem; }
+  .overview { display: flex; flex-direction: column; }
+  /* Three tiles per row keeps values large (a 6-wide home section fills two full rows); the track
+     minimum stops a narrow panel squeezing them below a readable width. */
+  .entity-grid { flex: 1 1 auto; align-content: stretch; grid-template-columns: repeat(auto-fill, minmax(max(12rem, calc((100% - 2 * 10px) / 3)), 1fr)); grid-auto-rows: minmax(108px, 1fr); }
 
-  /* Header: the clock is the single largest thing on the panel. */
-  h1 { font-size: 1.7rem; }
-  .clock-block > .clock-time { min-width: 0; font-size: 2.3rem; }
-  .clock-block span { height: 34px; font-size: .74rem; }
-  .rotation-status { height: 34px; }
-  .rotation-status span { font-size: .72rem; }
-
-  /* Moments and utility rail: secondary reading, but no longer 10px type. */
-  .night-mode-moment, .thermostat-quick { min-height: 60px; padding: 8px 13px; }
-  .moment-copy strong { font-size: .84rem; }
-  .moment-copy small { font-size: .74rem; }
-  .thermostat-quick .moment-copy strong { font-size: 1.5rem; }
-  .utility-cell { min-height: 62px; padding: 8px 11px; gap: 9px; }
-  .utility-icon { flex-basis: 32px; height: 32px; }
-  .utility-copy strong { font-size: .8rem; letter-spacing: 0; }
-  .utility-copy small { font-size: .7rem; }
-  .attention-strip { min-height: 46px; padding: 7px 12px; gap: 10px; }
-  .attention-strip strong { font-size: .78rem; }
-  .attention-strip small { font-size: .72rem; }
-
-  /* Tiles lead with the reading: label above, value large, trend fills the rest. */
-  .tile-heading { align-items: flex-start; gap: 13px; }
-  /* Icon scales with the same vw-driven ramp as the value text below it, so a stretched tile
-     (fewer tiles in a section, e.g. Security) doesn't end up with a huge reading beside a
-     tiny fixed-size icon. */
+  .tile-heading { align-items: flex-start; }
+  /* Icon scales with the same vw-driven ramp as the value text beside it, so a stretched tile
+     (fewer tiles in a section) does not end up with a huge reading beside a tiny icon. */
   .tile-icon { flex-basis: clamp(46px, 3.6vw, 66px); width: clamp(46px, 3.6vw, 66px); height: clamp(46px, 3.6vw, 66px); }
   .tile-icon svg { width: clamp(24px, 1.9vw, 34px); height: clamp(24px, 1.9vw, 34px); }
   .tile-heading > div { flex: 1 1 auto; }
-  /* At wall distance this h3 stops being a title and becomes the label above a big reading, so a
-     small tracked cap-line is doing real work here rather than shouting. */
-  .tile-heading h3 { margin-bottom: 5px; color: var(--muted); font-size: .74rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-  .tile-heading p {
-    max-width: none; color: var(--text); font-size: clamp(1.3rem, 2.2vw, 1.85rem);
-    font-weight: 750; line-height: 1.05; letter-spacing: -.02em;
-  }
-  .entity-tile.is-unavailable .tile-heading p { color: var(--muted); font-size: 1rem; font-weight: 650; }
+  .tile-heading h3 { margin-bottom: 6px; }
+  .tile-heading p { font-size: clamp(1.3rem, 2.2vw, 1.9rem); font-weight: 800; line-height: 1.05; letter-spacing: -.02em; }
+  .entity-tile.is-unavailable .tile-heading p { font-size: 1rem; }
   /* Without a trend to fill the box, the reading centres instead of hugging the top. */
   .entity-tile:not(:has(.tile-spark)) .tile-heading { margin-block: auto; }
   /* Summary tiles (e.g. which doors are open) carry a sentence, not a reading. */
   .entity-tile.has-summary .tile-heading p {
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
-    font-size: .92rem; font-weight: 650; line-height: 1.3; white-space: normal; text-transform: capitalize;
+    font-size: .95rem; font-weight: 700; line-height: 1.3; white-space: normal;
   }
-  .entity-tile.is-hazard .tile-heading p { color: var(--danger); }
   .tile-spark { flex: 1 1 0; min-height: 34px; margin-top: 12px; overflow: hidden; }
-  .toggle { width: 52px; height: 30px; }
-  .toggle span { width: 24px; height: 24px; }
-  .toggle.is-on span { transform: translateX(22px); }
 }
 
-/* On a phone the heading has no room to host presence, so the chips take their own line. */
-@media (max-width: 760px) {
-  .section-heading { flex-wrap: wrap; }
-  .section-heading .presence-row { flex: 1 1 100%; margin: 4px 0 0; padding: 0 0 4px; }
+/* Very wide panels have room for a fourth column at the same reading size. */
+@media (min-width: 1700px) {
+  .entity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-
-/* Three tiles per row keeps values large; a 6-wide home section fills two full rows. */
-@media (min-width: 1100px) {
-  .entity-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  /* One rail row, not two: a second row costs ~70px that the tile grid needs on 1280x800 panels. */
-  .utility-rail { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-}
-@media (min-width: 1700px) { .entity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

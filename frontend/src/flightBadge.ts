@@ -85,3 +85,30 @@ export function arrivalVerdict(schedule: TrackSchedule | undefined) {
   if (late <= 15) return { tone: 'warn', label: `${late} min late` }
   return { tone: 'danger', label: `${late} min late` }
 }
+
+interface EtaSource {
+  etaLine?: string | null
+  etaAt?: string | null
+  minutesLeft?: number | null
+}
+
+/**
+ * Arrival clock from the backend's absolute `etaAt`, rendered in the tablet's own time zone. The
+ * older `etaLine` prose was composed on the server in *its* zone, which is why a tablet in one
+ * room and a backend in a container disagreed about when the same flight lands.
+ */
+export function etaClock(entry: EtaSource | null | undefined) {
+  const iso = entry?.etaAt
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** One line for the ETA: the absolute time when the backend sent one, else its own prose, else nothing. */
+export function etaLabel(entry: EtaSource | null | undefined) {
+  const clock = etaClock(entry)
+  if (!clock) return entry?.etaLine ?? null
+  const minutes = entry?.minutesLeft
+  return typeof minutes === 'number' && Number.isFinite(minutes) ? `ETA ${clock} · ${Math.round(minutes)} min left` : `ETA ${clock}`
+}
