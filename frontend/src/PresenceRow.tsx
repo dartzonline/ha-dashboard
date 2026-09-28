@@ -1,10 +1,6 @@
 import type { HAEntity } from './types'
+import { friendlyName } from './entityNames'
 import './PresenceRow.css'
-
-function friendlyName(entity: HAEntity) {
-  const name = entity.attributes.friendly_name
-  return typeof name === 'string' && name.trim() ? name.trim() : entity.entity_id.split('.').slice(1).join('.')
-}
 
 function initials(name: string) {
   const parts = name.split(/\s+/).filter(Boolean)
@@ -39,9 +35,10 @@ export function PresenceRow({ entities }: { entities: Map<string, HAEntity> }) {
   if (people.length === 0) return null
 
   return (
-    <div className="presence-row" role="list" aria-label="Household presence">
+    // Its own horizontal scroll, so a sideways drag here must not also flip the page.
+    <div className="presence-row" role="list" aria-label="Household presence" data-swipe-ignore>
       {people.map((entity) => {
-        const name = friendlyName(entity)
+        const name = friendlyName(entity).trim()
         const isAway = entity.state === 'not_home'
         return (
           <div key={entity.entity_id} role="listitem" className={`presence-chip ${isAway ? 'is-away' : 'is-home'}`}>

@@ -3,13 +3,18 @@ import { Activity, TrendingUp } from 'lucide-react'
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
+import { GlassTooltip } from './chartKit'
+import { chartMargin, gridProps, lineProps, seriesColor, tooltipCursor, xAxisProps, yAxisProps } from './chartTheme'
+import { EmptyState, LoadingState } from './ui/StateMessages'
 import './EntityHistory.css'
-import { apiUrl } from './api'
+import { isAbortError } from './cachedFetch'
+import { downsample, fetchHistory, parseHistoryStates } from './history'
+import type { HistoryPoint } from './history'
+import { displayUnit, toMbps } from './units'
 
-interface HistoryPoint {
-  time: number
-  value: number
-}
+/** Detail sheets are opened by hand; a chart a few minutes old is indistinguishable from a fresh one. */
+const HISTORY_TTL_MS = 5 * 60_000
+const MAX_POINTS = 360
 
 interface EntityHistoryProps {
   entityId: string
@@ -18,11 +23,7 @@ interface EntityHistoryProps {
 }
 
 function normalizeValue(value: number, unit: string) {
-  return unit === 'KiB/s' ? value * 8 / 1024 : value
-}
-
-function displayUnit(unit: string) {
-  return unit === 'KiB/s' ? 'Mbps' : unit
+  return toMbps(value, unit)
 }
 
 function formatValue(value: number, unit: string) {
@@ -32,19 +33,8 @@ function formatValue(value: number, unit: string) {
 }
 
 function parseHistory(payload: unknown, unit: string): HistoryPoint[] {
-  if (!Array.isArray(payload)) return []
-  const states = Array.isArray(payload[0]) ? payload[0] : payload
-  const points = states.flatMap((item): HistoryPoint[] => {
-    if (!item || typeof item !== 'object') return []
-    const state = item as Record<string, unknown>
-    const rawValue = Number(state.state)
-    const time = Date.parse(String(state.last_changed ?? state.last_updated ?? ''))
-    return Number.isFinite(rawValue) && Number.isFinite(time)
-      ? [{ time, value: normalizeValue(rawValue, unit) }]
-      : []
-  })
-  const step = Math.max(1, Math.ceil(points.length / 360))
-  return points.filter((_, index) => index % step === 0 || index === points.length - 1)
+  const points = parseHistoryStates(payload).map((point) => ({ time: point.time, value: normalizeValue(point.value, unit) }))
+  return downsample(points, MAX_POINTS)
 }
 
 function formatTime(timestamp: number) {
@@ -56,19 +46,18 @@ export function EntityHistory({ entityId, unit, currentState }: EntityHistoryPro
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let stopped = false
-    fetch(apiUrl(`history/${entityId}`))
-      .then((response) => response.ok ? response.json() : [])
+    const abort = new AbortController()
+    fetchHistory(entityId, 24, HISTORY_TTL_MS, abort.signal)
       .then((payload) => {
-        if (!stopped) setPoints(parseHistory(payload, unit))
+        setPoints(parseHistory(payload, unit))
+        setLoading(false)
       })
-      .catch(() => {
-        if (!stopped) setPoints([])
+      .catch((error: unknown) => {
+        if (isAbortError(error)) return
+        setPoints([])
+        setLoading(false)
       })
-      .finally(() => {
-        if (!stopped) setLoading(false)
-      })
-    return () => { stopped = true }
+    return () => abort.abort()
   }, [entityId, unit])
 
   const values = points.map((point) => point.value)
@@ -80,25 +69,23 @@ export function EntityHistory({ entityId, unit, currentState }: EntityHistoryPro
   return (
     <section className="entity-history" aria-label="24 hour history">
       <header><div><Activity size={17} /><h3>24-hour history</h3></div><span>{points.length ? `${points.length} samples` : ''}</span></header>
-      <div className="history-chart">
+      <div className="history-chart glass-inset">
         {points.length > 1 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={points} margin={{ top: 8, right: 8, left: -25, bottom: 0 }}>
-              <defs>
-                <linearGradient id="entityHistoryFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--chart-line)" stopOpacity={.38} />
-                  <stop offset="95%" stopColor="var(--chart-line)" stopOpacity={.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-              <XAxis dataKey="time" tickFormatter={formatTime} tick={{ fontSize: 11, fill: 'var(--muted)' }} minTickGap={44} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(value) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(Number(value))} tick={{ fontSize: 11, fill: 'var(--muted)' }} width={54} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
-              <Tooltip formatter={(value) => formatValue(Number(value), unit)} labelFormatter={(label) => formatTime(Number(label))} contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12 }} />
-              <Area type="monotone" dataKey="value" stroke="var(--chart-line)" strokeWidth={2} fill="url(#entityHistoryFill)" dot={false} activeDot={{ r: 5, stroke: 'var(--surface)', strokeWidth: 2 }} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div className="history-plot" data-swipe-ignore>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={points} margin={chartMargin}>
+                <CartesianGrid {...gridProps} />
+                <XAxis dataKey="time" {...xAxisProps} tickFormatter={formatTime} minTickGap={44} />
+                <YAxis {...yAxisProps} tickFormatter={(value: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} width={48} domain={['auto', 'auto']} />
+                <Tooltip cursor={tooltipCursor} content={<GlassTooltip valueFormat={(value) => formatValue(value, unit)} labelFormat={(label) => formatTime(Number(label))} />} />
+                <Area type="monotone" dataKey="value" name="Value" stroke={seriesColor(0)} fill={seriesColor(0)} fillOpacity={0.1} {...lineProps} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : loading ? (
+          <LoadingState size="compact" label="Loading history" />
         ) : (
-          <div className={`history-empty ${loading ? 'loading' : ''}`}><TrendingUp size={22} /><span>{loading ? 'Loading history' : 'No numeric history available'}</span></div>
+          <EmptyState size="compact" icon={<TrendingUp />} title="No numeric history" hint="The recorder has no numeric samples for this entity in the last 24 hours" />
         )}
       </div>
       <div className="history-summary">

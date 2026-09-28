@@ -1,0 +1,4 @@
+# Everything the runtime needs, plus the test runner. Installed by developers only; the
+# Dockerfile installs requirements.txt alone so the image carries no test tooling.
+-r requirements.txt
+pytest==8.4.1

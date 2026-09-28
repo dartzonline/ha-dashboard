@@ -9,22 +9,37 @@
   pointer-events: none;
 }
 
+/* Stacked, so the outgoing picture stays in place underneath while the next one fades in. Only
+   opacity animates; the filters below are static per style, so they are rasterised once. */
 .photo-backdrop img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  animation: photo-backdrop-in 1.2s ease-out;
+  opacity: 0;
 }
+.photo-backdrop img.is-previous { opacity: 1; }
+.photo-backdrop img.is-current { opacity: 1; animation: photo-backdrop-in 1.2s ease-out; }
 
 /* The scrim, not the image opacity, does most of the darkening: laying a near-opaque dark layer
    over a full-strength photo keeps the highlights and colour that make it recognisable, where
    simply fading the image toward the canvas colour turns it into flat grey mush. */
 .photo-backdrop-scrim { position: absolute; inset: 0; }
 
+/* Behind the topbar and the page sub-heading: the photo is free to be bright further down, but
+   the two lines of text you read first always sit on the same dark band. */
+.photo-backdrop-band {
+  position: absolute;
+  inset: 0 0 auto;
+  height: min(260px, 38vh);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--canvas) 72%, transparent), transparent);
+}
+
 @keyframes photo-backdrop-in {
-  from { opacity: 0; transform: scale(1.04); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* ---- dim: the quietest. Blurred and heavily darkened -- reads as texture, not as a picture. ---- */
@@ -37,9 +52,9 @@
 .style-cinematic .photo-backdrop-scrim {
   background:
     linear-gradient(105deg,
-      color-mix(in srgb, var(--canvas) 92%, transparent) 0%,
-      color-mix(in srgb, var(--canvas) 78%, transparent) 45%,
-      color-mix(in srgb, var(--canvas) 62%, transparent) 100%),
+      color-mix(in srgb, var(--canvas) 88%, transparent) 0%,
+      color-mix(in srgb, var(--canvas) 70%, transparent) 45%,
+      color-mix(in srgb, var(--canvas) 52%, transparent) 100%),
     radial-gradient(120% 90% at 70% 40%, transparent 30%, color-mix(in srgb, var(--canvas) 70%, transparent) 100%);
 }
 
@@ -56,5 +71,5 @@
 
 /* The photo is decoration; it must never animate under someone who asked for less motion. */
 @media (prefers-reduced-motion: reduce) {
-  .photo-backdrop img { animation: none; }
+  .photo-backdrop img.is-current { animation: none; }
 }

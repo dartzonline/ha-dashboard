@@ -1,40 +1,57 @@
-/* Expanded explanation panel for any Insights tile. Reuses the global detail sheet shell. */
-.detail-sheet.insight-sheet { width: min(780px, 100%); max-height: min(760px, calc(100svh - 48px)); }
-.insight-headline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 16px 0 14px; }
-.insight-headline > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); display: grid; gap: 3px; }
-.insight-headline span { color: var(--muted); font-size: .62rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
+/* Expanded explanation sheet for any Insights tile. The backdrop, header and footer come from the
+   shared detail sheet; this adds the glass pane, the chart well and the explanation blocks. */
+.detail-sheet.insight-sheet { width: min(780px, 100%); max-height: min(760px, calc(100svh - 48px)); padding: 20px 22px; border-radius: var(--r-lg); overscroll-behavior: contain; }
+/* The shared .detail-sheet paints a flat surface; restate the strong glass so it wins regardless of
+   stylesheet order. */
+.detail-sheet.insight-sheet.glass-strong { border-color: var(--glass-border); background-color: var(--glass-bg-strong); background-image: var(--glass-highlight); }
+.insight-sheet > header button { width: var(--tap); height: var(--tap); padding: 0; color: var(--muted); display: grid; place-items: center; }
+.insight-headline { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); padding: 16px 0 14px; }
+.insight-headline > div { min-width: 0; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); display: grid; gap: 3px; }
+.insight-headline span { color: var(--muted); font-size: .7rem; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; }
 .insight-headline strong { font: 750 1.05rem var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.insight-headline strong.up { color: var(--warn); }
-.insight-headline strong.down { color: var(--good); }
-.insight-detail-chart { height: 236px; margin-bottom: 14px; padding: 8px 4px 0; border: 1px solid var(--border); border-radius: 10px; background: var(--canvas); }
-.insight-detail-chart .chart-empty { border-top: 0; }
-.state-timeline { height: 100%; margin: 0; padding: 4px 8px; list-style: none; display: grid; align-content: start; gap: 5px; overflow-y: auto; }
-.state-timeline li { min-height: 34px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-.state-timeline svg { color: var(--muted); }
-.state-timeline strong { font-size: .74rem; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.state-timeline small { color: var(--muted); font-size: .62rem; white-space: nowrap; }
-.insight-explainer { margin-bottom: 16px; padding: 12px 13px; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface-raised) 62%, var(--accent-soft)); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
-.insight-explainer > span { width: 28px; height: 28px; border-radius: 50%; color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 18%, transparent); display: grid; place-items: center; }
-.insight-explainer h3 { margin: 0 0 3px; font-size: .76rem; }
-.insight-explainer p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
-.insight-subheading { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-.factor-grid { margin-bottom: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.factor-grid > div { min-width: 0; min-height: 64px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised); display: grid; align-content: center; gap: 2px; }
-.factor-grid span { color: var(--muted); font-size: .6rem; letter-spacing: .04em; text-transform: uppercase; }
-.factor-grid strong { font: 750 .82rem var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.factor-grid small { color: var(--muted); font-size: .6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.factor-grid > div.tone-good { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
-.factor-grid > div.tone-good strong { color: var(--good); }
-.factor-grid > div.tone-warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
-.factor-grid > div.tone-warn strong { color: var(--warn); }
-.factor-grid > div.tone-danger { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
-.factor-grid > div.tone-danger strong { color: var(--danger); }
-.insight-chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
-.insight-chip-row span { max-width: 100%; padding: 6px 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface-raised); font-size: .68rem; display: inline-flex; align-items: center; gap: 6px; }
-.insight-chip-row em { color: var(--muted); font-size: .62rem; font-style: normal; text-transform: uppercase; }
+
+.insight-detail-chart { height: 256px; margin-bottom: 14px; padding: 10px 12px 6px; border-radius: var(--r-md); display: flex; flex-direction: column; gap: 6px; }
+.insight-detail-plot { flex: 1 1 auto; min-height: 0; }
+.insight-detail-chart > .state-message { flex: 1 1 auto; }
+.insight-transitions { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; list-style: none; display: grid; align-content: start; overflow-y: auto; overscroll-behavior: contain; }
+.insight-transitions li { min-height: var(--tap); padding: 6px 4px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.insight-transitions li:last-child { border-bottom: 0; }
+.insight-transitions svg { color: var(--muted); }
+.insight-transitions strong { font-size: .8rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.insight-transitions small { color: var(--muted); font-size: .72rem; font-weight: 550; white-space: nowrap; }
+
+.insight-explainer { margin-bottom: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
+.insight-explainer > span { width: 30px; height: 30px; border-radius: 50%; color: var(--accent-strong); background: var(--accent-soft); display: grid; place-items: center; }
+.insight-explainer h3 { margin: 0 0 3px; font-size: .8rem; font-weight: 700; }
+.insight-explainer p { margin: 0; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.insight-subheading { margin: 0 0 8px; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .72rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+
+.factor-grid { margin-bottom: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--gap); }
+.factor-grid > div { min-width: 0; min-height: 66px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); display: grid; align-content: center; gap: 2px; }
+.factor-grid span { display: flex; align-items: center; gap: 5px; color: var(--muted); font-size: .66rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.factor-grid strong { font: 750 .86rem var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.factor-grid small { color: var(--muted); font-size: .72rem; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Status rides the icon beside the label plus a tinted edge; the value stays in text ink. */
+.factor-grid > div.is-good { border-color: color-mix(in srgb, var(--good) 40%, var(--border)); }
+.factor-grid > div.is-good svg { color: var(--good); }
+.factor-grid > div.is-warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.factor-grid > div.is-warn svg { color: var(--warn); }
+.factor-grid > div.is-danger { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
+.factor-grid > div.is-danger svg, .factor-grid > div.is-danger strong { color: var(--danger); }
+
+.insight-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.insight-chip-row span { max-width: 100%; min-height: 32px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); font-size: .74rem; display: inline-flex; align-items: center; gap: 6px; }
+.insight-chip-row em { color: var(--muted); font-size: .7rem; font-style: normal; font-weight: 650; }
+
 @media (max-width: 760px) {
-  .detail-sheet.insight-sheet { width: 100%; }
+  .detail-sheet.insight-sheet { width: 100%; padding: 8px 16px calc(18px + env(safe-area-inset-bottom)); border-radius: var(--r-lg) var(--r-lg) 0 0; }
   .insight-headline { grid-template-columns: 1fr; padding: 12px 0 10px; }
-  .insight-detail-chart { height: 200px; }
+  .insight-detail-chart { height: 220px; }
   .factor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (prefers-reduced-transparency: reduce) {
+  .detail-sheet.insight-sheet.glass-strong { background-color: var(--surface-solid); }
+}
+
+/* No glass on glass: the close button is a raised chip on the sheet, not a second blur layer. */
+.insight-sheet .glass-pill { backdrop-filter: none; -webkit-backdrop-filter: none; background-image: none; box-shadow: none; background-color: var(--surface-raised); }

@@ -1,7 +1,9 @@
-import { Clock3, Globe2, MapPin, MoonStar, Navigation, SunMedium, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Clock3, Globe2, MapPin, MoonStar, SunMedium, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
 import { CityWeatherPanel } from './CityWeatherPanel'
 import { terminatorPath } from './daylight'
+import { PageFrame } from './ui/PageFrame'
 import './WorldTimeMap.css'
 import { countryCode, worldCities } from './worldCities'
 
@@ -45,16 +47,18 @@ const satelliteMapUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/7400
 /** NASA's Black Marble: the same globe, photographed at night. Both images are equirectangular at
     the same extent, so the day and night layers register pixel for pixel. */
 const nightLightsUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/79000/79765/dnb_land_ocean_ice.2012.3600x1800.jpg'
-const pinAccent = '#7fd4ff'
+/** A dropped pin is "the current selection", so it wears the selection accent, not a series hue. */
+const pinAccent = 'var(--accent-strong)'
+/** Movement beyond this between pointerdown and pointerup is a swipe or a drag, not a tap. */
+const TAP_SLOP_PX = 10
 
-// Jewel-tone accents drawn from the app's own palette (warn/accent/good, plus the violet
-// already used for the Night Mode moment) rather than arbitrary neon hex, so the map reads
-// as part of the same system instead of a generic map-pin widget.
+// Each city is a category, so it takes the next chart series colour in fixed order, not a status
+// tint: amber/green here would read as "warning"/"fine" rather than "this is Khammam".
 const locations: Location[] = [
-  { id: 'home', city: 'Georgetown', country: 'Texas, United States', code: 'US', timeZone: browserTimeZone, lat: 30.64, lon: -97.68, accent: 'var(--warn)', isHome: true },
-  { id: 'frankfurt', city: 'Frankfurt', country: 'Hesse, Germany', code: 'DE', timeZone: 'Europe/Berlin', lat: 50.11, lon: 8.68, accent: 'var(--accent)' },
-  { id: 'khammam', city: 'Khammam', country: 'Telangana, India', code: 'IN', timeZone: 'Asia/Kolkata', lat: 17.25, lon: 80.15, accent: 'var(--good)' },
-  { id: 'auckland', city: 'Auckland', country: 'New Zealand', code: 'NZ', timeZone: 'Pacific/Auckland', lat: -36.85, lon: 174.76, accent: '#a99eff' },
+  { id: 'home', city: 'Georgetown', country: 'Texas, United States', code: 'US', timeZone: browserTimeZone, lat: 30.64, lon: -97.68, accent: 'var(--chart-1)', isHome: true },
+  { id: 'frankfurt', city: 'Frankfurt', country: 'Hesse, Germany', code: 'DE', timeZone: 'Europe/Berlin', lat: 50.11, lon: 8.68, accent: 'var(--chart-2)' },
+  { id: 'khammam', city: 'Khammam', country: 'Telangana, India', code: 'IN', timeZone: 'Asia/Kolkata', lat: 17.25, lon: 80.15, accent: 'var(--chart-3)' },
+  { id: 'auckland', city: 'Auckland', country: 'New Zealand', code: 'NZ', timeZone: 'Pacific/Auckland', lat: -36.85, lon: 174.76, accent: 'var(--chart-4)' },
 ]
 
 /** The map is a plain equirectangular projection, so screen position and coordinates convert directly. */
@@ -194,6 +198,7 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
   const [selectedId, setSelectedId] = useState('home')
   const [pin, setPin] = useState<Reading | null>(null)
   const [weatherFor, setWeatherFor] = useState<Reading | null>(null)
+  const pressStart = useRef<{ x: number; y: number } | null>(null)
   // Recomputed only when the minute rolls over: the shape depends on nothing finer than that.
   const nightPath = useMemo(() => terminatorPath(now), [now])
   const zoneHours = useMemo(() => Array.from({ length: 24 }, (_, index) => (now.getUTCHours() - 12 + index + 24) % 24), [now])
@@ -214,8 +219,17 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
   const selected = readings.find((reading) => reading.id === selectedId) ?? readings[0]
   const selectedHour = getHour(now, selected.timeZone)
 
+  function startPress(event: PointerEvent<HTMLButtonElement>) {
+    pressStart.current = { x: event.clientX, y: event.clientY }
+  }
+
   /** Any point on the map is a valid reading, not just the four preset markers. */
-  function readPoint(event: React.PointerEvent<HTMLButtonElement>) {
+  function readPoint(event: PointerEvent<HTMLButtonElement>) {
+    const start = pressStart.current
+    pressStart.current = null
+    // A swipe that happens to end on the map is page navigation, not a tap: dropping a pin at the
+    // lift-off point would be a surprise.
+    if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP_PX) return
     const bounds = event.currentTarget.getBoundingClientRect()
     if (!bounds.width || !bounds.height) return
     const x = ((event.clientX - bounds.left) / bounds.width) * 100
@@ -242,30 +256,12 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
 
   return (
     <section className="world-view" aria-label="World time">
-      <header className="world-heading">
-        <div>
-          <span className="eyebrow"><Navigation size={13} /> Global overview</span>
-        </div>
-        {selectedId !== 'home' && (
-          <div className="world-selection" aria-live="polite">
-            <span className="selection-icon" style={{ '--marker-color': selected.accent } as React.CSSProperties}>
-              {selectedHour >= 7 && selectedHour < 19 ? <SunMedium size={20} /> : <MoonStar size={20} />}
-            </span>
-            <div className="selection-place">
-              <span>{selected.approximate ? 'Estimated zone' : 'Selected location'}</span>
-              <strong>{selected.city}</strong>
-              <small>{selected.country}</small>
-            </div>
-            <div className="selection-time">
-              <strong>{formatTime(now, selected.timeZone)}</strong>
-              <small>{formatDay(now, selected.timeZone)}</small>
-            </div>
-            <p className="selection-meta">
-              <Clock3 size={13} /> {daylightLabel(selectedHour)} · {getOffset(now, selected.timeZone)} · {formatDifference(now, selected.timeZone)}
-            </p>
-          </div>
-        )}
-      </header>
+      <PageFrame
+        icon={<Globe2 />}
+        eyebrow="Global overview"
+        title={selectedId === 'home' ? `${readings.length} clocks around the world` : `${selected.city} ${formatTime(now, selected.timeZone)}`}
+        meta="Tap anywhere on the map for its local time"
+      />
 
       <div className="world-body">
       <div className="world-map-shell">
@@ -315,8 +311,12 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
 
           {/* Full-bleed hit target under the markers: the whole map is the control. */}
           <button
+            type="button"
             className="map-surface"
+            data-swipe-ignore
+            onPointerDown={startPress}
             onPointerUp={readPoint}
+            onPointerCancel={() => { pressStart.current = null }}
             aria-label="Read the local time at a point on the map"
           />
 
@@ -325,15 +325,16 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
             return (
               <button
                 key={reading.id}
+                type="button"
                 className={`map-marker marker-${reading.id} ${active ? 'is-selected' : ''}`}
-                style={{ left: `${reading.x}%`, top: `${reading.y}%`, '--marker-color': reading.accent } as React.CSSProperties}
+                style={{ left: `${reading.x}%`, top: `${reading.y}%`, '--marker-color': reading.accent } as CSSProperties}
                 onPointerUp={(event) => { event.stopPropagation(); setSelectedId(reading.id) }}
                 aria-pressed={active}
                 aria-label={`${reading.city}, ${formatTime(now, reading.timeZone)}`}
               >
                 <span className="marker-pulse" />
                 <span className="marker-dot" />
-                <span className="marker-label"><strong>{reading.city}</strong><small>{formatTime(now, reading.timeZone)}</small></span>
+                <span className="marker-label glass-strong"><strong>{reading.city}</strong><small>{formatTime(now, reading.timeZone)}</small></span>
               </button>
             )
           })}
@@ -341,11 +342,11 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
           {pin && (
             <div
               className={`map-pin ${pin.x > 62 ? 'flip-label' : ''}`}
-              style={{ left: `${pin.x}%`, top: `${pin.y}%`, '--marker-color': pin.accent } as React.CSSProperties}
+              style={{ left: `${pin.x}%`, top: `${pin.y}%`, '--marker-color': pin.accent } as CSSProperties}
             >
               <span className="pin-rings" aria-hidden="true" />
               <MapPin size={22} aria-hidden="true" />
-              <span className="pin-label">
+              <span className="pin-label glass-strong">
                 <strong>{formatTime(now, pin.timeZone)}</strong>
                 <small>{pin.city}</small>
               </span>
@@ -353,13 +354,33 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
           )}
 
           {pin && (
-            <button className="map-clear-pin" onPointerUp={(event) => { event.stopPropagation(); clearPin() }} title="Remove the dropped pin">
-              <X size={14} aria-hidden="true" /> Clear pin
+            <button type="button" className="map-clear-pin glass-pill on-glass-text" onPointerUp={(event) => { event.stopPropagation(); clearPin() }} title="Remove the dropped pin">
+              <X size={16} aria-hidden="true" /> Clear pin
             </button>
           )}
 
-          <a className="map-credit" href="https://visibleearth.nasa.gov/images/74218/december-blue-marble-next-generation" target="_blank" rel="noreferrer">NASA Blue Marble · Black Marble</a>
-          <div className="map-legend" aria-hidden="true"><span><SunMedium size={14} /> Sunlit</span><span><MoonStar size={14} /> City lights</span></div>
+          {selectedId !== 'home' && (
+            <div className="world-selection glass-strong on-glass-text" aria-live="polite">
+              <span className="selection-icon" style={{ '--marker-color': selected.accent } as CSSProperties}>
+                {selectedHour >= 7 && selectedHour < 19 ? <SunMedium size={20} aria-hidden="true" /> : <MoonStar size={20} aria-hidden="true" />}
+              </span>
+              <div className="selection-place">
+                <span>{selected.approximate ? 'Estimated zone' : 'Selected location'}</span>
+                <strong>{selected.city}</strong>
+                <small>{selected.country}</small>
+              </div>
+              <div className="selection-time">
+                <strong>{formatTime(now, selected.timeZone)}</strong>
+                <small>{formatDay(now, selected.timeZone)}</small>
+              </div>
+              <p className="selection-meta">
+                <Clock3 size={13} aria-hidden="true" /> {daylightLabel(selectedHour)} · {getOffset(now, selected.timeZone)} · {formatDifference(now, selected.timeZone)}
+              </p>
+            </div>
+          )}
+
+          <a className="map-credit on-glass-text" href="https://visibleearth.nasa.gov/images/74218/december-blue-marble-next-generation" target="_blank" rel="noreferrer">NASA Blue Marble · Black Marble</a>
+          <div className="map-legend glass-pill" aria-hidden="true"><span><SunMedium size={14} /> Sunlit</span><span><MoonStar size={14} /> City lights</span></div>
         </div>
       </div>
 
@@ -371,8 +392,9 @@ export function WorldTimeMap({ now }: WorldTimeMapProps) {
           return (
             <button
               key={reading.id}
-              className={`world-clock-card ${active ? 'is-selected' : ''} ${isPin ? 'is-pinned' : ''}`}
-              style={{ '--marker-color': reading.accent } as React.CSSProperties}
+              type="button"
+              className={`world-clock-card glass ${active ? 'is-selected' : ''} ${isPin ? 'is-pinned' : ''}`}
+              style={{ '--marker-color': reading.accent } as CSSProperties}
               onClick={() => { setSelectedId(reading.id); setWeatherFor(reading) }}
               role="listitem"
               aria-pressed={active}

@@ -1,6 +1,7 @@
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { BACKDROP_SECTIONS, PhotoBackdrop, backdropPhotoFor } from './PhotoBackdrop'
+import { PhotoBackdrop } from './PhotoBackdrop'
+import { BACKDROP_SECTIONS, backdropPhotoFor } from './photoLibrary'
 
 afterEach(cleanup)
 
@@ -61,5 +62,30 @@ describe('PhotoBackdrop', () => {
   it('carries the requested style so the treatment can be changed in one place', () => {
     render(<PhotoBackdrop sectionId="climate" photoIds={LIBRARY} style="duotone" />)
     expect(document.querySelector('.photo-backdrop')!.className).toContain('style-duotone')
+  })
+
+  it('keeps the previous photo on screen until the next one has loaded, then cross-fades', () => {
+    const { rerender } = render(<PhotoBackdrop sectionId="climate" photoIds={LIBRARY} />)
+    const first = document.querySelector('.photo-backdrop img')!
+    fireEvent.load(first)
+    expect(first.className).toBe('is-current')
+
+    rerender(<PhotoBackdrop sectionId="security" photoIds={LIBRARY} />)
+    const images = Array.from(document.querySelectorAll('.photo-backdrop img'))
+    // Old picture still showing underneath; the new one is on top but invisible until it loads.
+    expect(images).toHaveLength(2)
+    expect(images[0]).toBe(first)
+    expect(images[0].className).toBe('is-current')
+    expect(images[1].className).toBe('is-loading')
+
+    fireEvent.load(images[1])
+    expect(images[0].className).toBe('is-previous')
+    expect(images[1].className).toBe('is-current')
+
+    // Once the fade has finished, the old layer is dropped.
+    // jsdom has no AnimationEvent, so React listens for the prefixed name there; send both.
+    fireEvent.animationEnd(images[1])
+    fireEvent(images[1], new Event('webkitAnimationEnd', { bubbles: true }))
+    expect(document.querySelectorAll('.photo-backdrop img')).toHaveLength(1)
   })
 })

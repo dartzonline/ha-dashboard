@@ -7,6 +7,7 @@ from "a tile worth showing", which is the actual hard part of automatic entity d
 here changes the dashboard yet -- see the design doc for the phases that build on it.
 """
 
+import asyncio
 import time
 from typing import Any
 
@@ -23,20 +24,34 @@ class RegistrySnapshot:
         self._cached_at = 0.0
         self._entities: dict[str, dict[str, Any]] = {}
         self._areas: dict[str, str] = {}
+        # Every browser tab asks for the registry on load, and on a cold start they all arrive
+        # together with an empty cache. Without this each one would fire its own three registry
+        # requests at Home Assistant instead of sharing the first refresh.
+        self._refresh_lock: asyncio.Lock | None = None
+
+    def _fresh(self, now: float) -> bool:
+        return self._cached_at > 0 and now - self._cached_at < CACHE_TTL_S
 
     async def get(self) -> dict[str, Any]:
         now = time.time()
-        if now - self._cached_at < CACHE_TTL_S and self._cached_at > 0:
+        if self._fresh(now):
             return {"entities": self._entities, "areas": self._areas}
-        await self._refresh()
-        self._cached_at = now
+        if self._refresh_lock is None:
+            # Created lazily so the snapshot can be constructed at import time, before any loop.
+            self._refresh_lock = asyncio.Lock()
+        async with self._refresh_lock:
+            # Re-check: whoever held the lock before us may have just refreshed.
+            if not self._fresh(time.time()):
+                await self._refresh()
+                self._cached_at = time.time()
         return {"entities": self._entities, "areas": self._areas}
 
     async def _refresh(self) -> None:
-        entity_rows, device_rows, area_rows = [
-            await self._bridge.send_command(f"config/{kind}_registry/list")
-            for kind in ("entity", "device", "area")
-        ]
+        # The three registries are independent; fetching them concurrently costs one round trip
+        # instead of three on the same socket.
+        entity_rows, device_rows, area_rows = await asyncio.gather(
+            *(self._bridge.send_command(f"config/{kind}_registry/list") for kind in ("entity", "device", "area"))
+        )
 
         areas: dict[str, str] = {}
         for row in area_rows if isinstance(area_rows, list) else []:

@@ -1,88 +1,64 @@
-/* `100svw` here measured the whole viewport, so this ran the sidebar's width past the right edge. */
-.energy-view { margin: 0; padding: 4px 0 8px; border-radius: 0; background: var(--canvas); width: 100%; min-height: calc(100svh - 150px); }
-
-main.is-fixed-view .energy-view {
-  height: 100svh;
-  width: 100%;
-  padding: 20px clamp(16px, 4vw, 32px);
-}
-.energy-view > header { padding: 0 2px 10px; border: 0; display: flex; align-items: center; justify-content: space-between; }
-.energy-view > header > div { display: flex; align-items: center; gap: 7px; color: var(--muted); }
-.energy-view h3 { margin: 0; color: var(--text); font-size: .86rem; font-weight: 650; }
-.energy-view > header > span { color: var(--muted); font-size: .65rem; }
-
-.energy-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin-bottom: 10px; }
-.energy-stats div { min-width: 0; padding: 8px; border-radius: 7px; background: var(--surface); display: flex; flex-direction: column; }
-.energy-stats span { color: var(--muted); font-size: .6rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
-.energy-stats strong { margin-top: 2px; font-size: .78rem; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.energy-stats .trend-up { color: var(--danger); flex-shrink: 0; }
-.energy-stats .trend-down { color: var(--good); flex-shrink: 0; }
+/* The page fills the shell's .page-slide; each block below is its own pane. */
+.energy-view { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; flex: 1 1 auto; width: 100%; }
 
 /* Bill estimate leads the page: it is the number people actually came for. */
 .energy-bill {
-  margin-bottom: 10px;
-  padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--border));
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 70%, var(--warn-soft));
+  padding: 16px 18px;
+  border-radius: var(--r-lg);
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 12px 18px;
 }
 
-.energy-bill-main { min-width: 0; display: flex; align-items: center; gap: 11px; }
-.energy-bill-icon { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); display: grid; place-items: center; }
-.energy-bill-main > div { min-width: 0; display: grid; }
-.energy-bill-main span { color: var(--muted); font-size: .62rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-.energy-bill-main strong { font-size: 1.5rem; font-weight: 750; letter-spacing: -.03em; line-height: 1.15; }
-.energy-bill-main small { color: var(--muted); font-size: .68rem; overflow: hidden; text-overflow: ellipsis; }
+.energy-bill-main { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.energy-bill-icon { flex: 0 0 auto; width: 44px; height: 44px; border-radius: var(--r-sm); color: var(--muted); background: var(--surface-raised); box-shadow: var(--glass-edge); display: grid; place-items: center; }
+.energy-bill-main > div { min-width: 0; display: grid; gap: 2px; }
+.energy-bill-main span { color: var(--muted); font-size: .74rem; font-weight: 650; }
+.energy-bill-main strong { font-size: 1.7rem; font-weight: 750; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.energy-bill-main small { color: var(--muted); font-size: .74rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; }
 
-.energy-bill-side { display: flex; align-items: center; gap: 8px; }
-.energy-bill-side > div { padding: 7px 11px; border-radius: 8px; background: var(--surface); display: grid; gap: 1px; }
-.energy-bill-side span { color: var(--muted); font-size: .6rem; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; }
-.energy-bill-side strong { font-size: .95rem; white-space: nowrap; }
+.energy-bill-side { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.energy-bill-side > div { padding: 8px 14px; border-radius: var(--r-sm); background: var(--surface); display: grid; align-content: center; gap: 2px; }
+.energy-bill-side span { color: var(--muted); font-size: .72rem; font-weight: 650; }
+.energy-bill-side strong { font-size: 1rem; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-.energy-rate-value { padding: 0; border: 0; background: none; color: var(--text); display: flex; align-items: baseline; gap: 4px; cursor: pointer; font: inherit; }
-.energy-rate-value small { color: var(--muted); font-size: .62rem; }
-.energy-rate-value svg { align-self: center; color: var(--muted); }
+/* The rate is tapped from across a kitchen: the whole figure is the target, not the pencil. */
+.energy-rate-value { min-height: var(--tap); margin: -6px -8px; padding: 0 8px; border: 0; border-radius: var(--r-sm); background: none; color: var(--text); display: flex; align-items: center; gap: 5px; cursor: pointer; font: inherit; }
+.energy-rate-value small { color: var(--muted); font-size: .72rem; }
+.energy-rate-value svg { color: var(--muted); }
+.energy-rate-value:hover { background: var(--surface-raised); }
 .energy-rate-value:hover svg { color: var(--accent); }
-.energy-rate-edit { display: flex; align-items: center; gap: 5px; }
-.energy-rate-edit input { width: 72px; padding: 3px 6px; border: 1px solid var(--accent); border-radius: 6px; color: var(--text); background: var(--surface-raised); font-size: .82rem; }
-.energy-rate-edit button { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; color: var(--accent); background: var(--surface-raised); display: grid; place-items: center; cursor: pointer; }
+.energy-rate-edit { display: flex; align-items: center; gap: 6px; }
+.energy-rate-edit input { width: 84px; min-height: var(--tap); padding: 0 10px; border: 1px solid var(--accent); border-radius: var(--r-sm); color: var(--text); background: var(--surface-raised); font: inherit; font-size: .9rem; }
+.energy-rate-edit button { width: var(--tap); height: var(--tap); padding: 0; color: var(--accent); display: grid; place-items: center; cursor: pointer; }
+
+.energy-stats { padding: 12px 16px; border-radius: var(--r-md); display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px 16px; }
+.energy-stats div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.energy-stats span { color: var(--muted); font-size: .72rem; font-weight: 600; }
+.energy-stats strong { font-size: .95rem; font-weight: 700; display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+/* Direction is also carried by the sign on the figure and the arrow's shape. */
+.energy-stats .trend-up { color: var(--danger); flex-shrink: 0; }
+.energy-stats .trend-down { color: var(--good); flex-shrink: 0; }
 
 /* Side by side on a wall panel: the per-device split and the daily trend answer different questions
    and together they fill the width that used to sit empty below the single chart. */
-.energy-chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.energy-chart-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
 @media (min-width: 1000px) { .energy-chart-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
-.energy-chart-title { margin: 0 0 4px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 600; }
-.energy-chart { height: 196px; border-top: 1px solid var(--border); padding-top: 6px; }
-.energy-chart-empty { height: 100%; color: var(--muted); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; font-size: .72rem; }
-.energy-chart-empty.loading svg { animation: energy-pulse 1.2s ease-in-out infinite; }
-@keyframes energy-pulse { 50% { opacity: .35; transform: translateY(-2px); } }
+.energy-card { min-width: 0; padding: 14px 16px; border-radius: var(--r-md); display: flex; flex-direction: column; gap: 8px; }
+.energy-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4px 10px; flex-wrap: wrap; }
+.energy-card-head h3 { margin: 0; color: var(--text); display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 700; }
+.energy-card-head h3 svg { color: var(--muted); align-self: center; }
+.energy-card-head > span { color: var(--muted); font-size: .74rem; font-weight: 550; font-variant-numeric: tabular-nums; }
+.energy-chart { height: 196px; min-width: 0; }
 
-/* Fills what used to be dead space below the per-device chart. */
-.energy-daily { border-top: 1px solid var(--border); padding-top: 6px; }
-.energy-daily > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
-.energy-daily > header > div { display: flex; align-items: center; gap: 6px; color: var(--warn); }
-.energy-daily h4 { margin: 0; color: var(--warn); font-size: .72rem; }
-.energy-daily > header > span { color: var(--muted); font-size: .64rem; }
-.energy-daily-chart { height: 196px; }
-
-.energy-whole-home { display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 10px; border-radius: 7px; background: var(--surface); color: var(--muted); font-size: .68rem; }
-.energy-whole-home svg { color: var(--accent); flex-shrink: 0; }
-
-.energy-view-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 16px; color: var(--muted); text-align: center; }
-.energy-view-empty svg { color: var(--muted); }
-.energy-view-empty p { margin: 0; color: var(--text); font-size: .9rem; font-weight: 600; }
-.energy-view-empty span { font-size: .74rem; max-width: 320px; }
+.energy-whole-home { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 14px; border-radius: var(--r-sm); background: var(--surface); color: var(--muted); font-size: .76rem; font-weight: 550; }
+.energy-whole-home svg { color: var(--muted); flex-shrink: 0; }
 
 @media (max-width: 680px) {
-  .energy-view { margin-inline: -4px; padding-inline: 8px; }
   .energy-chart { height: 184px; }
-  .energy-stats { gap: 4px; }
-  .energy-stats div { padding: 7px 5px; }
-  .energy-stats strong { font-size: .72rem; }
+  .energy-bill-main strong { font-size: 1.45rem; }
 }
+

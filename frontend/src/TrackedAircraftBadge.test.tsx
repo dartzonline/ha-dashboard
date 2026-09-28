@@ -1,8 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TrackedAircraftBadge } from './TrackedAircraftBadge'
-import { AIRCRAFT_ART, arrivalVerdict, artKeyForAircraft } from './flightBadge'
+import { AIRCRAFT_ART, arrivalVerdict, artKeyForAircraft, etaClock, etaLabel } from './flightBadge'
 import type { HAEntity } from './types'
+import { resetFlightBoard } from './useFlightBoard'
 
 const ENTITIES = new Map<string, HAEntity>([
   [
@@ -77,8 +78,23 @@ function drag(from: { x: number; y: number }, to: { x: number; y: number }) {
 
 afterEach(() => {
   cleanup()
+  // The badge reads a module-level board shared with the Flights page; each test starts it empty.
+  resetFlightBoard()
   vi.unstubAllGlobals()
   vi.useRealTimers()
+})
+
+describe('etaClock / etaLabel', () => {
+  it('renders the backend\'s absolute ETA in the local zone and falls back to its prose', () => {
+    const at = '2026-08-03T23:40:00Z'
+    const expected = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    expect(etaClock({ etaAt: at })).toBe(expected)
+    expect(etaLabel({ etaAt: at, minutesLeft: 41, etaLine: 'stale prose' })).toBe(`ETA ${expected} · 41 min left`)
+    expect(etaLabel({ etaAt: at })).toBe(`ETA ${expected}`)
+    expect(etaLabel({ etaLine: 'in 41 min' })).toBe('in 41 min')
+    expect(etaLabel({ etaAt: 'garbage', etaLine: 'in 41 min' })).toBe('in 41 min')
+    expect(etaLabel(null)).toBeNull()
+  })
 })
 
 describe('AIRCRAFT_ART', () => {
@@ -166,6 +182,7 @@ describe('TrackedAircraftBadge', () => {
     await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
     const tracked = silhouette()!.innerHTML
     cleanup()
+    resetFlightBoard()
 
     await renderBadge({ query: null, mode: null, flight: null, route: null, flights: [] }, {
       aircraft: [{ callsign: 'SWA771', airlineCode: 'WN', type: 'B738', kind: 'jet', fromCode: 'BUR', toCode: 'AUS', distanceKm: 15 }],
@@ -181,6 +198,7 @@ describe('TrackedAircraftBadge', () => {
 
     const widebody = silhouette()!.innerHTML
     cleanup()
+    resetFlightBoard()
 
     await renderBadge(trackPayload())
     await waitFor(() => expect(screen.getByText('SWA771')).toBeTruthy())
@@ -203,6 +221,26 @@ describe('TrackedAircraftBadge', () => {
   it('falls back to the live time-to-run when no schedule clock exists', async () => {
     await renderBadge(trackPayload({ schedule: { delayMin: 0 } }))
     await waitFor(() => expect(screen.getByText('in 41 min')).toBeTruthy())
+  })
+
+  it('prefers the absolute ETA, shown in the local zone, over the server-composed prose', async () => {
+    const etaAt = '2026-08-03T23:40:00Z'
+    const expected = new Date(etaAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    await renderBadge(trackPayload({ schedule: { delayMin: 0 }, etaAt, minutesLeft: 41 }))
+    await waitFor(() => expect(screen.getByText(`Arrives ${expected}`)).toBeTruthy())
+    expect(screen.queryByText('in 41 min')).toBeNull()
+  })
+
+  it('polls the two endpoints once each at mount, not once per consumer', async () => {
+    const fetchMock = mockApi(trackPayload(), EMPTY_SKY)
+    vi.stubGlobal('fetch', fetchMock)
+    await act(async () => {
+      render(<><TrackedAircraftBadge entities={ENTITIES} /><TrackedAircraftBadge entities={ENTITIES} /></>)
+    })
+    await waitFor(() => expect(screen.getAllByText('SWA771').length).toBe(2))
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]))
+    expect(urls.filter((url) => url.includes('flights/track'))).toHaveLength(1)
+    expect(urls.filter((url) => url.includes('flights/nearby'))).toHaveLength(1)
   })
 
   it('still draws an aircraft when the sky is empty', async () => {

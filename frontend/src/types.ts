@@ -23,7 +23,12 @@ export interface DashboardSection {
 
 export interface HealthResponse {
   status: string
-  home_assistant: { configured: boolean; connected: boolean }
+  home_assistant: {
+    configured: boolean
+    connected: boolean
+    /** Set by the backend once Home Assistant rejects its token; reconnecting will not fix that. */
+    auth_failed?: boolean
+  }
 }
 
 export interface DashboardConfigResponse {

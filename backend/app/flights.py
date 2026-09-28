@@ -23,10 +23,11 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from . import flight_sources
+from .bounded_cache import BoundedCache
 
 router = APIRouter(prefix="/api/flights")
 
@@ -240,6 +241,11 @@ COMPASS_POINTS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
 
 # ---------------------------------------------------------------------------
 # In-memory caches (module-level; no disk persistence, single async process)
+#
+# Every cache below is a BoundedCache: keys are chosen by whatever is overhead (icao24, callsign,
+# rounded coordinates), so a plain dict on a panel that runs for weeks only ever grew. Each cache
+# still stores (fetched_at, value) and applies its own TTL rules; the bound is on entry count only.
+# Sizes are a few hours of busy airspace -- generous for a home panel, small in absolute memory.
 # ---------------------------------------------------------------------------
 
 _opensky_token: dict[str, Any] = {"value": None, "expires_at": 0.0}
@@ -293,19 +299,19 @@ def upstream_failing(source: str, now: float | None = None) -> bool:
 
 # key: icao24 (lower) -> (fetched_at, state vector). Carries a tracked flight across the gaps in a
 # rate-limited feed; see fetch_state_by_icao24.
-_state_row_cache: dict[str, tuple[float, list[Any]]] = {}
+_state_row_cache: BoundedCache[str, tuple[float, list[Any]]] = BoundedCache(maxsize=512)
 
 # Single-slot list holding (fetched_at, states) for the whole-planet snapshot; see _all_states.
 _all_states_cache: list[tuple[float, list[Any]]] = []
 
 # key: (round(lat, 2), round(lon, 2), radius_km) -> (fetched_at, states)
-_states_cache: dict[tuple[float, float, float], tuple[float, list[Any]]] = {}
+_states_cache: BoundedCache[tuple[float, float, float], tuple[float, list[Any]]] = BoundedCache(maxsize=64)
 
 # key: callsign (upper) -> (fetched_at, adsbdb flightroute dict | None)
-_route_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_route_cache: BoundedCache[str, tuple[float, dict[str, Any] | None]] = BoundedCache(maxsize=2048)
 
 # key: (icao24 lower, callsign upper | None) -> (fetched_at, adsbdb aircraft dict | None, adsbdb flightroute dict | None)
-_aircraft_cache: dict[tuple[str, str | None], tuple[float, dict[str, Any] | None, dict[str, Any] | None]] = {}
+_aircraft_cache: BoundedCache[tuple[str, str | None], tuple[float, dict[str, Any] | None, dict[str, Any] | None]] = BoundedCache(maxsize=2048)
 
 # Pinned-flight tracking state, guarded by asyncio.Lock (single async process). Keyed by the
 # normalised callsign and insertion-ordered, so the dashboard rotates flights in the order pinned.
@@ -844,7 +850,7 @@ async def resolve_icao24_by_callsign(
     return None
 
 
-_flight_history_cache: dict[str, tuple[float, tuple[str | None, str | None]]] = {}
+_flight_history_cache: BoundedCache[str, tuple[float, tuple[str | None, str | None]]] = BoundedCache(maxsize=1024)
 
 
 async def flight_history(client: httpx.AsyncClient, icao24: str | None, callsign: str | None) -> tuple[str | None, str | None]:
@@ -911,7 +917,7 @@ FLOWN_PATH_MAX_POINTS = 150
 # rather than every ten seconds is not something anyone would notice.
 FLOWN_PATH_CACHE_TTL = 90.0
 
-_flown_path_cache: dict[str, tuple[float, list[dict[str, float]]]] = {}
+_flown_path_cache: BoundedCache[str, tuple[float, list[dict[str, float]]]] = BoundedCache(maxsize=64)
 
 
 def _thin_points(points: list[tuple[float, float]], limit: int) -> list[dict[str, float]]:
@@ -1141,7 +1147,7 @@ async def airlabs_schedule(client: httpx.AsyncClient, iata_number: str | None) -
 
 # key: iata number -> (fetched_at, schedule dict). A schedule changes on the order of minutes, not
 # seconds, so a poll-rate cache here is what keeps the metered/scraped sources to a trickle.
-_schedule_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_schedule_cache: BoundedCache[str, tuple[float, dict[str, Any]]] = BoundedCache(maxsize=256)
 SCHEDULE_CACHE_TTL = 300.0
 # An empty answer is retried sooner than a good one, but not on every poll.
 SCHEDULE_EMPTY_TTL = 120.0
@@ -1167,7 +1173,9 @@ async def resolve_schedule(client: httpx.AsyncClient, iata_number: str | None) -
             return dict(cached[1])
 
     result: dict[str, Any] = {}
-    if flight_sources.budget.allows("flightstats"):
+    # A query FlightStats cannot take (no carrier+number pair) returns {} before any request, so
+    # spending a budget unit on it would only ever shorten the day for real lookups.
+    if flight_sources.split_flight_number(key) and flight_sources.budget.allows("flightstats"):
         flight_sources.budget.spend("flightstats")
         result = await flight_sources.schedule_from_flightstats(client, key, _note_upstream)
 
@@ -1278,7 +1286,14 @@ async def build_aircraft_entry(
 # ---------------------------------------------------------------------------
 
 @router.get("/nearby")
-async def nearby_aircraft(latitude: float, longitude: float, limit: int = 15) -> dict[str, Any]:
+async def nearby_aircraft(
+    # Bounded at the edge: an out-of-range coordinate produced a nonsense bounding box that OpenSky
+    # rejected (a 400 that then read as "OpenSky is down"), and an unbounded `limit` fanned out one
+    # adsbdb lookup per aircraft for as many aircraft as were asked for.
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    limit: int = Query(15, ge=1, le=50),
+) -> dict[str, Any]:
     client = get_http_client()
     states: list[list[Any]] = []
     used_radius = SEARCH_RADII[-1]
@@ -1330,6 +1345,8 @@ def _empty_track_context() -> dict[str, Any]:
         "schedule": {},
         "progress": 0.0,
         "etaLine": None,
+        "etaAt": None,
+        "minutesLeft": None,
         "flownPath": [],
         "awaitReason": None,
     }
@@ -1352,6 +1369,24 @@ def _format_eta(hours_left: float) -> str:
     except ValueError:  # pragma: no cover - non-POSIX strftime fallback
         time_label = eta_dt.strftime("%I:%M %p").lstrip("0")
     return f"ETA ~{time_label} · {minutes_left} min left"
+
+
+def _eta_fields(hours_left: float, now: datetime | None = None) -> dict[str, Any]:
+    """`etaLine` plus machine-readable siblings.
+
+    `etaLine` is rendered in the *server's* zone -- correct for an add-on on the same box as the
+    tablet, wrong for a Compose deployment on a host set to UTC, where every ETA read hours off.
+    `etaAt` is the same instant as an ISO-8601 UTC timestamp so the browser can format it in its
+    own zone, and `minutesLeft` saves it re-deriving the countdown. `etaLine` stays for anything
+    still reading it.
+    """
+    current = now or datetime.now(timezone.utc)
+    eta_at = current + timedelta(hours=hours_left)
+    return {
+        "etaLine": _format_eta(hours_left),
+        "etaAt": eta_at.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "minutesLeft": int(round(hours_left * 60)),
+    }
 
 
 def await_reason(
@@ -1490,8 +1525,7 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
 
     route_out: dict[str, Any] | None = None
     progress = 0.0
-    eta_line: str | None = None
-
+    eta: dict[str, Any] = {"etaLine": None, "etaAt": None, "minutesLeft": None}
     on_ground = bool(state_row[8]) if state_row else None
     mode = "await"
     if state_row is not None:
@@ -1522,7 +1556,7 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
                 if mode == "track" and speed_kt is not None and speed_kt > 30:
                     speed_kmh = velocity * 3.6
                     if speed_kmh > 0:
-                        eta_line = _format_eta(d_to / speed_kmh)
+                        eta = _eta_fields(d_to / speed_kmh)
 
     async with _track_lock:
         live = _track.get(key)
@@ -1549,7 +1583,9 @@ async def _build_pin_context(client: httpx.AsyncClient, pin: dict[str, Any]) -> 
         "route": route_out,
         "schedule": schedule,
         "progress": round(progress, 4),
-        "etaLine": eta_line,
+        "etaLine": eta["etaLine"],
+        "etaAt": eta["etaAt"],
+        "minutesLeft": eta["minutesLeft"],
         "flownPath": path,
         "awaitReason": (
             await_reason(
@@ -1622,6 +1658,40 @@ async def get_track() -> dict[str, Any]:
 # /api/flights/status  (diagnostics)
 # ---------------------------------------------------------------------------
 
+# The status probe is itself an OpenSky request. The board polls /status alongside /nearby, so
+# without a cache the diagnostics spent a share of the very rate limit they exist to explain.
+STATUS_PROBE_TTL = 60.0
+_status_probe_cache: dict[str, Any] = {"at": 0.0, "tokenOk": False, "statesOk": False}
+
+
+async def _opensky_probe() -> tuple[bool, bool]:
+    """(token ok, states endpoint ok), cached for STATUS_PROBE_TTL."""
+    now = time.time()
+    if now - _status_probe_cache["at"] < STATUS_PROBE_TTL:
+        return _status_probe_cache["tokenOk"], _status_probe_cache["statesOk"]
+
+    token_ok = False
+    states_ok = False
+    async with _SharedClient() as client:
+        token_ok = bool(await get_opensky_token(client))
+        if token_ok:
+            headers = await _opensky_headers(client)
+            try:
+                probe = await client.get(
+                    OPENSKY_STATES_URL,
+                    params={"lamin": 30.0, "lomin": -98.0, "lamax": 31.0, "lomax": -97.0},
+                    headers=headers,
+                    timeout=15,
+                )
+                states_ok = probe.status_code == 200
+                if not states_ok:
+                    _note_upstream("opensky_states", f"HTTP {probe.status_code}")
+            except httpx.HTTPError as error:
+                _note_upstream("opensky_states", str(error))
+    _status_probe_cache.update({"at": now, "tokenOk": token_ok, "statesOk": states_ok})
+    return token_ok, states_ok
+
+
 @router.get("/status")
 async def flights_status() -> dict[str, Any]:
     """Which upstreams are configured and reachable right now.
@@ -1636,22 +1706,7 @@ async def flights_status() -> dict[str, Any]:
     token_ok = False
     states_ok = False
     if has_opensky:
-        async with _SharedClient() as client:
-            token_ok = bool(await get_opensky_token(client))
-            if token_ok:
-                headers = await _opensky_headers(client)
-                try:
-                    probe = await client.get(
-                        OPENSKY_STATES_URL,
-                        params={"lamin": 30.0, "lomin": -98.0, "lamax": 31.0, "lomax": -97.0},
-                        headers=headers,
-                        timeout=15,
-                    )
-                    states_ok = probe.status_code == 200
-                    if not states_ok:
-                        _note_upstream("opensky_states", f"HTTP {probe.status_code}")
-                except httpx.HTTPError as error:
-                    _note_upstream("opensky_states", str(error))
+        token_ok, states_ok = await _opensky_probe()
 
     return {
         "opensky": {

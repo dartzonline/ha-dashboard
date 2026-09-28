@@ -11,10 +11,13 @@ import {
   Wind,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { apiUrl } from './api'
 import { RadarPanel } from './RadarPanel'
 import type { RadarOutlook } from './RadarPanel'
+import { tabListKeyHandler } from './tablist'
 import type { HAEntity } from './types'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import { WeatherAtmosphere } from './WeatherAtmosphere'
 import { skyTheme } from './weatherTheme'
 import './WeatherView.css'
@@ -86,6 +89,16 @@ function normalizeCondition(condition: string) {
   return condition.replaceAll('_', ' ').toLowerCase()
 }
 
+/** Sentence case in code rather than `text-transform`, which also capitalised units. */
+function conditionLabel(condition: string) {
+  return normalizeCondition(condition).replace(/^./, (letter) => letter.toUpperCase())
+}
+
+const PANELS = ['Today', 'Hourly', '6-day', 'Radar'] as const
+const PANEL_INDEXES = PANELS.map((_, index) => index)
+const TABPANEL_ID = 'weather-tabpanel'
+const tabId = (index: number) => `weather-tab-${index}`
+
 function getConditionIcon(condition: string) {
   const value = normalizeCondition(condition)
   if (/(lightning|thunder|storm)/.test(value)) return 'storm'
@@ -154,6 +167,7 @@ function todayIsoLocal() {
 export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps) {
   const [externalData, setExternalData] = useState<ExternalWeatherPayload | null>(null)
   const [externalError, setExternalError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   const weather = entities.get('weather.forecast_home') ?? Array.from(entities.values()).find((entity) => entity.entity_id.startsWith('weather.'))
   const outsideTemp = entities.get('sensor.open_weather_temperature')
@@ -198,7 +212,12 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
       })
 
     return () => abort.abort()
-  }, [latitude, longitude, units])
+  }, [latitude, longitude, units, reloadKey])
+
+  function retryExternal() {
+    setExternalError(null)
+    setReloadKey((key) => key + 1)
+  }
 
   const forecastRaw = Array.isArray(weather?.attributes.forecast) ? weather?.attributes.forecast : []
   const forecast: ForecastEntry[] = forecastRaw
@@ -219,7 +238,7 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
     .slice(0, 6)
 
   const currentCondition = String(weather?.state ?? 'unknown')
-  const currentConditionLabel = normalizeCondition(currentCondition).replace(/^./, (letter) => letter.toUpperCase())
+  const currentConditionLabel = conditionLabel(currentCondition)
   const currentTemp = externalData?.current.temperature ?? toNumber(outsideTemp?.state) ?? toNumber(weather?.attributes.temperature)
   const humidityValue = externalData?.current.humidity ?? toNumber(humidity?.state) ?? toNumber(weather?.attributes.humidity)
   const windValue = externalData?.current.windSpeed ?? toNumber(wind?.state) ?? toNumber(weather?.attributes.wind_speed)
@@ -302,12 +321,38 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
     }
   })()
   const sourceUpdatedAt = formatClock(externalData?.current.time ?? null)
+  const hasCoordinates = latitude !== null && longitude !== null
+  const externalPending = hasCoordinates && !externalData && !externalError
+  const sourceMeta = externalData ? `Source: ${externalData.provider}` : null
+  const onTabKey: (event: KeyboardEvent<HTMLElement>) => void = tabListKeyHandler(PANEL_INDEXES, slide, onSelectSlide)
+
+  // Only an absent source is empty; a slow one is loading, and a failed one says so with a retry.
+  function externalState(emptyTitle: string) {
+    if (externalError) return <InlineError message={externalError} onRetry={retryExternal} />
+    if (externalPending) return <LoadingState size="compact" label="Loading forecast" />
+    if (!hasCoordinates) {
+      return <EmptyState size="compact" title="No location for the forecast" hint="Looks for latitude and longitude on the weather.* entity or on zone.home" />
+    }
+    return <EmptyState size="compact" title={emptyTitle} />
+  }
+
+  if (entities.size > 0 && !weather && !outsideTemp && !hasCoordinates) {
+    return (
+      <section className="weather-view" aria-label="Weather forecast">
+        <EmptyState
+          icon={<CloudSun />}
+          title="No weather source found"
+          hint="Looks for a weather.* entity (for example weather.forecast_home) or zone.home coordinates for the external forecast"
+        />
+      </section>
+    )
+  }
 
   return (
     <section className="weather-view" aria-label="Weather forecast">
       <article className={`weather-hero sky-surface ${heroTheme.className}`}>
         <WeatherAtmosphere theme={heroTheme} />
-        <div className="weather-current">
+        <div className="weather-current glass-strong">
           <p className="weather-eyebrow">Outside now</p>
           <div className="weather-current-main">
             <span className="weather-current-icon">{renderConditionIcon(currentCondition, 30)}</span>
@@ -319,55 +364,55 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
           <div className="weather-today-band">
             <span>Today</span>
             <strong>{todaysExternal ? `${formatTemperature(todaysExternal.temperatureMax)} / ${formatTemperature(todaysExternal.temperatureMin)}` : '-- / --'}</strong>
-            <small>{todaysExternal ? `UV max ${todaysExternal.uvMax === null ? '--' : todaysExternal.uvMax.toFixed(1)} · Rain ${todaysExternal.rainChance === null ? '--' : `${Math.round(todaysExternal.rainChance)}%`}` : 'Waiting for external details'}</small>
+            <small>{todaysExternal ? `UV max ${todaysExternal.uvMax === null ? '--' : todaysExternal.uvMax.toFixed(1)} · Rain ${todaysExternal.rainChance === null ? '--' : `${Math.round(todaysExternal.rainChance)}%`}` : 'Waiting for the forecast'}</small>
           </div>
         </div>
         <div className="weather-stat-grid">
-          <div className="weather-stat-card">
-            <Droplets size={16} />
+          <div className="weather-stat-card glass-strong">
+            <Droplets size={16} aria-hidden="true" />
             <strong>{humidityValue === null ? '--' : `${Math.round(humidityValue)}%`}</strong>
             <span>Humidity</span>
           </div>
-          <div className="weather-stat-card">
-            <Wind size={16} />
+          <div className="weather-stat-card glass-strong">
+            <Wind size={16} aria-hidden="true" />
             <strong>{windValue === null ? '--' : `${Math.round(windValue)}`}</strong>
             <span>Wind</span>
           </div>
-          <div className="weather-stat-card">
-            <Umbrella size={16} />
+          <div className="weather-stat-card glass-strong">
+            <Umbrella size={16} aria-hidden="true" />
             <strong>{rainChance === null ? '--' : `${rainChance}%`}</strong>
             <span>Rain chance</span>
           </div>
-          <div className="weather-stat-card">
-            <Sun size={16} />
+          <div className="weather-stat-card glass-strong">
+            <Sun size={16} aria-hidden="true" />
             <strong>{uvNow === null ? '--' : uvNow.toFixed(1)}</strong>
             <span>UV now</span>
           </div>
         </div>
       </article>
 
-      <section className="weather-panel-shell" aria-live="polite">
+      <section className="weather-panel-shell glass" role="tabpanel" id={TABPANEL_ID} aria-labelledby={tabId(slide)}>
         {slide === 0 && (
           <section className="weather-panel today-panel" aria-label="Today details">
             <header className="weather-panel-heading">
-              <strong>Today at a glance</strong>
-              <span>{externalData ? `Source: ${externalData.provider}` : externalError ? 'Source unavailable' : 'Loading external source...'}</span>
+              <h3>Today at a glance</h3>
+              {sourceMeta && <span>{sourceMeta}</span>}
             </header>
-            {externalError && <p className="hourly-error">{externalError}</p>}
+            {externalError && <InlineError message={externalError} onRetry={retryExternal} />}
             <div className="today-metric-grid">
-              <article className="today-metric-card tone-cool">
+              <article className="today-metric-card">
                 <span>Feels like</span>
                 <strong>{formatTemperature(feelsLike)}</strong>
               </article>
-              <article className="today-metric-card tone-warm">
+              <article className="today-metric-card">
                 <span>Precip now</span>
                 <strong>{precipitationNow === null ? '--' : `${precipitationNow.toFixed(2)} ${externalData?.precipitationUnit ?? 'mm'}`}</strong>
               </article>
-              <article className="today-metric-card tone-breeze">
+              <article className="today-metric-card">
                 <span>Wind gusts</span>
                 <strong>{gusts === null ? '--' : `${Math.round(gusts)}`}</strong>
               </article>
-              <article className="today-metric-card tone-daylight">
+              <article className="today-metric-card">
                 <span>Sunrise</span>
                 <strong>{formatClock(todaysExternal?.sunrise ?? null)}</strong>
                 <small>Sunset {formatClock(todaysExternal?.sunset ?? null)}</small>
@@ -383,79 +428,90 @@ export function WeatherView({ entities, slide, onSelectSlide }: WeatherViewProps
 
         {slide === 1 && (
           <section className="weather-panel hourly-strip" aria-label="Next 12 hours forecast">
-            <div className="hourly-strip-title">
-              <strong>Next 12 hours</strong>
-              <span>{externalData ? `Source: ${externalData.provider}` : externalError ? 'Source unavailable' : 'Loading external source...'}</span>
-            </div>
-            {externalError && <p className="hourly-error">{externalError}</p>}
-            <div className="hourly-grid">
-              {upcomingHours.length === 0 && <p className="forecast-empty">Hourly forecast will appear when external data is available.</p>}
-              {upcomingHours.map((slot) => {
-                const isTomorrow = localDayIso(slot.time) !== isoToday
-                return (
-                  <article className={`hourly-card ${isTomorrow ? 'is-tomorrow' : ''}`} key={slot.time}>
-                    <span>{formatHour(slot.time)}{isTomorrow ? ' +1' : ''}</span>
-                    {renderConditionIcon(slot.condition, 18)}
-                    <strong>{formatTemperature(slot.temperature)}</strong>
-                    <small>UV {slot.uv === null ? '--' : slot.uv.toFixed(1)}</small>
-                    <small>{slot.rainChance === null ? '--' : `${Math.round(slot.rainChance)}%`} rain</small>
-                  </article>
-                )
-              })}
-            </div>
+            <header className="weather-panel-heading">
+              <h3>Next 12 hours</h3>
+              {sourceMeta && <span>{sourceMeta}</span>}
+            </header>
+            {upcomingHours.length === 0
+              ? externalState('No hourly forecast from the source')
+              : (
+                <div className="hourly-grid">
+                  {upcomingHours.map((slot) => {
+                    const isTomorrow = localDayIso(slot.time) !== isoToday
+                    return (
+                      <article className={`hourly-card ${isTomorrow ? 'is-tomorrow' : ''}`} key={slot.time}>
+                        <span>{formatHour(slot.time)}{isTomorrow ? ' +1' : ''}</span>
+                        {renderConditionIcon(slot.condition, 18)}
+                        <strong>{formatTemperature(slot.temperature)}</strong>
+                        <small>UV {slot.uv === null ? '--' : slot.uv.toFixed(1)}</small>
+                        <small>{slot.rainChance === null ? '--' : `${Math.round(slot.rainChance)}%`} rain</small>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
           </section>
         )}
 
         {slide === 2 && (
           <section className="weather-panel" aria-label="6 day forecast">
-            <header className="weather-panel-heading compact">
-              <strong>Next 6 days</strong>
-              <span>High/low, rain, and UV outlook</span>
+            <header className="weather-panel-heading">
+              <h3>Next 6 days</h3>
+              <span>High/low, rain and UV outlook</span>
             </header>
-            <section className="forecast-grid">
-              {effectiveForecast.length === 0 && <p className="forecast-empty">Waiting for weather forecast data.</p>}
-              {effectiveForecast.map((day) => {
-                const rain = day.precipitation_probability
-                const rainAmount = day.precipitation
-                return (
-                  <article className="forecast-card" key={`${day.datetime}-${day.condition}`}>
-                    <header>
-                      <strong>{dayLabel(day.datetime)}</strong>
-                      <span>{normalizeCondition(day.condition)}</span>
-                    </header>
-                    <span className="forecast-icon">{renderConditionIcon(day.condition, 24)}</span>
-                    <div className="forecast-temp-row">
-                      <strong>{formatTemperature(day.temperature)}</strong>
-                      <small>{formatTemperature(day.templow)}</small>
-                    </div>
-                    <div className="forecast-meta">
-                      <span>{rain === null ? '--' : `${Math.round(rain)}%`} rain</span>
-                      <span>{rainAmount === null ? '--' : `${rainAmount.toFixed(2)} ${externalData?.precipitationUnit ?? 'mm'}`}</span>
-                      <span>{day.uv_max === null ? 'UV --' : `UV ${day.uv_max.toFixed(1)}`}</span>
-                    </div>
-                  </article>
-                )
-              })}
-            </section>
+            {effectiveForecast.length === 0
+              ? externalState('No daily forecast yet')
+              : (
+                <section className="forecast-grid">
+                  {effectiveForecast.map((day) => {
+                    const rain = day.precipitation_probability
+                    const rainAmount = day.precipitation
+                    return (
+                      <article className="forecast-card" key={`${day.datetime}-${day.condition}`}>
+                        <header>
+                          <strong>{dayLabel(day.datetime)}</strong>
+                          <span>{conditionLabel(day.condition)}</span>
+                        </header>
+                        <span className="forecast-icon">{renderConditionIcon(day.condition, 24)}</span>
+                        <div className="forecast-temp-row">
+                          <strong>{formatTemperature(day.temperature)}</strong>
+                          <small>{formatTemperature(day.templow)}</small>
+                        </div>
+                        <div className="forecast-meta">
+                          <span>{rain === null ? '--' : `${Math.round(rain)}%`} rain</span>
+                          <span>{rainAmount === null ? '--' : `${rainAmount.toFixed(2)} ${externalData?.precipitationUnit ?? 'mm'}`}</span>
+                          <span>{day.uv_max === null ? 'UV --' : `UV ${day.uv_max.toFixed(1)}`}</span>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </section>
+              )}
           </section>
         )}
 
         {slide === 3 && <RadarPanel latitude={latitude} longitude={longitude} outlook={radarOutlook} />}
       </section>
 
-      <div className="weather-pager" role="tablist" aria-label="Weather panels">
-        {['Today', 'Hourly', '6-day', 'Radar'].map((label, index) => (
-          <button
-            key={label}
-            role="tab"
-            aria-selected={slide === index}
-            className={slide === index ? 'is-active' : ''}
-            onClick={() => onSelectSlide(index)}
-            title={`Show ${label} panel`}
-          >
-            <span>{label}</span>
-          </button>
-        ))}
+      <div className="weather-pager" role="tablist" aria-label="Weather panels" onKeyDown={onTabKey}>
+        {PANELS.map((label, index) => {
+          const selected = slide === index
+          return (
+            <button
+              key={label}
+              type="button"
+              role="tab"
+              id={tabId(index)}
+              aria-selected={selected}
+              aria-controls={TABPANEL_ID}
+              tabIndex={selected ? 0 : -1}
+              className={`glass-pill ${selected ? 'is-active' : ''}`}
+              onClick={() => onSelectSlide(index)}
+            >
+              {label}
+            </button>
+          )
+        })}
       </div>
     </section>
   )

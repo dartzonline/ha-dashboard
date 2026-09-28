@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import math
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,7 +10,10 @@ from typing import Any, AsyncIterator
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -21,6 +26,7 @@ from .event_bridge import EventBridge
 from .flights import close_http_client, get_http_client
 from .flights import router as flights_router
 from .ha_client import HomeAssistantClient
+from .photos import close_http_client as close_photos_http_client
 from .photos import router as photos_router
 
 settings = load_settings()
@@ -47,6 +53,67 @@ class NightModeRequest(BaseModel):
     confirm: bool = False
 
 
+# Which Home Assistant services the dashboard may call. The panel is LAN-only by design and has
+# no login of its own, so this list -- not authentication -- is what keeps a wall tablet (or
+# anything else on the LAN) to *device* controls. `None` allows every service in the domain;
+# `homeassistant` is narrowed to the three generic toggles because that domain also carries
+# `restart`, `stop` and `reload_*`. shell_command, python_script, hassio, persistent_notification
+# and the rest are absent on purpose: nothing on the dashboard needs them and each is a way to
+# run code or change configuration.
+SERVICE_ALLOWLIST: dict[str, frozenset[str] | None] = {
+    "light": None,
+    "switch": None,
+    "lock": None,
+    "cover": None,
+    "climate": None,
+    "fan": None,
+    "media_player": None,
+    "vacuum": None,
+    "scene": None,
+    "script": None,
+    "button": None,
+    "update": None,
+    "number": None,
+    "select": None,
+    "input_boolean": None,
+    "input_number": None,
+    "input_select": None,
+    "humidifier": None,
+    "water_heater": None,
+    "remote": None,
+    "siren": None,
+    "homeassistant": frozenset({"turn_on", "turn_off", "toggle"}),
+}
+_SERVICE_NAME = re.compile(r"^[a-z0-9_]+$")
+
+
+def service_allowed(domain: str, service: str) -> bool:
+    if not (_SERVICE_NAME.match(domain) and _SERVICE_NAME.match(service)):
+        return False
+    if domain not in SERVICE_ALLOWLIST:
+        return False
+    allowed = SERVICE_ALLOWLIST[domain]
+    return allowed is None or service in allowed
+
+
+def addon_version(config_path: Path | None = None) -> str:
+    """The `version:` from the add-on's config.yaml, so /docs and the OpenAPI title track releases.
+
+    Parsed with a regex rather than a YAML library because it is one line and pulling in PyYAML for
+    it would be the only reason the runtime needed it. `config.yaml` sits at the repo root in
+    development and is copied to the same place relative to the app in the image.
+    """
+    path = config_path or Path(__file__).resolve().parents[2] / "config.yaml"
+    try:
+        for line in path.read_text().splitlines():
+            match = re.match(r"^version:\s*[\"']?([0-9A-Za-z.\-+]+)[\"']?\s*$", line)
+            if match:
+                return match.group(1)
+    except OSError:
+        pass
+    return "0.0.0"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     task = asyncio.create_task(bridge.run())
@@ -60,9 +127,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await task
     await ha_client.close()
     await close_http_client()
+    await close_photos_http_client()
 
 
-app = FastAPI(title="Home Panel", version="1.2.0", lifespan=lifespan)
+app = FastAPI(title="Home Panel", version=addon_version(), lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -72,6 +140,25 @@ app.add_middleware(
 )
 app.include_router(flights_router)
 app.include_router(photos_router)
+
+
+def _json_safe(value: Any) -> Any:
+    """Replace non-finite floats so a validation error about them can itself be serialised."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_: Request, error: RequestValidationError) -> JSONResponse:
+    # FastAPI's default 422 body echoes the rejected `input`. Python's JSON parser accepts `NaN`,
+    # pydantic then (correctly) refuses it -- and the default handler falls over trying to write
+    # `NaN` back into a strict-JSON response, turning a 422 into a 500. Same body, made encodable.
+    return JSONResponse(status_code=422, content={"detail": _json_safe(jsonable_encoder(error.errors()))})
 
 
 def get_client() -> HomeAssistantClient:
@@ -85,6 +172,11 @@ def require_configuration() -> None:
 
 def upstream_error(error: httpx.HTTPError) -> HTTPException:
     status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else 502
+    if status == 401:
+        # Forwarding Home Assistant's 401 would tell the browser *it* is unauthenticated, which is
+        # both wrong (this app has no login) and misleading -- it is the backend's token that HA
+        # refused. A 502 with the real reason points whoever reads it at the right fix.
+        return HTTPException(502, "Home Assistant rejected the backend's token")
     return HTTPException(status, "Home Assistant request failed")
 
 
@@ -223,7 +315,13 @@ async def health(client: HomeAssistantClient = Depends(get_client)) -> dict[str,
     connected = bridge.connected if settings.configured else await client.health()
     return {
         "status": "ok" if connected else "degraded",
-        "home_assistant": {"configured": settings.configured, "connected": connected},
+        "home_assistant": {
+            "configured": settings.configured,
+            "connected": connected,
+            # True while Home Assistant is refusing the token: a configuration problem the
+            # reconnect loop cannot fix on its own, as opposed to a plain outage.
+            "auth_failed": bridge.auth_failed,
+        },
     }
 
 
@@ -236,11 +334,17 @@ def default_energy_rate() -> float:
 
 
 def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
+    # `is None` rather than truthiness: an empty Night Mode list means "touch no lights" and a rate
+    # of 0.0 means "free electricity" (solar households) -- both are deliberate settings that an
+    # `or` would silently replace with the defaults on every read.
+    lights = overrides.get("nightModeIndoorLights")
+    rate = overrides.get("energyRatePerKwh")
+    ignored = overrides.get("ignoredEntityIds")
     return {
         "sections": overrides.get("sections"),
-        "nightModeIndoorLights": overrides.get("nightModeIndoorLights") or sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT),
-        "energyRatePerKwh": overrides.get("energyRatePerKwh") or default_energy_rate(),
-        "ignoredEntityIds": overrides.get("ignoredEntityIds") or [],
+        "nightModeIndoorLights": sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT) if lights is None else lights,
+        "energyRatePerKwh": default_energy_rate() if rate is None else rate,
+        "ignoredEntityIds": [] if ignored is None else ignored,
     }
 
 
@@ -285,7 +389,9 @@ async def registry() -> dict[str, Any]:
     """
     try:
         return await registry_snapshot.get()
-    except (RuntimeError, TimeoutError) as error:
+    except (RuntimeError, TimeoutError, ConnectionError) as error:
+        # ConnectionError is what the bridge raises when its socket drops mid-command; without it
+        # here that surfaced as a 500 instead of the 502 every other upstream failure gets.
         raise HTTPException(502, f"Home Assistant registry request failed: {error}") from error
 
 
@@ -297,17 +403,60 @@ async def entity_picture(entity_id: str, client: HomeAssistantClient = Depends(g
         raise upstream_error(error) from error
 
     picture = entity.get("attributes", {}).get("entity_picture")
-    if not picture:
+    if not picture or not isinstance(picture, str):
         raise HTTPException(404, "Entity has no picture")
 
-    try:
-        response = await client.raw_get(picture)
-        response.raise_for_status()
-    except httpx.HTTPError as error:
-        raise upstream_error(error) from error
+    if picture.startswith("/") and not picture.startswith("//"):
+        # A Home-Assistant-relative path (`/api/media_player_proxy/...`, `/api/image/...`) needs
+        # the backend's token, which is exactly why the browser goes through this route at all.
+        try:
+            response = await client.raw_get(picture)
+            response.raise_for_status()
+        except httpx.HTTPError as error:
+            raise upstream_error(error) from error
+        if len(response.content) > ENTITY_PICTURE_MAX_BYTES:
+            raise HTTPException(502, "Entity picture is too large to proxy")
+        body = response.content
+        media_type = response.headers.get("content-type", "image/jpeg")
+    elif picture.startswith(("http://", "https://")):
+        # Absolute URLs (Spotify/Sonos album art, camera snapshots on other hosts) must go out on
+        # a *plain* client: the HA client attaches the token to every request it makes, and
+        # sending that bearer token to whatever CDN an integration named would leak it.
+        body, media_type = await _fetch_external_picture(picture)
+    else:
+        raise HTTPException(404, "Entity picture is not a fetchable URL")
 
-    media_type = response.headers.get("content-type", "image/jpeg")
-    return Response(content=response.content, media_type=media_type)
+    return Response(
+        content=body,
+        media_type=media_type,
+        # Album art changes with the track, so this is short; `private` because the browser cache
+        # is the only place it belongs (the response depends on which HA this backend talks to).
+        headers={"Cache-Control": "private, max-age=300"},
+    )
+
+
+# Album art and camera stills are well under a megabyte; the cap stops a misbehaving upstream
+# (or a huge camera snapshot) from being buffered whole into memory on every poll.
+ENTITY_PICTURE_MAX_BYTES = 5 * 1024 * 1024
+
+
+async def _fetch_external_picture(url: str) -> tuple[bytes, str]:
+    """Streamed so the size cap aborts the download instead of just rejecting it afterwards."""
+    try:
+        async with get_http_client().stream("GET", url, follow_redirects=True, timeout=15) as response:
+            response.raise_for_status()
+            media_type = response.headers.get("content-type", "image/jpeg")
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > ENTITY_PICTURE_MAX_BYTES:
+                    raise HTTPException(502, "Entity picture is too large to proxy")
+                chunks.append(chunk)
+    except httpx.HTTPError as error:
+        status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else 502
+        raise HTTPException(status if 400 <= status < 600 else 502, "Entity picture request failed") from error
+    return b"".join(chunks), media_type
 
 
 @app.get("/api/weather/external")
@@ -412,6 +561,8 @@ async def call_service(
     data: dict[str, Any],
     client: HomeAssistantClient = Depends(get_client),
 ) -> list[dict[str, Any]]:
+    if not service_allowed(domain, service):
+        raise HTTPException(403, f"Service {domain}.{service} is not allowed from the dashboard")
     try:
         if settings.configured:
             return await bridge.call_service(domain, service, data)
@@ -459,7 +610,10 @@ async def night_mode(
             or "garrage" in entity_name(entity)
         )
     ]
-    indoor_lights = set(load_overrides().get("nightModeIndoorLights") or NIGHT_MODE_INDOOR_LIGHTS_DEFAULT)
+    # Same `is None` rule as config_response: an explicitly empty list means "Night Mode turns off
+    # no lights", not "use the bundled defaults".
+    configured_lights = load_overrides().get("nightModeIndoorLights")
+    indoor_lights = set(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT if configured_lights is None else configured_lights)
     lights = [
         str(entity["entity_id"])
         for entity in all_states

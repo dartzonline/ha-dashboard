@@ -1,1 +1,15 @@
-.is-dimmed { filter: brightness(.78) saturate(.92); transition: filter 1.2s ease; }
+/* After sunset the panel dims behind a fixed overlay rather than `filter: brightness()` on the
+   root: a filter on the root makes it the containing block for every `position: fixed` child
+   (sheets, alerts, the nav rail all ended up positioned against the scrolled shell) and costs a
+   full-tree filter pass on every frame. An overlay is one composited layer that only fades. */
+.command-center::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, .28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+}
+.command-center.is-dimmed::after { opacity: 1; }

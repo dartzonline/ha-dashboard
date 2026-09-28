@@ -1,83 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Info, Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Info, MapPinOff, Map as MapIcon, Plane, PlaneTakeoff, Plus, Radar as RadarIcon, Search, X } from 'lucide-react'
 import { AirlineLogo } from './AirlineLogo'
 import { ShowcaseAircraft, type ShowcaseAircraftType } from './aircraftSilhouettes'
 import { AllRoutesMap } from './AllRoutesMap'
 import { apiUrl } from './api'
+import { etaLabel } from './flightBadge'
 import { RouteMap } from './RouteMap'
 import type { HAEntity } from './types'
+import { tabListKeyHandler } from './tablist'
+import { publishTrack, refreshFlightBoard, useFlightBoard } from './useFlightBoard'
+import type { Aircraft, TrackEntry, TrackResponse } from './useFlightBoard'
+import { homeCoordinates } from './useServiceStatus'
+import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import './FlightsView.css'
-
-interface Aircraft {
-  icao24: string
-  callsign: string
-  airline: string | null
-  airlineCode: string | null
-  type: string | null
-  reg: string | null
-  kind: 'jet' | 'heavy' | 'bizjet' | 'turboprop' | 'light' | 'heli'
-  fromCode: string | null
-  fromCity: string | null
-  fromCountry: string | null
-  toCode: string | null
-  toCity: string | null
-  toCountry: string | null
-  altitudeFt: number | null
-  speedKt: number | null
-  verticalRateFpm: number | null
-  onGround: boolean
-  trackDeg: number | null
-  bearingDeg: number | null
-  distanceKm: number | null
-  lat: number
-  lon: number
-}
-
-interface NearbyResponse {
-  home: { lat: number; lon: number; rangeKm: number }
-  updatedAt: string
-  aircraft: Aircraft[]
-}
-
-interface TrackSchedule {
-  depScheduled?: string
-  depActual?: string
-  arrScheduled?: string
-  arrEstimated?: string
-  delayMin?: number
-  status?: string
-}
-
-interface TrackRoute {
-  fromCode: string | null
-  fromCity: string | null
-  /** Endpoint coordinates, present whenever the airport resolved to a known field. */
-  fromLat?: number | null
-  fromLon?: number | null
-  toCode: string | null
-  toCity: string | null
-  toLat?: number | null
-  toLon?: number | null
-}
-
-interface TrackEntry {
-  query: string | null
-  mode: 'track' | 'landed' | 'await' | null
-  flight: Aircraft | null
-  route: TrackRoute | null
-  schedule: TrackSchedule
-  progress: number
-  etaLine: string | null
-  /** Real historical positions since departure, earliest first -- the actual flown track. */
-  flownPath?: { lat: number; lon: number }[]
-  /** Why a pinned flight has no live position yet — set by the backend only while awaiting. */
-  awaitReason?: string | null
-}
-
-/** The first pinned flight is flattened at the top level; `flights` lists every pin. */
-interface TrackResponse extends TrackEntry {
-  flights?: TrackEntry[]
-}
 
 interface FlightsViewProps {
   entities: Map<string, HAEntity>
@@ -95,6 +30,8 @@ const TICK_COUNT = 12
 
 // Matches the backend pin cap: pinning beyond this evicts the oldest.
 const MAX_TRACKED = 6
+/** Rows on the radar list; the shared poller fetches more so the header can find an airliner among them. */
+const NEARBY_ROWS = 15
 
 // Real-map backdrop behind the radar overlay: free, keyless CARTO dark tiles (the same
 // source FlyInk-Board's own web dashboard used for its radar map), positioned by ordinary
@@ -111,15 +48,6 @@ function lonToTileX(lon: number, zoom: number) {
 function latToTileY(lat: number, zoom: number) {
   const rad = (lat * Math.PI) / 180
   return Math.floor(((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * 2 ** zoom)
-}
-
-function toNumber(value: unknown): number | null {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function fromAttributesNumber(entity: HAEntity | undefined, key: string) {
-  return toNumber(entity?.attributes[key])
 }
 
 function formatNumber(value: number, maximumFractionDigits = 0) {
@@ -178,8 +106,8 @@ function polarPoint(bearingDeg: number, distanceKm: number | null, rangeKm: numb
   }
 }
 
-function DelayBadge({ delayMin }: { delayMin: number | undefined }) {
-  if (delayMin === undefined) return <span className="delay-badge tone-muted">--</span>
+function DelayBadge({ delayMin }: { delayMin: number | null | undefined }) {
+  if (delayMin === undefined || delayMin === null) return <span className="delay-badge tone-muted">--</span>
   if (delayMin >= 5) return <span className="delay-badge tone-danger">{`+${formatNumber(delayMin)} MIN`}</span>
   if (delayMin <= -2) return <span className="delay-badge tone-good">{`${formatNumber(Math.abs(delayMin))} MIN EARLY`}</span>
   return <span className="delay-badge tone-neutral">On time</span>
@@ -220,23 +148,40 @@ function TrackShowcase() {
 
   const jet = SHOWCASE[index]
 
-  function handleTouchStart(event: React.TouchEvent<HTMLDivElement>) {
+  // Pointer events carry the gesture so a mouse drag works as well as a finger. Every event this
+  // pane handles stops at the pane, touch included: App's page swipe listens for touch as well as
+  // pointer events, and a drag through the jets must not also turn the page.
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
     event.stopPropagation()
-    swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }
+    swipeStart.current = { x: event.clientX, y: event.clientY }
   }
 
-  function handleTouchEnd(event: React.TouchEvent<HTMLDivElement>) {
+  function handlePointerUp(event: React.PointerEvent<HTMLDivElement>) {
     event.stopPropagation()
     if (!swipeStart.current) return
-    const deltaX = event.changedTouches[0].clientX - swipeStart.current.x
-    const deltaY = event.changedTouches[0].clientY - swipeStart.current.y
+    const deltaX = event.clientX - swipeStart.current.x
+    const deltaY = event.clientY - swipeStart.current.y
     swipeStart.current = null
     if (Math.abs(deltaX) < 42 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return
     move(deltaX < 0 ? 1 : -1)
   }
 
+  function stopTouch(event: React.TouchEvent<HTMLDivElement>) {
+    event.stopPropagation()
+  }
+
   return (
-    <div className="track-showcase" aria-hidden="true" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} onTouchCancel={() => { swipeStart.current = null }}>
+    <div
+      className="track-showcase"
+      aria-hidden="true"
+      data-swipe-ignore
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={(event) => { event.stopPropagation(); swipeStart.current = null }}
+      onTouchStart={stopTouch}
+      onTouchEnd={stopTouch}
+      onTouchCancel={stopTouch}
+    >
       <div className="showcase-stage">
         <span className="showcase-ring showcase-ring-a" />
         <span className="showcase-ring showcase-ring-b" />
@@ -304,6 +249,7 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
   const schedule = entry.schedule ?? {}
   const progressPct = Math.round(Math.min(Math.max(entry.progress ?? 0, 0), 1) * 100)
   const callsign = entry.flight?.callsign ?? entry.query ?? '—'
+  const eta = etaLabel(entry)
 
   return (
     <article
@@ -329,12 +275,12 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
         <span className={`track-mode tone-${modeTone(entry.mode)}`}>{modeLabel(entry.mode)}</span>
         <button
           type="button"
-          className="track-list-remove"
+          className="track-list-remove hit-area"
           aria-label={`Stop tracking ${entry.query ?? 'flight'}`}
           disabled={busy || !entry.query}
           onClick={(event) => { event.stopPropagation(); onRemove() }}
         >
-          <X size={13} />
+          <X size={16} />
         </button>
       </header>
 
@@ -351,8 +297,8 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
       </div>
 
       <div className="track-progress">
-        <div className="track-progress-track">
-          <div className="track-progress-fill" style={{ width: `${progressPct}%` }} />
+        <div className="track-progress-track glass-inset">
+          <div className="track-progress-fill" style={{ transform: `scaleX(${progressPct / 100})` }} />
           <span className="track-progress-plane" style={{ left: `${progressPct}%` }}><Plane size={12} /></span>
         </div>
       </div>
@@ -372,7 +318,7 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
         </div>
       </div>
 
-      {entry.etaLine && <p className="track-eta">{entry.etaLine}</p>}
+      {eta && <p className="track-eta">{eta}</p>}
 
       {/* "Awaiting" alone reads as a broken tracker; the backend says which kind of waiting it is. */}
       {entry.mode === 'await' && entry.awaitReason && (
@@ -395,97 +341,27 @@ function TrackedFlightCard({ entry, isFocused, mappable, onFocus, onRemove, busy
   )
 }
 
-/**
- * Runs `callback` now and every `intervalMs`, but only while the page is visible — each poll fans
- * out to one metered upstream call per pinned flight, so polling a dashboard nobody is looking at
- * is what exhausts the flight API quota. Becoming visible again fetches immediately so the panel
- * never shows a full interval of stale data.
- *
- * `callback` is passed a `cancelled` probe and must consult it before calling setState, since a
- * response can land after the effect that started it has been torn down.
- */
-function usePolledEffect(callback: (cancelled: () => boolean) => void, intervalMs: number) {
-  useEffect(() => {
-    let cancelled = false
-
-    function poll() {
-      if (document.hidden) return
-      callback(() => cancelled)
-    }
-
-    poll()
-    const timer = window.setInterval(poll, intervalMs)
-    document.addEventListener('visibilitychange', poll)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', poll)
-    }
-  }, [callback, intervalMs])
-}
-
 export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps) {
-  const [nearby, setNearby] = useState<NearbyResponse | null>(null)
-  const [nearbyError, setNearbyError] = useState<string | null>(null)
   const [hoveredCallsign, setHoveredCallsign] = useState<string | null>(null)
   const [trackNotice, setTrackNotice] = useState<string | null>(null)
+  const noticeTimer = useRef<number | undefined>(undefined)
 
-  const [track, setTrack] = useState<TrackResponse | null>(null)
   const [queryInput, setQueryInput] = useState('')
   const [trackBusy, setTrackBusy] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [quickAddValue, setQuickAddValue] = useState('')
 
-  const weather = entities.get('weather.forecast_home') ?? Array.from(entities.values()).find((entity) => entity.entity_id.startsWith('weather.'))
-  const homeZone = entities.get('zone.home')
+  const coordinates = homeCoordinates(entities)
+  const latitude = coordinates?.latitude ?? null
+  const longitude = coordinates?.longitude ?? null
 
-  const latitude = useMemo(() => {
-    const candidates = [
-      fromAttributesNumber(weather, 'latitude'),
-      fromAttributesNumber(homeZone, 'latitude'),
-    ]
-    return candidates.find((value) => value !== null) ?? null
-  }, [homeZone, weather])
+  // Both feeds come from the poller the header badge shares, so the page adds no requests of its own.
+  const { track, trackError, nearby, nearbyError } = useFlightBoard(coordinates)
 
-  const longitude = useMemo(() => {
-    const candidates = [
-      fromAttributesNumber(weather, 'longitude'),
-      fromAttributesNumber(homeZone, 'longitude'),
-    ]
-    return candidates.find((value) => value !== null) ?? null
-  }, [homeZone, weather])
-
-  const loadNearby = useCallback((cancelled: () => boolean) => {
-    if (latitude === null || longitude === null) return
-    fetch(apiUrl(`flights/nearby?latitude=${latitude}&longitude=${longitude}&limit=15`))
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Flight radar unavailable (${response.status})`)
-        const payload: NearbyResponse = await response.json()
-        if (cancelled()) return
-        setNearby(payload)
-        setNearbyError(null)
-      })
-      .catch((error: unknown) => {
-        if (cancelled()) return
-        setNearbyError(error instanceof Error ? error.message : 'Flight radar failed')
-      })
-  }, [latitude, longitude])
-
-  usePolledEffect(loadNearby, 60_000)
-
-  const loadTrack = useCallback((cancelled: () => boolean) => {
-    fetch(apiUrl('flights/track'))
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Track unavailable (${response.status})`)
-        const payload: TrackResponse = await response.json()
-        if (!cancelled()) setTrack(payload)
-      })
-      .catch(() => {
-        // Keep the last known tracked flight on screen; the next poll will retry.
-      })
+  // A notice that outlives the page would call setState on an unmounted component.
+  useEffect(() => () => {
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
   }, [])
-
-  usePolledEffect(loadTrack, 30_000)
 
   async function trackFlight(query: string) {
     const trimmed = query.trim()
@@ -499,13 +375,14 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
       })
       if (response.ok) {
         const payload: TrackResponse = await response.json()
-        setTrack(payload)
+        publishTrack(payload)
         setQueryInput('')
         setTrackNotice(`Tracking ${trimmed}`)
-        window.setTimeout(() => setTrackNotice(null), 4000)
+        if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+        noticeTimer.current = window.setTimeout(() => setTrackNotice(null), 4000)
       }
     } catch {
-      // Network hiccup; the 30s poll picks it back up.
+      // Network hiccup; the shared poll picks it back up.
     } finally {
       setTrackBusy(false)
     }
@@ -523,9 +400,9 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     setTrackBusy(true)
     try {
       await fetch(apiUrl('flights/track'), { method: 'DELETE' })
-      setTrack(null)
+      publishTrack(null)
     } catch {
-      // Network hiccup; the 30s poll reconciles state.
+      // Network hiccup; the shared poll reconciles state.
     } finally {
       setTrackBusy(false)
     }
@@ -537,17 +414,22 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
       const response = await fetch(apiUrl(`flights/track?query=${encodeURIComponent(query)}`), { method: 'DELETE' })
       if (response.ok) {
         const payload: TrackResponse = await response.json()
-        setTrack(payload)
+        publishTrack(payload)
       }
     } catch {
-      // Network hiccup; the 30s poll reconciles state.
+      // Network hiccup; the shared poll reconciles state.
     } finally {
       setTrackBusy(false)
     }
   }
 
   const rangeKm = nearby?.home.rangeKm ?? 100
-  const aircraftSorted = [...(nearby?.aircraft ?? [])].sort((left, right) => (left.distanceKm ?? Infinity) - (right.distanceKm ?? Infinity))
+  const aircraftSorted = useMemo<Aircraft[]>(
+    () => [...(nearby?.aircraft ?? [])]
+      .sort((left, right) => (left.distanceKm ?? Infinity) - (right.distanceKm ?? Infinity))
+      .slice(0, NEARBY_ROWS),
+    [nearby],
+  )
 
   const mapTiles = useMemo(() => {
     if (latitude === null || longitude === null) return []
@@ -624,9 +506,11 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
   // must pass through untouched.
   const mapSwipe = useRef<{ x: number; y: number } | null>(null)
   function onMapPointerDown(event: React.PointerEvent) {
+    event.stopPropagation()
     mapSwipe.current = { x: event.clientX, y: event.clientY }
   }
   function onMapPointerUp(event: React.PointerEvent) {
+    event.stopPropagation()
     const start = mapSwipe.current
     mapSwipe.current = null
     if (!start) return
@@ -636,9 +520,41 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
     stepMap(deltaX < 0 ? 1 : -1)
   }
 
+  const panels = [
+    { label: 'Radar', id: 'flights-panel-radar', tabId: 'flights-tab-radar' },
+    { label: 'Track', id: 'flights-panel-track', tabId: 'flights-tab-track' },
+  ]
+  const activePanel = panels[slide] ?? panels[0]
+
+  // The nearby list has four honest states, and each needs its own words: no home location means
+  // the radar can never load, which is different from a feed that failed or a sky that is empty.
+  let nearbyState: React.ReactNode = null
+  if (!coordinates) {
+    nearbyState = (
+      <EmptyState
+        size="compact"
+        icon={<MapPinOff />}
+        title="Home location not set"
+        hint="Looks for latitude and longitude on zone.home or a weather.* entity"
+      />
+    )
+  } else if (nearbyError && aircraftSorted.length === 0) {
+    nearbyState = <InlineError message={`Radar feed unavailable: ${nearbyError}`} onRetry={refreshFlightBoard} />
+  } else if (!nearby && !nearbyError) {
+    nearbyState = <LoadingState size="compact" label="Loading nearby traffic" />
+  } else if (aircraftSorted.length === 0) {
+    nearbyState = <EmptyState size="compact" icon={<RadarIcon />} title="No aircraft in range" hint={`Nothing reporting within ${formatNumber(rangeKm)} km of home`} />
+  }
+
   return (
     <section className="flights-view" aria-label="Flight tracker">
-      <div className="flights-panel-shell" aria-live="polite">
+      <div
+        className="flights-panel-shell glass"
+        role="tabpanel"
+        id={activePanel.id}
+        aria-labelledby={activePanel.tabId}
+        aria-live="polite"
+      >
         {slide === 0 && (
           <section className="flights-panel radar-panel" aria-label="Nearby aircraft radar">
             <div className="radar-column">
@@ -703,27 +619,26 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                 </svg>
                 <div className="radar-sweep" aria-hidden="true" />
               </div>
-              <p className="radar-meta">
-                {nearbyError ? nearbyError : nearby ? `${aircraftSorted.length} tracked within ${formatNumber(rangeKm)} km` : 'Loading nearby traffic…'}
-              </p>
+              {nearby && <p className="radar-meta">{`${aircraftSorted.length} tracked within ${formatNumber(rangeKm)} km`}</p>}
             </div>
 
             <div className="flights-list-column">
               <header className="flights-list-heading">
-                <span><RadarIcon size={16} /></span>
+                <span aria-hidden="true"><RadarIcon size={16} /></span>
                 <div><strong>Nearby traffic</strong><p>Tap a row to track it</p></div>
               </header>
-              {trackNotice && <p className="flights-list-notice">{trackNotice}</p>}
+              {trackNotice && <p className="flights-list-notice" role="status">{trackNotice}</p>}
+              {/* A failed poll with the last list still on screen: say so without hiding the list. */}
+              {nearbyError && aircraftSorted.length > 0 && <InlineError message={`Radar feed stale: ${nearbyError}`} onRetry={refreshFlightBoard} />}
               <div className="flights-list">
-                {aircraftSorted.length === 0 && (
-                  <p className="flights-list-empty">{nearbyError ? 'Radar feed unavailable right now.' : 'No aircraft in range.'}</p>
-                )}
+                {nearbyState}
                 {aircraftSorted.map((aircraft) => {
                   const phase = phaseOf(aircraft)
                   const isActive = hoveredCallsign === aircraft.callsign
                   return (
                     <button
                       key={aircraft.icao24}
+                      type="button"
                       className={`flight-row ${isActive ? 'is-highlighted' : ''}`}
                       onClick={() => trackFlight(aircraft.callsign)}
                       title={`Track ${aircraft.callsign}`}
@@ -753,7 +668,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
         {slide === 1 && (
           <section className="flights-panel track-panel" aria-label="Track a flight">
             {screen ? (
-              <div className="track-stage" onPointerDown={onMapPointerDown} onPointerUp={onMapPointerUp}>
+              <div className="track-stage" data-swipe-ignore onPointerDown={onMapPointerDown} onPointerUp={onMapPointerUp}>
                 {screen.kind === 'all' ? (
                   <AllRoutesMap
                     routes={mappableFlights.map((entry) => ({
@@ -785,7 +700,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                     flownPath={screen.entry.flownPath}
                     progress={screen.entry.progress}
                     callsign={screen.entry.flight?.callsign ?? screen.entry.query}
-                    caption={screen.entry.mode === 'await' ? 'Route · awaiting position' : screen.entry.etaLine ?? shortModeLabel(screen.entry.mode)}
+                    caption={screen.entry.mode === 'await' ? 'Route · awaiting position' : etaLabel(screen.entry) ?? shortModeLabel(screen.entry.mode)}
                   />
                 )}
                 {mapScreens.length > 1 && (
@@ -814,8 +729,8 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                 trackFlight(queryInput)
               }}
             >
-              <div className="track-input-wrap">
-                <Search size={15} />
+              <div className="track-input-wrap glass-inset">
+                <Search size={15} aria-hidden="true" />
                 <input
                   type="text"
                   value={queryInput}
@@ -833,11 +748,15 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
 
             {atTrackCap && <p className="track-cap-hint">Board full ({MAX_TRACKED}) — adding another drops the oldest.</p>}
 
+            {trackError && <InlineError message={trackedFlights.length > 0 ? `Tracker stale: ${trackError}` : `Tracker unavailable: ${trackError}`} onRetry={refreshFlightBoard} />}
+
             {trackedFlights.length === 0 ? (
-              <div className="track-empty">
-                <PlaneTakeoff size={28} />
-                <p>No flight pinned. Track one from the Radar page or type a flight number above.</p>
-              </div>
+              <EmptyState
+                className="track-empty"
+                icon={<PlaneTakeoff />}
+                title="No flight pinned"
+                hint="Track one from the Radar page or type a flight number above."
+              />
             ) : (
               <div className="track-board" aria-label="Tracked flights">
                 {trackedFlights.map((entry, index) => (
@@ -863,7 +782,7 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
         <div className="flights-quick-add">
           {quickAddOpen ? (
             <form
-              className="quick-add-form"
+              className="quick-add-form glass-pill"
               onSubmit={(event) => { event.preventDefault(); void submitQuickAdd() }}
             >
               <Search size={14} aria-hidden="true" />
@@ -885,26 +804,38 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
               </button>
             </form>
           ) : (
-            <button type="button" className="quick-add-fab" onClick={() => setQuickAddOpen(true)} title="Track a flight by number" aria-label="Track a flight by number">
+            <button type="button" className="quick-add-fab glass-pill" onClick={() => setQuickAddOpen(true)} title="Track a flight by number" aria-label="Track a flight by number">
               <Plus size={20} />
             </button>
           )}
         </div>
       )}
 
-      <div className="flights-pager" role="tablist" aria-label="Flights panels">
-        {['Radar', 'Track'].map((label, index) => (
-          <button
-            key={label}
-            role="tab"
-            aria-selected={slide === index}
-            className={slide === index ? 'is-active' : ''}
-            onClick={() => onSelectSlide(index)}
-            title={`Show ${label} panel`}
-          >
-            <span>{label}</span>
-          </button>
-        ))}
+      <div
+        className="flights-pager"
+        role="tablist"
+        aria-label="Flights panels"
+        onKeyDown={tabListKeyHandler(panels.map((_, index) => index), slide, onSelectSlide)}
+      >
+        {panels.map((panel, index) => {
+          const selected = slide === index
+          return (
+            <button
+              key={panel.label}
+              type="button"
+              role="tab"
+              id={panel.tabId}
+              aria-selected={selected}
+              aria-controls={panel.id}
+              tabIndex={selected ? 0 : -1}
+              className={`glass-pill ${selected ? 'is-active' : ''}`.trim()}
+              onClick={() => onSelectSlide(index)}
+              title={`Show ${panel.label} panel`}
+            >
+              <span>{panel.label}</span>
+            </button>
+          )
+        })}
       </div>
     </section>
   )

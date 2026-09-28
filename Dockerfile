@@ -22,6 +22,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/app ./backend/app
 COPY backend/addon_entrypoint.py ./backend/addon_entrypoint.py
+# main.py reads `version:` from here so the API reports the add-on's real release number.
+COPY config.yaml ./config.yaml
 COPY --from=frontend-build /build/frontend/dist ./frontend/dist
 
 RUN mkdir -p backend/data

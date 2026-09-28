@@ -1,18 +1,18 @@
 /* Every tracked flight on one basemap. Where RouteMap gives one route the whole frame, this trades
    that detail for the comparison: which flights are converging, which is furthest along. Each route
-   takes its own hue so a line can be followed from its label to its aircraft. */
+   takes its own series hue, in pin order, so a line can be followed from its label to its aircraft.
+   The flight-number label on each line is its legend: a direct label beats a key in the corner. */
 .all-routes-map {
   position: relative;
   min-height: 0;
   height: 100%;
-  border-radius: 12px;
-  background: #0a0b0f;
+  border-radius: var(--r-md);
+  background: var(--surface-solid);
   overflow: hidden;
   isolation: isolate;
 }
 
-.all-routes-map.is-empty { display: grid; place-items: center; border: 1px dashed var(--border); }
-.all-routes-empty { margin: 0; color: var(--muted); font-size: .82rem; }
+.all-routes-map.is-empty { display: grid; place-items: center; background: transparent; }
 
 .all-routes-tiles { position: absolute; inset: 0; }
 .all-routes-tiles img {
@@ -25,14 +25,15 @@
 
 .all-routes-overlay { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; }
 
-/* Six hues, cycled by index. Distinct enough to tell apart at a glance on a wall panel, and all
-   within the dashboard's own palette rather than arbitrary primaries. */
-.all-route.tone-0 { color: #4da3ff; }
-.all-route.tone-1 { color: #46d9a8; }
-.all-route.tone-2 { color: #ffb454; }
-.all-route.tone-3 { color: #c98bff; }
-.all-route.tone-4 { color: #ff7a8a; }
-.all-route.tone-5 { color: #5fe0e6; }
+/* The fixed-order categorical set: never cycled, a seventh route folds into "other". */
+.all-route.tone-0, .all-route-label.tone-0 { --route-color: var(--chart-1); }
+.all-route.tone-1, .all-route-label.tone-1 { --route-color: var(--chart-2); }
+.all-route.tone-2, .all-route-label.tone-2 { --route-color: var(--chart-3); }
+.all-route.tone-3, .all-route-label.tone-3 { --route-color: var(--chart-4); }
+.all-route.tone-4, .all-route-label.tone-4 { --route-color: var(--chart-5); }
+.all-route.tone-5, .all-route-label.tone-5 { --route-color: var(--chart-6); }
+.all-route.tone-other, .all-route-label.tone-other { --route-color: var(--muted-2); }
+.all-route { color: var(--route-color); }
 
 .all-route-remaining {
   fill: none;
@@ -52,17 +53,18 @@
   filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
 }
 
-.all-route-end { fill: currentColor; stroke: #05070d; stroke-width: 1.2; }
-.all-route-glyph { fill: currentColor; stroke: #05070d; stroke-width: 1; }
+.all-route-end { fill: currentColor; stroke: var(--canvas); stroke-width: 1.2; }
+.all-route-glyph { fill: currentColor; stroke: var(--canvas); stroke-width: 1; }
 
 /* A landed flight stays on the board for a while; greying it out keeps it from competing with the
    flights still in the air without removing it from the picture. */
-.all-route.is-landed { color: var(--muted); }
+.all-route.is-landed, .all-route-label.is-landed { --route-color: var(--muted); }
 .all-route.is-landed .all-route-flown { filter: none; }
 
 /* Labels sit outside the SVG so they keep normal text rendering and stay upright. Centred on the
    aircraft and lifted clear of the line, which is why they can overlap on converging routes --
-   pointer-events are off so they never block a tap on the map beneath. */
+   pointer-events are off so they never block a tap on the map beneath. The route's hue is on the
+   edge and the leading swatch; the text itself stays ink so every label reads the same. */
 .all-route-label {
   position: absolute;
   z-index: 3;
@@ -71,33 +73,32 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-  background: color-mix(in srgb, #05070d 82%, transparent);
-  color: currentColor;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid color-mix(in srgb, var(--route-color) 60%, transparent);
+  background-color: var(--glass-bg-strong);
+  box-shadow: var(--glass-edge);
+  color: var(--text);
   line-height: 1.1;
   white-space: nowrap;
   pointer-events: none;
 }
 
-.all-route-label strong { font-size: .72rem; font-weight: 700; letter-spacing: .02em; }
-.all-route-label small { font-size: .6rem; color: var(--muted); letter-spacing: .04em; }
-
-.all-route-label.tone-0 { color: #4da3ff; }
-.all-route-label.tone-1 { color: #46d9a8; }
-.all-route-label.tone-2 { color: #ffb454; }
-.all-route-label.tone-3 { color: #c98bff; }
-.all-route-label.tone-4 { color: #ff7a8a; }
-.all-route-label.tone-5 { color: #5fe0e6; }
-.all-route-label.is-landed { color: var(--muted); }
+.all-route-label strong { display: inline-flex; align-items: center; gap: 5px; font-size: .72rem; font-weight: 700; letter-spacing: .02em; }
+.all-route-label strong::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--route-color); }
+.all-route-label small { font-size: .66rem; color: var(--muted); letter-spacing: .04em; }
 
 .all-routes-credit {
   position: absolute;
-  right: 6px;
-  bottom: 4px;
+  right: 8px;
+  bottom: 6px;
   z-index: 4;
   font-size: .55rem;
   color: color-mix(in srgb, var(--muted) 75%, transparent);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
   pointer-events: none;
 }
+
+/* Attribution never sits on raw map tiles: a small near-opaque backing keeps it legible over bright
+   imagery without competing with the data. */
+.all-routes-credit { padding: 1px 7px; border-radius: 6px; background: var(--glass-bg-strong); color: var(--muted); font-size: .6rem; text-shadow: none; }

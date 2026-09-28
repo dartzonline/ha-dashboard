@@ -3,7 +3,6 @@
   /* .weather-panel starts its rows at the top; the map row has to claim the leftover height
      instead, or the scope collapses to a letterbox strip. */
   align-content: stretch;
-  gap: 8px;
 }
 
 .radar-scope {
@@ -14,7 +13,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--r-md);
   background: var(--canvas);
   overflow: hidden;
 }
@@ -39,6 +38,8 @@
   filter: saturate(.7) brightness(1.05);
 }
 
+/* RainViewer's own colour scheme is kept as-is: the returns are baked into the tile imagery, so
+   any recolouring or legend of ours would disagree with what is drawn. */
 .radar-precip {
   /* Screen keeps the map legible under the returns instead of the radar blanking it out. */
   mix-blend-mode: screen;
@@ -51,12 +52,11 @@
 
 .radar-attribution {
   position: absolute;
-  right: 8px;
-  bottom: 6px;
+  right: 10px;
+  bottom: 8px;
   z-index: 3;
-  color: color-mix(in srgb, var(--muted) 80%, transparent);
-  font-size: .55rem;
-  text-shadow: 0 1px 3px #000;
+  color: var(--muted);
+  font-size: .6rem;
   pointer-events: none;
 }
 
@@ -71,24 +71,32 @@
 
 .radar-home-dot {
   position: absolute;
-  width: 8px;
-  height: 8px;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent), 0 1px 4px rgba(0, 0, 0, .6);
 }
 
-.radar-loading {
+/* Loading / empty / error sit on a glass card over the (possibly blank) map. */
+.radar-overlay {
   position: absolute;
   inset: 0;
   z-index: 3;
   display: grid;
   place-items: center;
-  color: var(--muted);
-  font-size: .74rem;
-  letter-spacing: 0;
-  text-align: center;
-  padding: 0 16px;
+  padding: 16px;
+}
+
+.radar-overlay > .state-message {
+  max-width: min(460px, 100%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  background-color: var(--glass-bg-strong);
+  box-shadow: var(--glass-edge), var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .radar-controls {
@@ -102,43 +110,29 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  min-height: var(--tap);
+  padding: 0 16px;
   color: var(--text);
-  background: var(--surface);
-  font-size: .74rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color .16s ease, color .16s ease;
-}
-
-.radar-play-toggle:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-}
-
-.radar-play-toggle:disabled {
-  opacity: .5;
-  cursor: default;
+  font-size: .78rem;
+  font-weight: 650;
 }
 
 .radar-frame-dots {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .radar-frame-dots span {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--border);
-  transition: background .16s ease, transform .16s ease;
+  background: var(--border-strong);
+  transition: opacity .16s ease, transform .16s ease;
 }
 
 .radar-frame-dots span.is-active {
   background: var(--accent);
-  transform: scale(1.3);
+  transform: scale(1.35);
 }
 
 .radar-source {
@@ -146,26 +140,25 @@
   align-items: center;
   gap: 4px;
   color: var(--muted);
-  font-size: .66rem;
+  font-size: .72rem;
+  font-weight: 550;
 }
 
-.radar-home-dot { z-index: 1; }
-
-/* Dry-day stand-in: the map stays, but the panel spends its words on what is actually happening. */
+/* Dry-day stand-in: the map stays, but the panel spends its words on what is actually happening.
+   The good tint is a status (paired with the sun icon and the sentence), not decoration. */
 .radar-quiet {
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--good) 22%, var(--border));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--good-soft) 40%, var(--surface));
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
 }
 
 .radar-quiet-lead {
-  margin: 0 0 5px;
+  margin: 0 0 6px;
   color: var(--good);
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: .74rem;
+  font-size: .78rem;
   font-weight: 600;
 }
 
@@ -179,14 +172,14 @@
 
 .radar-quiet-grid > div {
   min-width: 0;
-  padding: 4px 7px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--canvas) 55%, transparent);
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
   display: grid;
   gap: 1px;
 }
 
-.radar-quiet-grid span { color: var(--muted); font-size: .6rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.radar-quiet-grid span { color: var(--muted); font-size: .7rem; font-weight: 600; }
 .radar-quiet-grid strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -194,3 +187,7 @@
     transition: none;
   }
 }
+
+/* Attribution never sits on raw map tiles: a small near-opaque backing keeps it legible over bright
+   imagery without competing with the data. */
+.radar-attribution { padding: 1px 7px; border-radius: 6px; background: var(--glass-bg-strong); color: var(--muted); font-size: .6rem; text-shadow: none; }

@@ -1,14 +1,27 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ArrowDown, ArrowUp, Check, ListPlus, Moon, PackagePlus, Pencil, Plus, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
 import type { DashboardSection, HAEntity, TileConfig, TileKind } from './types'
 import type { TileProposal } from './entityClassifier'
+import { friendlyName } from './entityNames'
 import { icons } from './icons'
+import { tabListKeyHandler } from './tablist'
 import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
+import { useDialog } from './ui/useDialog'
+import { useTwoTapConfirm } from './ui/useTwoTapConfirm'
 import './ConfigPanel.css'
 
 const tileKinds: TileKind[] = ['sensor', 'toggle', 'lock', 'thermostat', 'vacuum']
 const iconNames = Object.keys(icons).sort()
+
+type ConfigTab = 'tiles' | 'discovery' | 'night-mode'
+const configTabs: readonly ConfigTab[] = ['tiles', 'discovery', 'night-mode']
+
+/** Editing the layout is slow, deliberate work; the default two-minute sheet timeout would throw
+ *  away a half-built section. Ten minutes still keeps an abandoned panel off the wall. */
+const CONFIG_IDLE_MS = 10 * 60_000
+
+const NOT_READY_HINT = 'Waiting for saved layout…'
 
 interface ConfigPanelProps {
   entities: Map<string, HAEntity>
@@ -17,14 +30,17 @@ interface ConfigPanelProps {
   onSave: (sections: DashboardSection[], lights: string[]) => Promise<void>
   onReset: () => Promise<{ sections: DashboardSection[]; nightModeIndoorLights: string[] }>
   onClose: () => void
+  /**
+   * False until the saved layout has actually loaded. Until then the draft here is the factory
+   * layout, and saving it would silently overwrite whatever the household had configured.
+   */
+  ready: boolean
+  /** Why the saved layout could not be loaded, when it could not. */
+  loadError?: string | null
 }
 
 function cloneSections(sections: DashboardSection[]): DashboardSection[] {
   return sections.map((section) => ({ ...section, tiles: section.tiles.map((tile) => ({ ...tile })) }))
-}
-
-function friendlyName(entity: HAEntity) {
-  return String(entity.attributes.friendly_name ?? entity.entity_id.split('.')[1]?.replaceAll('_', ' ') ?? entity.entity_id)
 }
 
 /** A review-list entity a human decided to place after all, seeded with neutral defaults to edit. */
@@ -32,28 +48,23 @@ function proposalFromEntity(entity: HAEntity): TileProposal {
   return { entityId: entity.entity_id, sectionId: 'home', label: friendlyName(entity), kind: 'sensor', icon: 'circle-dot' }
 }
 
-export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave, onReset, onClose }: ConfigPanelProps) {
+export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave, onReset, onClose, ready, loadError }: ConfigPanelProps) {
+  const ref = useDialog<HTMLElement>({ onClose, idleMs: CONFIG_IDLE_MS })
   const editableSections = sections.filter((section) => editableSectionIds.has(section.id))
-  const [tab, setTab] = useState<'tiles' | 'discovery' | 'night-mode'>('tiles')
+  const [tab, setTab] = useState<ConfigTab>('tiles')
   const [activeSectionId, setActiveSectionId] = useState(editableSections[0]?.id ?? '')
   const [draftSections, setDraftSections] = useState<DashboardSection[]>(() => cloneSections(sections))
   const [draftLights, setDraftLights] = useState<string[]>(nightModeIndoorLights)
   const [newTile, setNewTile] = useState({ entityId: '', label: '', kind: 'sensor' as TileKind, icon: iconNames[0] })
   const [manualLight, setManualLight] = useState('')
   const [pending, setPending] = useState(false)
-  const [confirmingReset, setConfirmingReset] = useState(false)
+  const resetConfirm = useTwoTapConfirm()
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
   // Proposals are diffed against the *draft* sections, so a device accepted here stops being offered
   // immediately, even before the save round-trips.
   const discovery = useEntityDiscovery(entities, draftSections)
   const [proposalEdits, setProposalEdits] = useState<Record<string, TileProposal>>({})
   const [editingProposalId, setEditingProposalId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!confirmingReset) return
-    const timer = window.setTimeout(() => setConfirmingReset(false), 4_000)
-    return () => window.clearTimeout(timer)
-  }, [confirmingReset])
 
   const activeSection = draftSections.find((section) => section.id === activeSectionId)
   const allEntityIds = Array.from(entities.keys()).sort()
@@ -114,6 +125,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
 
   /** Accepting a proposal appends the tile and persists straight away -- the tray is the confirmation step. */
   async function acceptProposal(proposal: TileProposal) {
+    if (!ready) return
     const target = draftSections.find((section) => section.id === proposal.sectionId)
     if (!target || target.tiles.some((tile) => tile.entityId === proposal.entityId)) return
     const nextSections = draftSections.map((section) =>
@@ -175,15 +187,16 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
           <span className="config-proposal-summary">{proposal.label} <em>{sectionLabel}</em></span>
         )}
         <div className="config-proposal-actions">
-          <button className="detail-action primary" onClick={() => void acceptProposal(proposal)} disabled={pending}><Plus size={16} aria-hidden="true" /><span>Add</span></button>
-          {!editing && <button className="detail-action" onClick={() => startEditing(proposal)}><Pencil size={15} aria-hidden="true" /><span>Edit</span></button>}
-          <button className="config-remove" onClick={() => void dismissProposal(proposal.entityId)} title="Dismiss" aria-label={`Dismiss ${proposal.entityId}`}><X size={15} /></button>
+          <button type="button" className="detail-action primary" onClick={() => void acceptProposal(proposal)} disabled={pending || !ready} title={ready ? undefined : NOT_READY_HINT}><Plus size={16} aria-hidden="true" /><span>Add</span></button>
+          {!editing && <button type="button" className="detail-action" onClick={() => startEditing(proposal)}><Pencil size={15} aria-hidden="true" /><span>Edit</span></button>}
+          <button type="button" className="config-remove" onClick={() => void dismissProposal(proposal.entityId)} title="Dismiss" aria-label={`Dismiss ${proposal.entityId}`}><X size={16} aria-hidden="true" /></button>
         </div>
       </div>
     )
   }
 
   async function handleSave() {
+    if (!ready) return
     setPending(true)
     setMessage(null)
     try {
@@ -197,13 +210,9 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
   }
 
   async function handleReset() {
-    if (!confirmingReset) {
-      setConfirmingReset(true)
-      return
-    }
+    if (!ready || !resetConfirm.request()) return
     setPending(true)
     setMessage(null)
-    setConfirmingReset(false)
     try {
       const result = await onReset()
       setDraftSections(cloneSections(result.sections))
@@ -218,33 +227,72 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
 
   return (
     <div className="detail-backdrop" role="presentation" onClick={onClose}>
-      <section className="detail-sheet config-sheet" role="dialog" aria-modal="true" aria-labelledby="config-title" onClick={(event) => event.stopPropagation()}>
-        <div className="sheet-handle" />
+      <section ref={ref} className="detail-sheet glass-strong config-sheet" role="dialog" aria-modal="true" aria-labelledby="config-title" onClick={(event) => event.stopPropagation()}>
+        <div className="sheet-handle" aria-hidden="true" />
         <header>
-          <span className="detail-icon"><Wrench size={24} /></span>
+          <span className="detail-icon"><Wrench size={24} aria-hidden="true" /></span>
           <div><p>Dashboard configuration</p><h2 id="config-title">Configure</h2></div>
-          <button onClick={onClose} title="Close" aria-label="Close configuration"><X size={20} /></button>
+          <button type="button" className="sheet-close" data-autofocus onClick={onClose} title="Close" aria-label="Close configuration"><X size={20} aria-hidden="true" /></button>
         </header>
 
-        <div className="config-tabs" role="tablist" aria-label="Configuration area">
-          <button role="tab" aria-selected={tab === 'tiles'} className={tab === 'tiles' ? 'active' : ''} onClick={() => setTab('tiles')}>Dashboard tiles</button>
-          <button role="tab" aria-selected={tab === 'discovery'} className={tab === 'discovery' ? 'active' : ''} onClick={() => setTab('discovery')}>
-            <PackagePlus size={14} aria-hidden="true" /> New devices
-            {discovery.proposals.length > 0 && <span className="config-tab-count">{discovery.proposals.length}</span>}
-          </button>
-          <button role="tab" aria-selected={tab === 'night-mode'} className={tab === 'night-mode' ? 'active' : ''} onClick={() => setTab('night-mode')}><Moon size={14} aria-hidden="true" /> Night Mode lights</button>
+        {!ready && (
+          <p className={loadError ? 'detail-error' : 'config-waiting'} role="status">
+            {loadError ? `Could not load the saved layout: ${loadError}. Saving is disabled so it cannot be overwritten.` : NOT_READY_HINT}
+          </p>
+        )}
+
+        <div className="config-tabs glass-inset" role="tablist" aria-label="Configuration area" onKeyDown={tabListKeyHandler(configTabs, tab, setTab)}>
+          {configTabs.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`config-tab-${id}`}
+              aria-selected={tab === id}
+              aria-controls={`config-panel-${id}`}
+              tabIndex={tab === id ? 0 : -1}
+              className={tab === id ? 'active' : ''}
+              onClick={() => setTab(id)}
+            >
+              {id === 'tiles' && 'Dashboard tiles'}
+              {id === 'discovery' && (
+                <>
+                  <PackagePlus size={16} aria-hidden="true" /> New devices
+                  {discovery.proposals.length > 0 && <span className="config-tab-count">{discovery.proposals.length}</span>}
+                </>
+              )}
+              {id === 'night-mode' && <><Moon size={16} aria-hidden="true" /> Night Mode lights</>}
+            </button>
+          ))}
         </div>
 
         {tab === 'tiles' && (
-          <div className="config-tiles">
-            <div className="config-section-pills" role="tablist" aria-label="Dashboard section">
+          <div className="config-tiles" role="tabpanel" id="config-panel-tiles" aria-labelledby="config-tab-tiles">
+            <div
+              className="config-section-pills"
+              role="tablist"
+              aria-label="Dashboard section"
+              onKeyDown={tabListKeyHandler(editableSections.map((item) => item.id), activeSectionId, setActiveSectionId)}
+            >
               {editableSections.map((item) => (
-                <button key={item.id} role="tab" aria-selected={item.id === activeSectionId} className={item.id === activeSectionId ? 'active' : ''} onClick={() => setActiveSectionId(item.id)}>{item.label}</button>
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  id={`config-section-tab-${item.id}`}
+                  aria-selected={item.id === activeSectionId}
+                  aria-controls="config-section-panel"
+                  tabIndex={item.id === activeSectionId ? 0 : -1}
+                  className={item.id === activeSectionId ? 'active' : ''}
+                  onClick={() => setActiveSectionId(item.id)}
+                >
+                  {item.label}
+                </button>
               ))}
             </div>
 
             {activeSection && (
-              <>
+              <div role="tabpanel" id="config-section-panel" aria-labelledby={`config-section-tab-${activeSection.id}`}>
                 <div className="config-tile-rows">
                   {activeSection.tiles.length === 0 && <p className="config-empty">No tiles in this section yet — add one below.</p>}
                   {activeSection.tiles.map((tile, index) => {
@@ -252,8 +300,8 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
                     return (
                       <div className="config-tile-row" key={tile.entityId}>
                         <div className="config-tile-move">
-                          <button onClick={() => moveTile(index, -1)} disabled={index === 0} aria-label={`Move ${tile.label} up`}><ArrowUp size={13} /></button>
-                          <button onClick={() => moveTile(index, 1)} disabled={index === activeSection.tiles.length - 1} aria-label={`Move ${tile.label} down`}><ArrowDown size={13} /></button>
+                          <button type="button" onClick={() => moveTile(index, -1)} disabled={index === 0} aria-label={`Move ${tile.label} up`}><ArrowUp size={16} aria-hidden="true" /></button>
+                          <button type="button" onClick={() => moveTile(index, 1)} disabled={index === activeSection.tiles.length - 1} aria-label={`Move ${tile.label} down`}><ArrowDown size={16} aria-hidden="true" /></button>
                         </div>
                         <span className="config-tile-icon"><TileIcon size={16} aria-hidden="true" /></span>
                         <code className="config-entity-id" title={tile.entityId}>{tile.entityId}</code>
@@ -264,7 +312,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
                         <select value={tile.icon} onChange={(event) => updateTileField(tile.entityId, 'icon', event.target.value)} aria-label={`Icon for ${tile.entityId}`}>
                           {iconNames.map((name) => <option key={name} value={name}>{name}</option>)}
                         </select>
-                        <button className="config-remove" onClick={() => removeTile(tile.entityId)} aria-label={`Remove ${tile.label}`} title="Remove tile"><Trash2 size={15} /></button>
+                        <button type="button" className="config-remove" onClick={() => removeTile(tile.entityId)} aria-label={`Remove ${tile.label}`} title="Remove tile"><Trash2 size={16} aria-hidden="true" /></button>
                       </div>
                     )
                   })}
@@ -279,18 +327,18 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
                   <select value={newTile.icon} onChange={(event) => setNewTile((current) => ({ ...current, icon: event.target.value }))} aria-label="New tile icon">
                     {iconNames.map((name) => <option key={name} value={name}>{name}</option>)}
                   </select>
-                  <button className="detail-action primary" onClick={addTile} disabled={!newTile.entityId.trim() || !newTile.label.trim()}><Plus size={16} aria-hidden="true" /><span>Add tile</span></button>
+                  <button type="button" className="detail-action primary" onClick={addTile} disabled={!newTile.entityId.trim() || !newTile.label.trim()}><Plus size={16} aria-hidden="true" /><span>Add tile</span></button>
                 </div>
                 <datalist id="config-entity-suggestions">
                   {allEntityIds.map((entityId) => <option key={entityId} value={entityId} />)}
                 </datalist>
-              </>
+              </div>
             )}
           </div>
         )}
 
         {tab === 'discovery' && (
-          <div className="config-discovery">
+          <div className="config-discovery" role="tabpanel" id="config-panel-discovery" aria-labelledby="config-tab-discovery">
             <p className="config-hint">
               Devices Home Assistant reports that no tile shows yet, with a suggested section, label and icon. Nothing is added
               until you say so — accepting one saves the dashboard configuration immediately.
@@ -320,8 +368,8 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
                         <code className="config-entity-id" title={entity.entity_id}>{entity.entity_id}</code>
                         <span className="config-proposal-summary">{friendlyName(entity)}</span>
                         <div className="config-proposal-actions">
-                          <button className="detail-action" onClick={() => startEditing(proposalFromEntity(entity))}><Plus size={16} aria-hidden="true" /><span>Place</span></button>
-                          <button className="config-remove" onClick={() => void dismissProposal(entity.entity_id)} title="Dismiss" aria-label={`Dismiss ${entity.entity_id}`}><X size={15} /></button>
+                          <button type="button" className="detail-action" onClick={() => startEditing(proposalFromEntity(entity))}><Plus size={16} aria-hidden="true" /><span>Place</span></button>
+                          <button type="button" className="config-remove" onClick={() => void dismissProposal(entity.entity_id)} title="Dismiss" aria-label={`Dismiss ${entity.entity_id}`}><X size={16} aria-hidden="true" /></button>
                         </div>
                       </div>
                     )
@@ -333,7 +381,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
         )}
 
         {tab === 'night-mode' && (
-          <div className="config-lights">
+          <div className="config-lights" role="tabpanel" id="config-panel-night-mode" aria-labelledby="config-tab-night-mode">
             <p className="config-hint">Night Mode turns off these lights the moment it is confirmed. Only include lights that are always safe to switch off unattended.</p>
             {lightEntities.length === 0 && offlineLights.length === 0 && (
               <p className="config-empty">No light entities are available yet — connect Home Assistant, or add one by entity ID below.</p>
@@ -354,7 +402,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
             </div>
             <div className="config-add-row config-add-light">
               <input placeholder="light.entity_id" value={manualLight} onChange={(event) => setManualLight(event.target.value)} />
-              <button className="detail-action" onClick={addManualLight} disabled={!manualLight.trim()}><ListPlus size={16} aria-hidden="true" /><span>Add by ID</span></button>
+              <button type="button" className="detail-action" onClick={addManualLight} disabled={!manualLight.trim()}><ListPlus size={16} aria-hidden="true" /><span>Add by ID</span></button>
             </div>
           </div>
         )}
@@ -363,11 +411,17 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
         {pending && <div className="detail-progress" role="status">Saving</div>}
 
         <div className="config-footer">
-          <button className="detail-action" onClick={() => void handleReset()} disabled={pending}>
-            <RotateCcw size={16} aria-hidden="true" /><span>{confirmingReset ? 'Confirm reset?' : 'Reset to defaults'}</span>
+          <button
+            type="button"
+            className={`detail-action ${resetConfirm.armed ? 'is-armed' : ''}`.trim()}
+            onClick={() => void handleReset()}
+            disabled={pending || !ready}
+            title={ready ? undefined : NOT_READY_HINT}
+          >
+            <RotateCcw size={16} aria-hidden="true" /><span>{resetConfirm.armed ? 'Tap again to reset' : 'Reset to defaults'}</span>
           </button>
-          <button className="detail-action primary" onClick={() => void handleSave()} disabled={pending}>
-            <Check size={16} aria-hidden="true" /><span>Save changes</span>
+          <button type="button" className="detail-action primary" onClick={() => void handleSave()} disabled={pending || !ready} title={ready ? undefined : NOT_READY_HINT}>
+            <Check size={16} aria-hidden="true" /><span>{ready ? 'Save changes' : NOT_READY_HINT}</span>
           </button>
         </div>
       </section>

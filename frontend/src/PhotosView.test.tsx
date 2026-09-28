@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PhotosView } from './PhotosView'
 import type { Photo } from './PhotosView'
@@ -78,22 +78,36 @@ describe('PhotosView', () => {
     expect(await screen.findByText(/No photos yet/)).toBeTruthy()
   })
 
-  it('deletes a photo only after the confirmation is accepted', async () => {
+  it('deletes a photo only on a second tap', async () => {
     const calls = mockApi([photo()])
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<PhotosView />)
 
     fireEvent.click(await screen.findByLabelText('Remove sunset.jpg'))
+    // First tap arms it and says so, in place of a browser dialog a kiosk may suppress.
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false)
+    fireEvent.click(screen.getByLabelText('Tap again to remove sunset.jpg'))
     await waitFor(() => expect(calls.some((call) => call.method === 'DELETE')).toBe(true))
   })
 
-  it('a declined confirmation leaves the photo alone', async () => {
+  it('a single tap leaves the photo alone and disarms on its own', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     const calls = mockApi([photo()])
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
     render(<PhotosView />)
 
     fireEvent.click(await screen.findByLabelText('Remove sunset.jpg'))
+    expect(screen.getByText('Tap again')).toBeTruthy()
+    await act(async () => { vi.advanceTimersByTime(4_100) })
+    expect(screen.getByLabelText('Remove sunset.jpg')).toBeTruthy()
     expect(calls.some((call) => call.method === 'DELETE')).toBe(false)
+    vi.useRealTimers()
+  })
+
+  it('never uses a blocking browser dialog', async () => {
+    mockApi([photo()])
+    const confirm = vi.spyOn(window, 'confirm')
+    render(<PhotosView />)
+    fireEvent.click(await screen.findByLabelText('Remove sunset.jpg'))
+    expect(confirm).not.toHaveBeenCalled()
   })
 
   it('sends the whole new order when a photo is moved', async () => {

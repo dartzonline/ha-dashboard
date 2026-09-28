@@ -8,7 +8,9 @@ Files live under the same persistent-volume convention as everything else that h
 restart (`dashboard_config.py`, `flight_sources.Budget`): `/data` when running as the Home Assistant
 add-on, a repo-local `backend/data/` fallback otherwise. A small JSON index sits alongside the image
 files themselves and is the source of truth for metadata; the files are named by id, not by the
-original filename, so two uploads called "photo.jpg" never collide.
+original filename, so two uploads called "photo.jpg" never collide. Should the index ever be lost or
+corrupted, it is rebuilt from the files -- the library's photos are never the thing that goes
+missing, only the metadata about them.
 
 **Every photo is processed on the way in** rather than served as uploaded. A modern phone photo is
 ~4000px wide and several megabytes; a wall tablet is ~1920px and will never show more than that, so
@@ -22,11 +24,17 @@ screen then throws most of away. On add, each image is:
   among other things, which has no business being served to the wall panel);
 * given a small thumbnail, so the manage screen can show a whole library at once without
   downloading full-size images to draw 150px tiles.
+
+The decoding and re-encoding is CPU work measured in hundreds of milliseconds per photo, so the
+routes hand it to a worker thread: the event loop that is also streaming Home Assistant events to
+every browser must not stall while a batch of holiday photos is being added.
 """
 
 from __future__ import annotations
 
+import asyncio
 import io
+import ipaddress
 import json
 import logging
 import re
@@ -34,12 +42,16 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
+
+from .atomic import write_text_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +60,12 @@ router = APIRouter(prefix="/api/photos")
 # Generous enough for an ordinary phone photo, bounded so one add can't fill the disk. This is the
 # limit on what is *accepted*; what gets stored is far smaller after processing.
 MAX_PHOTO_BYTES = 20 * 1024 * 1024
+
+# A decompression bomb is a tiny file that decodes to an enormous bitmap: a 50 KB PNG can declare
+# itself 30000x30000 and cost 2.7 GB of RAM to open. The byte limit above cannot catch that; this
+# pixel limit does. 40 megapixels is above any phone camera in normal use (most are 12-50 MP, and
+# 50 MP sensors bin to 12 MP by default), so real photos pass and only the pathological ones fail.
+MAX_PHOTO_PIXELS = 40_000_000
 
 # The wall tablet is a 1080p-class panel. Storing more than it can physically show is wasted disk
 # and wasted transfer on every load, and the extra detail is invisible by definition. Sized a
@@ -79,7 +97,25 @@ ALLOWED_CONTENT_TYPES: dict[str, str] = {
 STORED_CONTENT_TYPE = "image/jpeg"
 STORED_EXTENSION = "jpg"
 
+# Stored files are named by a fresh id and never rewritten, so a browser may cache them forever;
+# a changed photo is a new id. Thumbnails share the id, so they get the same treatment.
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
 _FILENAME_UNSAFE = re.compile(r"[^A-Za-z0-9 ._-]")
+
+# How many redirects an add-by-URL will follow. Each hop is re-checked against the private-address
+# filter below, because "public URL that 302s to http://supervisor/..." is the classic way around a
+# filter that only looks at the address the user typed.
+MAX_URL_REDIRECTS = 3
+
+# Hostnames that mean "this machine" or "Home Assistant" inside an add-on container regardless of
+# what they resolve to. The backend holds a Supervisor token; a photo-frame URL must never be a way
+# to point the backend at the Supervisor API.
+BLOCKED_HOSTNAMES = frozenset({"supervisor", "homeassistant", "hassio", "localhost"})
+
+# Carrier-grade NAT (RFC 6598) is not covered by `ip_address(...).is_private` on every Python
+# version, and it is exactly the range a home ISP's CPE may sit in.
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")
 
 
 def _data_dir() -> Path:
@@ -99,24 +135,86 @@ def _index_path() -> Path:
     return _data_dir() / "photos.json"
 
 
+# ---------------------------------------------------------------------------
+# Index
+# ---------------------------------------------------------------------------
+
 def _load_index() -> list[dict[str, Any]]:
     path = _index_path()
-    if not path.is_file():
-        return []
-    try:
-        payload = json.loads(path.read_text())
-    except (OSError, ValueError) as error:
-        logger.warning("photos index unreadable, starting fresh: %s", error)
-        return []
-    return payload if isinstance(payload, list) else []
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text())
+        except (OSError, ValueError) as error:
+            logger.warning("photos index unreadable, rebuilding from files: %s", error)
+        else:
+            if isinstance(payload, list):
+                return payload
+            logger.warning("photos index was not a list, rebuilding from files")
+    return _rebuild_index_from_files()
+
+
+def _rebuild_index_from_files() -> list[dict[str, Any]]:
+    """Best-effort index from whatever stored files exist.
+
+    Only the metadata (original name, source URL, original size) is lost when the index is; the
+    photos themselves are all named `<id>.jpg` with `<id>_thumb.jpg` beside them, which is enough to
+    keep the library on the wall. Returns `[]` -- and writes nothing -- when there are no files, so
+    an empty library still costs no index file.
+    """
+    photos_dir = _photos_dir()
+    entries: list[dict[str, Any]] = []
+    for path in sorted(photos_dir.glob(f"*.{STORED_EXTENSION}"), key=lambda item: item.stat().st_mtime):
+        if path.stem.endswith("_thumb"):
+            continue
+        thumb = photos_dir / f"{path.stem}_thumb.{STORED_EXTENSION}"
+        dimensions: dict[str, Any] = {}
+        try:
+            with Image.open(path) as image:
+                dimensions = {"width": image.width, "height": image.height}
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+            continue
+        stat = path.stat()
+        entries.append({
+            "id": path.stem,
+            "storedName": path.name,
+            "thumbName": thumb.name if thumb.is_file() else None,
+            "originalName": None,
+            "contentType": STORED_CONTENT_TYPE,
+            "sizeBytes": stat.st_size,
+            "thumbBytes": thumb.stat().st_size if thumb.is_file() else None,
+            "originalBytes": None,
+            **dimensions,
+            "addedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stat.st_mtime)),
+            "sourceUrl": None,
+            "position": len(entries),
+            "recovered": True,
+        })
+    if entries:
+        logger.warning("rebuilt photos index from %d file(s)", len(entries))
+        _save_index(entries)
+    return entries
 
 
 def _save_index(entries: list[dict[str, Any]]) -> None:
-    path = _index_path()
     try:
-        path.write_text(json.dumps(entries, indent=2))
+        # Atomic: a torn write would be read back as "unreadable" and trigger a rebuild that
+        # loses every original filename and source URL in the library.
+        write_text_atomic(_index_path(), json.dumps(entries, indent=2))
     except OSError as error:
         logger.warning("could not persist photos index: %s", error)
+
+
+# Serialises every read-modify-write of the index. Adds run partly in worker threads now, so two
+# uploads arriving together could otherwise both read N entries and both write N+1, losing one.
+# Created lazily because a module-level asyncio primitive would be built before any event loop.
+_index_lock: asyncio.Lock | None = None
+
+
+def _get_index_lock() -> asyncio.Lock:
+    global _index_lock
+    if _index_lock is None:
+        _index_lock = asyncio.Lock()
+    return _index_lock
 
 
 def _safe_name(name: str | None) -> str | None:
@@ -181,6 +279,10 @@ def reorder_photos(ordered_ids: list[str]) -> list[dict[str, Any]]:
     return list_photos()
 
 
+# ---------------------------------------------------------------------------
+# Processing
+# ---------------------------------------------------------------------------
+
 # Tried in order when the first encode comes out bigger than the file that was uploaded. An image
 # that arrived already heavily compressed can cost *more* to re-encode at the default quality than
 # it did to store originally, which would make "compress on the way in" quietly inflate a library.
@@ -191,6 +293,10 @@ def reorder_photos(ordered_ids: list[str]) -> list[dict[str, Any]]:
 # going below the source's own quality, so the floor wins and the file grows slightly -- which is
 # the right trade against visibly degrading every real photo to cover that case.
 QUALITY_LADDER = (88, 80, 72, 65)
+
+
+class PhotoTooLarge(ValueError):
+    """Distinct from a generic decode failure so the friendly message survives the except below."""
 
 
 def _encode_at(image: Image.Image, quality: int) -> bytes:
@@ -233,10 +339,17 @@ def process_image(data: bytes) -> tuple[bytes, bytes, dict[str, Any]]:
     """(display bytes, thumbnail bytes, dimensions) for one uploaded image.
 
     Raises ValueError for anything Pillow cannot decode, which covers both a corrupt file and a
-    non-image that arrived with an image content-type.
+    non-image that arrived with an image content-type, and for an image whose declared size would
+    take an unreasonable amount of memory to decode.
     """
     try:
         with Image.open(io.BytesIO(data)) as opened:
+            # `Image.open` reads only the header, so this is checked before any pixel is decoded
+            # -- the whole point is to refuse *before* paying the memory.
+            if opened.width * opened.height > MAX_PHOTO_PIXELS:
+                raise PhotoTooLarge(
+                    f"That image is {opened.width}x{opened.height}, more than the {MAX_PHOTO_PIXELS // 1_000_000} megapixel limit"
+                )
             # A phone writes portrait photos as landscape plus an EXIF "rotate me" tag; this bakes
             # the rotation in, so the panel does not have to honour a tag that is about to be
             # stripped anyway.
@@ -258,6 +371,11 @@ def process_image(data: bytes) -> tuple[bytes, bytes, dict[str, Any]]:
             # No budget on the thumbnail: it is a fraction of the size of anything it comes from,
             # so it can never be the thing that inflates a library.
             thumbnail, _, _ = _encode(upright, (THUMBNAIL_MAX, THUMBNAIL_MAX), THUMBNAIL_QUALITY)
+    except PhotoTooLarge:
+        raise
+    except Image.DecompressionBombError as error:
+        # Pillow's own guard, for an image so large it trips before the check above runs.
+        raise PhotoTooLarge("That image is far too large to process") from error
     except (UnidentifiedImageError, OSError, ValueError) as error:
         raise ValueError("That file could not be read as an image") from error
 
@@ -269,12 +387,11 @@ def process_image(data: bytes) -> tuple[bytes, bytes, dict[str, Any]]:
     }
 
 
-def add_photo(data: bytes, content_type: str, original_name: str | None, source_url: str | None) -> dict[str, Any]:
-    """Validates, processes, writes the files, records it in the index, and returns the new entry.
+def prepare_photo(data: bytes, content_type: str) -> tuple[bytes, bytes, dict[str, Any]]:
+    """The validate-and-process half of adding a photo: everything that needs no index access.
 
-    Raises ValueError with a message safe to show the person adding the photo -- the callers below
-    turn that straight into the HTTP error, so it has to already read like an explanation, not a
-    stack trace.
+    Split from `store_photo` so the routes can run this (the slow, CPU-bound half) outside the index
+    lock and only serialise the short file-and-index write that follows.
     """
     if not data:
         raise ValueError("The image was empty")
@@ -282,16 +399,27 @@ def add_photo(data: bytes, content_type: str, original_name: str | None, source_
         raise ValueError(f"Image is larger than the {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit")
     if content_type.split(";")[0].strip().lower() not in ALLOWED_CONTENT_TYPES:
         raise ValueError(f"Unsupported image type: {content_type or 'unknown'}")
+    return process_image(data)
 
-    display, thumbnail, dimensions = process_image(data)
 
+def store_photo(
+    processed: tuple[bytes, bytes, dict[str, Any]],
+    original_bytes: int,
+    original_name: str | None,
+    source_url: str | None,
+) -> dict[str, Any]:
+    """Writes the files and records the entry in the index. Returns the new entry."""
+    display, thumbnail, dimensions = processed
+    # Index first, files second: `_load_index` rebuilds a missing index from the files on disk,
+    # so writing this photo's files before reading the index would have it counted twice on the
+    # very first add to an empty library.
+    entries = _load_index()
     photo_id = f"photo_{uuid.uuid4().hex}"
     stored_name = f"{photo_id}.{STORED_EXTENSION}"
     thumb_name = f"{photo_id}_thumb.{STORED_EXTENSION}"
     (_photos_dir() / stored_name).write_bytes(display)
     (_photos_dir() / thumb_name).write_bytes(thumbnail)
 
-    entries = _load_index()
     entry = {
         "id": photo_id,
         "storedName": stored_name,
@@ -302,7 +430,7 @@ def add_photo(data: bytes, content_type: str, original_name: str | None, source_
         "thumbBytes": len(thumbnail),
         # Kept so the manage screen can say how much processing actually saved, which is the only
         # visible evidence that it happened at all.
-        "originalBytes": len(data),
+        "originalBytes": original_bytes,
         **dimensions,
         "addedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "sourceUrl": source_url,
@@ -312,6 +440,17 @@ def add_photo(data: bytes, content_type: str, original_name: str | None, source_
     entries.append(entry)
     _save_index(entries)
     return entry
+
+
+def add_photo(data: bytes, content_type: str, original_name: str | None, source_url: str | None) -> dict[str, Any]:
+    """Validates, processes, writes the files, records it in the index, and returns the new entry.
+
+    Raises ValueError with a message safe to show the person adding the photo -- the callers below
+    turn that straight into the HTTP error, so it has to already read like an explanation, not a
+    stack trace. Synchronous convenience over `prepare_photo` + `store_photo`; the routes call
+    those two separately so only the second runs under the index lock.
+    """
+    return store_photo(prepare_photo(data, content_type), len(data), original_name, source_url)
 
 
 def delete_photo(photo_id: str) -> bool:
@@ -330,6 +469,107 @@ def delete_photo(photo_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Fetching by URL
+# ---------------------------------------------------------------------------
+
+_http_client: httpx.AsyncClient | None = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    """One client for every add-by-URL, so the connection pool is reused rather than rebuilt per
+    request. Redirects are handled by hand in `_fetch_url` so each hop can be re-checked."""
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(follow_redirects=False, timeout=20, trust_env=False)
+    return _http_client
+
+
+async def close_http_client() -> None:
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+
+
+async def _resolve_host(host: str) -> list[str]:
+    """Every address `host` resolves to (a literal IP resolves to itself)."""
+    loop = asyncio.get_running_loop()
+    infos = await loop.getaddrinfo(host, None)
+    return sorted({str(info[4][0]) for info in infos})
+
+
+def _address_is_private(address: str) -> bool:
+    ip = ipaddress.ip_address(address.split("%", 1)[0])  # strip an IPv6 scope id
+    return (
+        ip.is_loopback
+        or ip.is_private
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+        or (ip.version == 4 and ip in _CGNAT)
+        or (ip.version == 6 and ip.ipv4_mapped is not None and _address_is_private(str(ip.ipv4_mapped)))
+    )
+
+
+async def _check_url_is_public(url: str) -> None:
+    """Refuses any URL whose host is this machine, Home Assistant, or anything on a private network.
+
+    The backend sits inside the home network with a Supervisor token in hand. Without this, "add a
+    photo from a URL" would double as "make the backend fetch any LAN address and hand me the
+    bytes" -- router admin pages, camera streams, the Supervisor API. Resolution happens here, at
+    request time, so a public hostname that resolves to a private address is caught too.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        raise HTTPException(400, "That doesn't look like a web address")
+    host = (parts.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        raise HTTPException(400, "That doesn't look like a web address")
+    if host in BLOCKED_HOSTNAMES or host.endswith(".local") or host.endswith(".internal"):
+        raise HTTPException(400, "Photos can only be added from public web addresses")
+    try:
+        # A literal address needs no lookup -- and must not get one, since a resolver could be
+        # coaxed into answering differently for it than the socket layer will.
+        addresses = [str(ipaddress.ip_address(host.strip("[]")))]
+    except ValueError:
+        try:
+            addresses = await _resolve_host(host)
+        except (OSError, ValueError):
+            raise HTTPException(400, "That web address could not be found") from None
+    if not addresses or any(_address_is_private(address) for address in addresses):
+        raise HTTPException(400, "Photos can only be added from public web addresses")
+
+
+async def _fetch_url(url: str) -> tuple[bytes, str, str]:
+    """(bytes, content-type, final url) for a public URL, following a few redirects by hand.
+
+    Each hop goes back through the public-address check: the address the person typed being public
+    says nothing about where it redirects to. The body is bounded while streaming so an oversized
+    or endless response is abandoned rather than buffered.
+    """
+    client = _get_http_client()
+    current = url
+    for _ in range(MAX_URL_REDIRECTS + 1):
+        await _check_url_is_public(current)
+        async with client.stream("GET", current) as response:
+            if response.status_code in (301, 302, 303, 307, 308) and response.headers.get("location"):
+                current = urljoin(current, response.headers["location"])
+                continue
+            response.raise_for_status()
+            content_type = response.headers.get("content-type", "")
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in response.aiter_bytes():
+                total += len(chunk)
+                if total > MAX_PHOTO_BYTES:
+                    raise HTTPException(400, f"Image is larger than the {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit")
+                chunks.append(chunk)
+            return b"".join(chunks), content_type, current
+    raise HTTPException(400, "That web address redirected too many times")
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -341,6 +581,17 @@ class ReorderRequest(BaseModel):
     ids: list[str]
 
 
+async def _add_photo_async(data: bytes, content_type: str, original_name: str | None, source_url: str | None) -> dict[str, Any]:
+    """`add_photo`, arranged for the event loop: the decode/encode runs in a worker thread without
+    holding the index lock; only the brief file-and-index write is serialised."""
+    try:
+        processed = await run_in_threadpool(prepare_photo, data, content_type)
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    async with _get_index_lock():
+        return await run_in_threadpool(store_photo, processed, len(data), original_name, source_url)
+
+
 @router.get("")
 async def get_photos() -> list[dict[str, Any]]:
     return list_photos()
@@ -348,11 +599,20 @@ async def get_photos() -> list[dict[str, Any]]:
 
 @router.post("")
 async def upload_photo(file: UploadFile = File(...)) -> dict[str, Any]:
-    data = await file.read()
-    try:
-        return add_photo(data, file.content_type or "", file.filename, source_url=None)
-    except ValueError as error:
-        raise HTTPException(400, str(error)) from error
+    too_large = HTTPException(400, f"Image is larger than the {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit")
+    # Starlette knows the size up front for multipart uploads; refusing here spares reading a
+    # 200 MB file into memory just to reject it afterwards. The running total below covers the
+    # case where it does not.
+    if file.size is not None and file.size > MAX_PHOTO_BYTES:
+        raise too_large
+    chunks: list[bytes] = []
+    total = 0
+    while chunk := await file.read(1024 * 1024):
+        total += len(chunk)
+        if total > MAX_PHOTO_BYTES:
+            raise too_large
+        chunks.append(chunk)
+    return await _add_photo_async(b"".join(chunks), file.content_type or "", file.filename, source_url=None)
 
 
 @router.post("/url")
@@ -362,36 +622,28 @@ async def add_photo_from_url(body: AddByUrlRequest) -> dict[str, Any]:
         raise HTTPException(400, "That doesn't look like a web address")
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                content_type = response.headers.get("content-type", "")
-                chunks: list[bytes] = []
-                total = 0
-                async for chunk in response.aiter_bytes():
-                    total += len(chunk)
-                    if total > MAX_PHOTO_BYTES:
-                        raise HTTPException(400, f"Image is larger than the {MAX_PHOTO_BYTES // (1024 * 1024)} MB limit")
-                    chunks.append(chunk)
+        data, content_type, final_url = await _fetch_url(url)
     except httpx.HTTPError as error:
-        raise HTTPException(502, f"Could not fetch that URL: {error}") from error
+        # The exception text can carry the resolved address and the full redirect target -- exactly
+        # the details the address filter exists to keep out of a response body. Logged for the
+        # operator; the person at the panel gets a plain answer.
+        logger.warning("add-by-URL fetch failed for %s: %s", url, error)
+        raise HTTPException(502, "Could not fetch that image") from error
 
-    data = b"".join(chunks)
-    original_name = url.rsplit("/", 1)[-1].split("?")[0] or None
-    try:
-        return add_photo(data, content_type, original_name, source_url=url)
-    except ValueError as error:
-        raise HTTPException(400, str(error)) from error
+    original_name = final_url.rsplit("/", 1)[-1].split("?")[0] or None
+    return await _add_photo_async(data, content_type, original_name, source_url=url)
 
 
 @router.post("/order")
 async def set_photo_order(body: ReorderRequest) -> list[dict[str, Any]]:
-    return reorder_photos(body.ids)
+    async with _get_index_lock():
+        return await run_in_threadpool(reorder_photos, body.ids)
 
 
 @router.delete("/{photo_id}")
 async def remove_photo(photo_id: str) -> dict[str, bool]:
-    return {"deleted": delete_photo(photo_id)}
+    async with _get_index_lock():
+        return {"deleted": await run_in_threadpool(delete_photo, photo_id)}
 
 
 @router.get("/{photo_id}/file")
@@ -411,4 +663,8 @@ def _serve(photo_id: str, thumbnail: bool) -> FileResponse:
     path = photo_file_path(photo_id, thumbnail=thumbnail)
     if not record or not path:
         raise HTTPException(404, "Photo not found")
-    return FileResponse(path, media_type=record.get("contentType") or "application/octet-stream")
+    return FileResponse(
+        path,
+        media_type=record.get("contentType") or "application/octet-stream",
+        headers={"Cache-Control": IMMUTABLE_CACHE_CONTROL},
+    )
