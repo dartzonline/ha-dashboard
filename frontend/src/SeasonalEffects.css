@@ -1,0 +1,54 @@
+.seasonal-effects { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.seasonal-layer { display: none; }
+:root[data-theme-palette='holidays']:not([data-theme-effects='off']) .seasonal-holidays,
+:root[data-theme-palette='halloween']:not([data-theme-effects='off']) .seasonal-halloween { display: block; }
+.seasonal-particle { position: absolute; top: -40px; left: var(--particle-left); color: #eef9f4; opacity: .42; animation: seasonal-fall var(--particle-duration) var(--particle-delay) linear infinite; }
+.seasonal-ornament { opacity: .24; color: #f1b5b9; }
+.seasonal-holidays .seasonal-ornament:nth-child(3n) { color: #e8d291; }
+.seasonal-holidays .seasonal-ornament:nth-child(4n) { color: #9ee4b5; }
+.seasonal-halloween .seasonal-ornament { color: #ffb36b; opacity: .58; animation-name: haunted-drift; }
+.seasonal-halloween .seasonal-ornament svg { width: 42px; height: 42px; }
+.seasonal-halloween .seasonal-ornament:nth-child(even) { color: #e2cef2; animation-direction: reverse; }
+.seasonal-halloween::before, .seasonal-halloween::after {
+  content: ''; position: absolute; top: 0; width: 150px; height: 150px; opacity: .3;
+  background: repeating-radial-gradient(circle at top left, transparent 0 25px, #c9b7d5 26px 27px, transparent 28px 38px),
+    repeating-conic-gradient(from 90deg at top left, transparent 0deg 17deg, #c9b7d5 18deg 19deg, transparent 20deg 30deg);
+  mask-image: linear-gradient(135deg, #000, transparent 74%);
+}
+.seasonal-halloween::before { left: 0; }
+.seasonal-halloween::after { right: 0; transform: scaleX(-1); }
+.haunted-lanterns { position: absolute; top: 24%; left: 4px; right: 4px; display: flex; justify-content: space-between; }
+.haunted-lantern { position: relative; display: grid; place-items: center; width: 30px; height: 44px; color: #ffb36b; border: 1px solid #98704d; border-radius: 10px 10px 4px 4px; background: rgba(32, 18, 10, .7); animation: lantern-breathe 7s ease-in-out infinite alternate; }
+.haunted-lantern::before { content: ''; position: absolute; bottom: 100%; left: 50%; width: 1px; height: 64px; background: #98704d; opacity: .5; }
+.haunted-lantern:last-child { margin-top: 180px; animation-delay: -3s; }
+@keyframes haunted-drift {
+  0% { transform: translate3d(0, -40px, 0) rotate(-18deg); opacity: 0; }
+  12%, 82% { opacity: .58; }
+  50% { transform: translate3d(var(--particle-sway), 50dvh, 0) rotate(14deg); }
+  100% { transform: translate3d(0, calc(100dvh + 80px), 0) rotate(-10deg); opacity: 0; }
+}
+@keyframes lantern-breathe { from { opacity: .35; } to { opacity: .85; } }
+.haunted-pumpkin { position: absolute; width: min(150px, 32vw); aspect-ratio: 1.15; opacity: 0; transform: translate(-50%, -50%); animation: pumpkin-visit 28s -12s ease-in-out infinite; filter: drop-shadow(0 5px 12px rgba(0, 0, 0, .65)); }
+.pumpkin-stem { position: absolute; top: 0; left: 45%; width: 12%; height: 24%; border-radius: 6px 3px 0 0; background: linear-gradient(90deg, #314029, #647545, #26351e); transform: rotate(16deg); }
+.pumpkin-body { position: absolute; inset: 14% 0 0; border-radius: 46% 46% 42% 42%; border: 2px solid #8a380e; background: linear-gradient(90deg, #6f290d, #e57c1b 23%, #b84b10 45%, #f18e25 67%, #77300c); box-shadow: inset 0 6px 8px rgba(255, 188, 65, .24), inset 0 -9px 14px rgba(58, 18, 6, .6); }
+.pumpkin-rib { position: absolute; inset: 0 27%; border-radius: 50%; border-left: 2px solid rgba(93, 31, 7, .6); border-right: 2px solid rgba(93, 31, 7, .6); background: linear-gradient(90deg, transparent, rgba(255, 170, 49, .28), transparent); }
+.pumpkin-eye, .pumpkin-nose, .pumpkin-grin { position: absolute; background: #ffe083; filter: drop-shadow(0 0 4px #ff9829); }
+.pumpkin-eye { top: 37%; width: 25%; height: 20%; }
+.pumpkin-eye-left { left: 17%; clip-path: polygon(0 0, 100% 62%, 22% 100%); }
+.pumpkin-eye-right { right: 17%; clip-path: polygon(100% 0, 78% 100%, 0 62%); }
+.pumpkin-nose { top: 54%; left: 45%; width: 10%; height: 12%; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.pumpkin-grin { top: 68%; left: 20%; width: 60%; height: 21%; clip-path: polygon(0 0, 22% 26%, 25% 0, 38% 7%, 38% 35%, 62% 35%, 62% 7%, 75% 0, 78% 26%, 100% 0, 87% 68%, 65% 100%, 60% 70%, 42% 70%, 35% 100%, 13% 68%); }
+@keyframes pumpkin-visit {
+  0%, 45% { opacity: 0; transform: translate(-50%, -42%) scale(.85) rotate(-8deg); }
+  52% { opacity: .82; transform: translate(-50%, -50%) scale(1) rotate(-4deg); }
+  60% { opacity: .82; transform: translate(-50%, -56%) scale(1.03) rotate(5deg); }
+  68%, 100% { opacity: 0; transform: translate(-50%, -66%) scale(.9) rotate(9deg); }
+}
+@keyframes seasonal-fall {
+  from { transform: translate3d(0, -40px, 0) rotate(-12deg); }
+  to { transform: translate3d(var(--particle-sway), calc(100dvh + 80px), 0) rotate(24deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seasonal-effects { display: none; }
+  .seasonal-particle, .haunted-lantern, .haunted-pumpkin { animation: none; }
+}

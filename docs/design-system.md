@@ -1,14 +1,45 @@
-# Design system: liquid glass
+# Design system: retro-modern console
 
-The panel is a set of translucent panes over a deep, softly lit canvas. Everything below lives in
-`frontend/src/index.css` (tokens, primitives) and `frontend/src/ui/` (shared components).
+Home / Control combines physical instrument-panel colours with modern, rounded controls: charcoal
+surfaces, phosphor highlights and self-hosted Space Mono readings. Manrope remains the body face for
+longer text. There are no scanlines, glowing text or flicker effects. Headers and status rows
+use continuous bands rather than a stack of floating cards. Everything below lives in
+`frontend/src/index.css` (default tokens, primitives), `frontend/src/theme.ts` (palettes and
+preferences), `frontend/src/theme.css` (style overrides), and `frontend/src/ui/` (shared components).
+
+## Theme settings
+
+Settings > Theme offers independent style and palette radio groups. Modern uses Manrope headings
+and rounded controls, Retro uses Space Mono and firm corners, and Retro / Modern combines Space
+Mono with rounded controls. Phosphor is the default; Arctic, Ember, Lavender, Halloween, and
+Holidays are alternatives. Semantic status and chart-series colors keep their meaning.
+
+Preferences are stored per browser under `home-panel.theme.v1`, applied before React mounts,
+and saved immediately. They are independent of the backend layout configuration and remain
+available offline. Invalid preferences fall back to defaults. Storage failures leave the UI usable
+and are reported in Settings. Reset theme changes only appearance, not devices or layout.
+
+Seasonal palettes also enable decorative layers from `SeasonalEffects.tsx`. They use a bounded
+number of CSS-animated Lucide symbols, are hidden from assistive technology, do not intercept
+pointer events, and sit below dialogs. Seasonal effects can be disabled independently and are
+hidden automatically under `prefers-reduced-motion: reduce`.
+
+The default Phosphor palette is:
+
+| Role | Colour |
+|---|---|
+| Canvas | Charcoal `#101413` |
+| Panels | Instrument green-black `#1d2521` |
+| Primary text | Pale phosphor `#edf2df` |
+| Selection and clock | Yellow-green `#d0e779` |
+| Attention | Amber `#e6b47a` |
 
 ## Readability comes first
 
-This is a wall dashboard read from across a room. The glass is a finish, not a see-through effect.
+This is a wall dashboard read from across a room. Retro styling must not obscure live readings.
 
-- Panes are about 80 to 90 percent opaque dark tint with a 14px blur. The edge light is faint and
-  the canvas washes are subtle.
+- Panels are opaque and unblurred. Existing `.glass` APIs now resolve to matte surfaces so all
+  views inherit the console treatment without duplicating component implementations.
 - Text only sits on a pane, never directly on the canvas, a map, a weather scene or a photo.
 - Body text holds 4.5:1 contrast and large numerals 3:1. `--text` and `--muted` clear that on every
   pane, including over a bright photo. `--muted-2` is for tertiary hints only.
@@ -18,7 +49,8 @@ This is a wall dashboard read from across a room. The glass is a finish, not a s
 - Disabled buttons are said with colour, never opacity. The label drops to `--muted` on a plain
   raised pane. Toggles are the exception, because they are only disabled while a command is in
   flight.
-- Every `PageFrame` heading sits on its own pane.
+- Every `PageFrame` heading sits on a continuous opaque-tinted band with a single bottom rule.
+- Use stable type sizes: 17px base on handhelds, 20px on larger displays. Do not scale type with viewport width.
 
 ## Tokens
 
@@ -26,11 +58,11 @@ This is a wall dashboard read from across a room. The glass is a finish, not a s
 |---|---|---|
 | Canvas and ink | `--canvas`, `--text`, `--muted`, `--muted-2`, `--fg` | `--fg` is an alias of `--text` |
 | Glass | `--glass-bg`, `--glass-bg-strong`, `--glass-border`, `--glass-blur`, `--glass-highlight`, `--glass-edge`, `--glass-shadow` | Set once; components use the `.glass*` classes |
-| Legacy surfaces | `--surface`, `--surface-raised`, `--border` | Now translucent, so old `background: var(--surface)` rules read as thin glass |
+| Legacy surfaces | `--surface`, `--surface-raised`, `--border` | Opaque, palette-aware surfaces shared by all styles |
 | Accent | `--accent`, `--accent-strong`, `--accent-soft`, `--accent-ink` | Selection, current view, primary action only |
 | Status | `--good`, `--warn`, `--danger` plus `-soft` and `-ink` | Always paired with an icon or word. Never used as chart series |
 | Chart series | `--chart-1` to `--chart-6`, `--chart-grid`, `--chart-axis`, `--chart-ink` | Fixed order, validated for colour-vision deficiency on the dark canvas. A seventh series folds into "Other" |
-| Shape | `--r-sm` 12, `--r-md` 18, `--r-lg` 26, `--r-xl` 34, `--r-pill` | Tiles use `--r-md`, sheets `--r-lg` |
+| Shape | `--r-sm` 8, `--r-md` 16, `--r-lg` 22, `--r-xl` 28, `--r-pill` | Inputs and icon keys use `--r-sm`, tiles `--r-md`, sheets `--r-lg` |
 | Touch | `--tap` 44px | Every `button` has this min-height globally. Use `.hit-area` for things drawn smaller |
 
 ## Primitives
@@ -61,6 +93,12 @@ This is a wall dashboard read from across a room. The glass is a finish, not a s
 - `tablist.ts` `tabListKeyHandler` gives any `role="tablist"` arrow-key navigation.
 
 ## URL state
+
+Phones have three primary destinations and a More control. More opens all configured sections
+and configuration in a modal drawer with focus isolation, Escape and Back handling. Secondary
+Home status readings collapse on phones; the attention summary remains visible. Device search
+matches labels and entity IDs within the current section, resets on manual section navigation,
+and holds automatic rotation while a query is present.
 
 The page lives in the hash: `#/<section>` or `#/<section>/<n>`, where `n` is the 1-based slide for
 Insights, Weather and Flights. Section and slide changes, including rotation ticks, replace the

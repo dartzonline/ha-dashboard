@@ -4,7 +4,7 @@ import {
   AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, ChartNoAxesCombined, ChevronDown, CloudSun,
   History, Info, KeyRound, Lightbulb, Lock, LockOpen, Menu, MonitorSmartphone, Moon, PanelLeftClose, Pause, Play,
   RotateCw, Send, Shield, SkipBack, SkipForward, Square, SunMedium, Thermometer, Volume2, Wifi, WifiOff, Wind,
-  Wrench, X,
+  Search, Wrench, X,
 } from 'lucide-react'
 import './App.css'
 import { icons, sectionIcons } from './icons'
@@ -16,6 +16,7 @@ import { useDashboardConfig } from './useDashboardConfig'
 import { insightsSlides, rotationInterval } from './insightsSlides'
 import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
+import { SeasonalEffects } from './SeasonalEffects'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
 import { PhotoBackdrop } from './PhotoBackdrop'
@@ -35,7 +36,7 @@ import { friendlyName } from './entityNames'
 import { formatNumber, isThroughputUnit, toMbps } from './units'
 import { clampSlide, parseShellHash, readRotationHold, shellHash, writeRotationHold } from './urlState'
 import { PageFrame } from './ui/PageFrame'
-import { LoadingState } from './ui/StateMessages'
+import { EmptyState, LoadingState } from './ui/StateMessages'
 import { useBackToClose } from './ui/useBackToClose'
 import { useDialog } from './ui/useDialog'
 import { useMediaQuery } from './ui/useMediaQuery'
@@ -198,6 +199,7 @@ interface UtilityRailProps {
 }
 
 function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectSecurity, now }: UtilityRailProps) {
+  const compact = useMediaQuery('(max-width: 760px)')
   const [newDeviceIndex, setNewDeviceIndex] = useState(0)
   const all = Array.from(entities.values())
   const deviceClass = (entity: HAEntity) => String(entity.attributes.device_class ?? '')
@@ -295,6 +297,8 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
 
   return (
     <div className="utility-stack">
+      <details className="utility-disclosure" open={!compact}>
+      <summary><Shield size={18} aria-hidden="true" /><strong>Home status</strong><ChevronDown size={18} aria-hidden="true" /></summary>
       <section className="utility-rail" aria-label="Home utility status">
         {utilities.map(({ id, target, icon: Icon, title, detail, tone, inspect }) => (
           // The tone colours the glyph; only a problem tints the whole pane. Three of six cells are
@@ -310,6 +314,7 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
           </button>
         ))}
       </section>
+      </details>
       <button
         type="button"
         className={`attention-strip glass ${issueCount > 0 ? 'has-issues tone-danger' : 'is-clear'}`}
@@ -728,6 +733,12 @@ function initialSlide(location: ReturnType<typeof parseShellHash>, sectionId: st
   return location.section === sectionId ? clampSlide(location.slide, SLIDE_COUNTS[sectionId]) : 0
 }
 
+function NavigationPanel({ children, onClose, onInteract }: { children: ReactNode; onClose: () => void; onInteract: () => void }) {
+  useBackToClose(true, onClose)
+  const ref = useDialog<HTMLElement>({ onClose, idleMs: null })
+  return <aside ref={ref} className="sidebar glass-strong is-open" role="dialog" aria-modal="true" aria-label="All sections" onPointerDown={onInteract} onPointerMove={onInteract} onFocusCapture={onInteract}>{children}</aside>
+}
+
 function App() {
   // Read once: the page and slide a reload (or a bookmarked #/climate) should land on.
   const [startLocation] = useState(() => parseShellHash(window.location.hash))
@@ -745,6 +756,7 @@ function App() {
   const [weatherSlide, setWeatherSlide] = useState(() => initialSlide(startLocation, 'weather'))
   const [flightsSlide, setFlightsSlide] = useState(() => initialSlide(startLocation, 'flights'))
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [deviceSearch, setDeviceSearch] = useState({ sectionId: '', query: '' })
   const [sidebarTouchedAt, setSidebarTouchedAt] = useState(0)
   const [securityOpen, setSecurityOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
@@ -776,7 +788,6 @@ function App() {
     sections: dashboardSections,
     nightModeIndoorLights,
     energyRatePerKwh,
-    customized: configCustomized,
     ready: configReady,
     error: configError,
     save: saveDashboardConfig,
@@ -786,6 +797,10 @@ function App() {
   // An unknown id from an old URL falls back to the first section rather than a blank page.
   const section = dashboardSections.find((item) => item.id === requestedSection) ?? dashboardSections[0]
   const activeSection = section.id
+  const searchQuery = deviceSearch.sectionId === activeSection ? deviceSearch.query : ''
+  const visibleTiles = section.tiles
+    .filter((tile) => !(activeSection === 'climate' && tile.entityId === 'climate.mainfoor_thermostat'))
+    .filter((tile) => `${tile.label} ${tile.entityId}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
   const sheetOpen = Boolean(expandedTile) || configOpen || securityOpen || eventLogOpen || connectionOpen
 
   // Scenes is a page of buttons to press, not something to watch go by, so the unattended rotation
@@ -843,7 +858,7 @@ function App() {
   }, [section.label])
 
   // ---- Rotation --------------------------------------------------------------------------------
-  const rotating = autoRotate && !sheetOpen
+  const rotating = autoRotate && !sheetOpen && !sidebarOpen && !searchQuery
   const rotationDelay = activeSection === 'weather' || activeSection === 'flights' ? SLIDE_INTERVAL_MS : rotationInterval
   const rotationKey = `${activeSection}:${insightsSlide}:${weatherSlide}:${flightsSlide}`
   const secondsLeft = countdown?.key === rotationKey ? countdown.seconds : Math.round(rotationDelay / 1000)
@@ -904,10 +919,10 @@ function App() {
   // The sidebar hides itself so the wall panel stays clean, but only while it is being ignored:
   // every touch inside it bumps `sidebarTouchedAt`, which restarts the countdown.
   useEffect(() => {
-    if (!sidebarOpen) return
+    if (!sidebarOpen || phoneLayout) return
     const timer = window.setTimeout(() => setSidebarOpen(false), SIDEBAR_IDLE_MS)
     return () => window.clearTimeout(timer)
-  }, [sidebarOpen, sidebarTouchedAt])
+  }, [sidebarOpen, sidebarTouchedAt, phoneLayout])
 
   const swipeStart = useRef<{ x: number; y: number } | null>(null)
 
@@ -966,6 +981,7 @@ function App() {
   function selectSection(sectionId: string) {
     stopRotation()
     setActiveSection(sectionId)
+    setDeviceSearch({ sectionId, query: '' })
     setSidebarOpen(false)
     if (sectionId !== activeSection) {
       setInsightsSlide(0)
@@ -1034,13 +1050,12 @@ function App() {
     }
   }
 
-  const sidebarHidden = !sidebarOpen && !phoneLayout
   const clockLabel = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
   const thermostat = entities.get('climate.mainfoor_thermostat')
   const minutesSinceData = lastMessageAt === null ? null : Math.max(0, Math.floor((now.getTime() - lastMessageAt) / 60_000))
   const showConfigHint = health !== null && health.home_assistant.configured === false
   const showError = Boolean(error) && !loading && !authFailed && connection !== 'stale'
-  const rotationLabel = !autoRotate ? 'Paused' : sheetOpen ? 'Held' : `${secondsLeft}s`
+  const rotationLabel = !autoRotate ? 'Paused' : sheetOpen || sidebarOpen || searchQuery ? 'Held' : `${secondsLeft}s`
   const rotationTitle = !autoRotate
     ? 'Resume automatic page rotation'
     : `Pause automatic page rotation · next ${activeSection in SLIDE_COUNTS ? 'slide' : 'page'} in ${secondsLeft}s`
@@ -1050,7 +1065,8 @@ function App() {
 
   return (
     <div className={`command-center ${autoDimClass}`.trim()}>
-      <div className="alert-stack" aria-live="polite" aria-atomic="false" data-swipe-ignore>
+      <SeasonalEffects />
+      <div className="alert-stack" aria-live="polite" aria-atomic="false" data-swipe-ignore data-dialog-background>
         {alerts.map((alert) => (
           <button type="button" key={alert.id} className={`state-alert glass-strong ${alert.tone}`} onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))}>
             <span aria-hidden="true">{alert.tone === 'critical' ? <AlertTriangle size={22} /> : <BellRing size={22} />}</span>
@@ -1060,17 +1076,8 @@ function App() {
         ))}
       </div>
       {sidebarOpen && <button type="button" className="sidebar-scrim" aria-label="Close navigation" onClick={() => setSidebarOpen(false)} />}
-      <aside
-        className={`sidebar glass-strong ${sidebarOpen ? 'is-open' : ''}`}
-        // Hidden and inert only as the slide-in drawer; on a phone it is the always-visible tab bar.
-        aria-hidden={sidebarHidden || undefined}
-        inert={sidebarHidden}
-        data-dialog-background
-        onPointerDown={keepSidebarOpen}
-        onPointerMove={keepSidebarOpen}
-        onFocusCapture={keepSidebarOpen}
-      >
-        <div className="brand" title="Home Panel"><span className="brand-mark"><Wind size={22} aria-hidden="true" /></span><span>Home Panel</span></div>
+      {sidebarOpen && <NavigationPanel onClose={() => setSidebarOpen(false)} onInteract={keepSidebarOpen}>
+        <div className="brand" title="Home Panel"><span className="brand-mark"><Wind size={22} aria-hidden="true" /></span><span>Home / Control</span><button className="topbar-chip" type="button" aria-label="Close navigation" title="Close navigation" onClick={() => setSidebarOpen(false)}><X size={20} /></button></div>
         <nav aria-label="Dashboard sections">
           {dashboardSections.map((item) => {
             const NavIcon = sectionIcons[item.id] ?? Square
@@ -1085,12 +1092,18 @@ function App() {
           type="button"
           className="settings-button"
           onClick={() => { stopRotation(); setSidebarOpen(false); setConfigOpen(true) }}
-          disabled={!configReady}
-          title={configReady ? 'Customize dashboard tiles and Night Mode lights' : configError ? `Saved layout could not be loaded: ${configError}` : 'Waiting for saved layout…'}
+          title="Theme, dashboard tiles, and Night Mode lights"
         >
-          <Wrench size={20} aria-hidden="true" /><span>{configReady ? `Configure${configCustomized ? '' : ' (default)'}` : 'Configure · loading'}</span>
+          <Wrench size={20} aria-hidden="true" /><span>Settings</span>
         </button>
-      </aside>
+      </NavigationPanel>}
+      <nav className="mobile-dock glass-strong" aria-label="Quick navigation" data-dialog-background>
+        {dashboardSections.filter((item) => ['home', 'climate', 'security'].includes(item.id)).map((item) => {
+          const NavIcon = sectionIcons[item.id] ?? Square
+          return <button type="button" key={item.id} aria-current={item.id === activeSection ? 'page' : undefined} onClick={() => selectSection(item.id)}><NavIcon size={21} aria-hidden="true" /><span>{item.label}</span></button>
+        })}
+        <button type="button" aria-label="All sections" aria-expanded={sidebarOpen} onClick={() => { stopRotation(); setSidebarOpen(true) }}><Menu size={21} aria-hidden="true" /><span>More</span></button>
+      </nav>
 
       <main
         className={`${activeSection === 'weather' || activeSection === 'flights' ? 'is-fixed-view' : ''}${activeSection === 'insights' ? 'is-tall-view' : ''}`.trim() || undefined}
@@ -1103,7 +1116,7 @@ function App() {
       >
         {/* Behind everything in main, on the few pages quiet enough to carry one. */}
         <PhotoBackdrop sectionId={activeSection} photoIds={photoIds} />
-        <header className="topbar glass">
+        <header className="topbar">
           <div className="page-title">
             <button
               type="button"
@@ -1115,7 +1128,7 @@ function App() {
             >
               {sidebarOpen ? <PanelLeftClose size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
             </button>
-            <div><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p><h1>{section.label}</h1></div>
+            <div><p className="shell-identity">Home / Control</p><h1>{section.label}</h1><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
           </div>
           <TrackedAircraftBadge entities={entities} onOpenFlights={openFlightsSlide} />
           <div className="clock-block">
@@ -1200,7 +1213,7 @@ function App() {
                     {nightConfirm.armed
                       ? 'Locks every lock, closes the garage, turns off indoor lights'
                       // Disabled is said in words, not by fading the button.
-                      : !health?.home_assistant.connected && nightModeStatus !== 'pending' ? 'Unavailable until Home Assistant connects' : nightModeMessage}
+                      : !health?.home_assistant.connected && nightModeStatus !== 'pending' ? 'Home Assistant unavailable' : nightModeMessage}
                   </small>
                 </span>
                 <Lock size={17} aria-hidden="true" />
@@ -1248,8 +1261,7 @@ function App() {
         ) : (
           <PageFrame
             className="overview has-pane"
-            eyebrow="My home"
-            title={section.label}
+            title="Devices"
             icon={<SectionIcon />}
             meta={loading ? 'Loading entities…' : `${section.tiles.filter((tile) => entities.has(tile.entityId)).length} available`}
             actions={activeSection === 'home' ? <PresenceRow entities={entities} /> : undefined}
@@ -1259,8 +1271,13 @@ function App() {
                 <ThermostatKnob entity={thermostat} pending={false} size="large" onSet={(value) => void callService('climate', 'set_temperature', { entity_id: 'climate.mainfoor_thermostat', temperature: value })} />
               </div>
             )}
-            <div className="entity-grid">
-              {section.tiles.filter((tile) => !(activeSection === 'climate' && tile.entityId === 'climate.mainfoor_thermostat')).map((tile) => {
+            <div className="device-toolbar" data-swipe-ignore>
+              <label className="device-search"><Search size={18} aria-hidden="true" /><input type="search" aria-label={`Search ${section.label} devices`} placeholder="Search devices" value={searchQuery} onChange={(event) => { stopRotation(); setDeviceSearch({ sectionId: activeSection, query: event.target.value }) }} />{searchQuery && <button type="button" onClick={() => setDeviceSearch({ sectionId: activeSection, query: '' })} aria-label="Clear device search" title="Clear search"><X size={18} /></button>}</label>
+              <span role="status">{visibleTiles.length} {visibleTiles.length === 1 ? 'device' : 'devices'}</span>
+            </div>
+            {!visibleTiles.length && <EmptyState title={searchQuery ? 'No matching devices' : 'No devices in this section'} />}
+            <div className={`entity-grid ${searchQuery ? 'is-filtered' : ''}`}>
+              {visibleTiles.map((tile) => {
                 const isDoorCount = tile.entityId === 'sensor.doors_open_count'
                 return (
                   <EntityTile

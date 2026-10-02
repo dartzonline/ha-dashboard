@@ -1,4 +1,4 @@
-import { MapPinOff, Pause, Play, Radar as RadarIcon, Sun } from 'lucide-react'
+import { MapPinOff, Minus, Pause, Play, Plus, Radar as RadarIcon, Sun } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { cachedJson, isAbortError, peekCached } from './cachedFetch'
 import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
@@ -34,7 +34,6 @@ const BASEMAP_ZOOM = 9
 // Fetched at its own zoom and scaled up in CSS to line up with the basemap's finer grid below.
 const PRECIP_ZOOM = 7
 const PRECIP_SOURCE_SIZE = 512
-const PRECIP_SCALE = 2 ** (BASEMAP_ZOOM - PRECIP_ZOOM)
 const BASEMAP_URL = 'https://basemaps.cartocdn.com/dark_all'
 /** Below this chance across the next day, "radar" has nothing to say and the panel pivots. */
 const QUIET_RAIN_CHANCE = 20
@@ -158,8 +157,11 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
   const [payload, setPayload] = useState<RadarPayload | null>(() => peekCached<RadarPayload>(RADAR_CACHE_KEY) ?? null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
-  const [frameIndex, setFrameIndex] = useState(0)
+  const [frameIndex, setFrameIndex] = useState(-1)
   const [playing, setPlaying] = useState(true)
+  const [zoom, setZoom] = useState(BASEMAP_ZOOM)
+  const [loadedTiles, setLoadedTiles] = useState<Set<string>>(() => new Set())
+  const [imageFailed, setImageFailed] = useState(false)
   const [size, setSize] = useState({ width: 0, height: 0 })
   const scopeRef = useRef<HTMLDivElement | null>(null)
 
@@ -178,6 +180,8 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
 
   function retry() {
     setLoadFailed(false)
+    setImageFailed(false)
+    setLoadedTiles(new Set())
     setAttempt((current) => current + 1)
   }
 
@@ -197,26 +201,35 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
   const frames = payload?.frames ?? []
   // Frame count only changes right after a refetch; deriving the in-range index at render time
   // avoids a setState-in-effect just to clamp it.
-  const displayIndex = frames.length ? frameIndex % frames.length : 0
+  const displayIndex = frames.length ? (frameIndex < 0 ? frames.length - 1 : frameIndex % frames.length) : 0
   const isNewestFrame = frames.length > 0 && displayIndex === frames.length - 1
-
-  useEffect(() => {
-    if (!playing || frames.length < 2) return
-    const timer = window.setTimeout(() => {
-      setFrameIndex((current) => (current + 1) % frames.length)
-    }, isNewestFrame ? LAST_FRAME_HOLD_MS : FRAME_INTERVAL_MS)
-    return () => window.clearTimeout(timer)
-  }, [playing, frames.length, displayIndex, isNewestFrame])
 
   const currentFrame = frames[displayIndex] ?? null
   const hasLocation = latitude !== null && longitude !== null
   const hasViewport = hasLocation && size.width > 0 && size.height > 0
   const tiles = hasViewport
-    ? planTiles(size.width, size.height, latitude, longitude, BASEMAP_ZOOM)
+    ? planTiles(size.width, size.height, latitude, longitude, zoom)
     : []
+  const precipZoom = Math.min(zoom, PRECIP_ZOOM)
+  const precipScale = 2 ** (zoom - precipZoom)
   const precipTiles = hasViewport
-    ? planTiles(size.width, size.height, latitude, longitude, PRECIP_ZOOM, PRECIP_SCALE)
+    ? planTiles(size.width, size.height, latitude, longitude, precipZoom, precipScale)
     : []
+
+  function tileUrl(frame: RadarFrame, tile: TilePlacement) {
+    return `${payload?.host}${frame.path}/${PRECIP_SOURCE_SIZE}/${precipZoom}/${tile.x}/${tile.y}/4/1_1.png`
+  }
+  const frameReady = Boolean(currentFrame && precipTiles.length && precipTiles.every((tile) => loadedTiles.has(tileUrl(currentFrame, tile))))
+  const nextFrame = frames[(displayIndex + 1) % frames.length]
+  const nextFrameReady = Boolean(nextFrame && precipTiles.length && precipTiles.every((tile) => loadedTiles.has(tileUrl(nextFrame, tile))))
+
+  useEffect(() => {
+    if (!playing || frames.length < 2 || !frameReady || !nextFrameReady || imageFailed) return
+    const timer = window.setTimeout(() => {
+      setFrameIndex((displayIndex + 1) % frames.length)
+    }, isNewestFrame ? LAST_FRAME_HOLD_MS : FRAME_INTERVAL_MS)
+    return () => window.clearTimeout(timer)
+  }, [playing, frames.length, displayIndex, isNewestFrame, frameReady, nextFrameReady, imageFailed])
 
   // Loading and failure are drawn over the map itself, so the heading only carries the frame time.
   const statusLabel = hasLocation && currentFrame ? `As of ${formatFrameClock(currentFrame.time)}` : null
@@ -224,7 +237,7 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
   // With nothing falling anywhere nearby, an empty radar loop is just a dark map. The same panel
   // then reports the things that actually matter on a dry day.
   const quiet = outlook !== undefined
-    && (outlook.peakRainChance === null || outlook.peakRainChance < QUIET_RAIN_CHANCE)
+    && outlook.peakRainChance !== null && outlook.peakRainChance < QUIET_RAIN_CHANCE
 
   const quietFacts = quiet && outlook
     ? [
@@ -240,7 +253,7 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
   return (
     <section className="weather-panel radar-panel" aria-label="Precipitation radar" data-swipe-ignore>
       <header className="weather-panel-heading">
-        <h3>{quiet ? 'Radar clear' : 'Precipitation radar'}</h3>
+        <h3>Precipitation radar</h3>
         {statusLabel && <span>{statusLabel}</span>}
       </header>
       <div className="radar-scope" ref={scopeRef}>
@@ -248,50 +261,60 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
           <div className="radar-layer radar-basemap" aria-hidden="true">
             {tiles.map((tile) => (
               <img
-                key={`base-${tile.key}`}
+                key={`base-${tile.key}-${zoom}-${attempt}`}
                 // @2x pulls a 512px source into a 256 CSS-px tile, so city-name labels render at
                 // retina sharpness instead of the visible upscaling blur a 1x tile shows at this size.
-                src={`${BASEMAP_URL}/${BASEMAP_ZOOM}/${tile.x}/${tile.y}@2x.png`}
+                src={`${BASEMAP_URL}/${zoom}/${tile.x}/${tile.y}@2x.png`}
                 alt=""
+                onError={() => setImageFailed(true)}
                 style={{ left: tile.left, top: tile.top }}
                 loading="eager"
               />
             ))}
           </div>
         )}
-        {precipTiles.length > 0 && currentFrame && payload && (
-          <div className="radar-layer radar-precip" aria-hidden="true">
+        {precipTiles.length > 0 && payload && frames.map((frame) => (
+          <div key={`${frame.path}-${attempt}`} className="radar-layer radar-precip" aria-hidden="true" style={{ visibility: frame.time === currentFrame?.time ? 'visible' : 'hidden' }}>
             {precipTiles.map((tile) => (
               <img
-                key={`radar-${tile.key}-${currentFrame.time}`}
-                src={`${payload.host}${currentFrame.path}/${PRECIP_SOURCE_SIZE}/${PRECIP_ZOOM}/${tile.x}/${tile.y}/4/1_1.png`}
+                key={`radar-${tile.key}-${precipZoom}`}
+                src={tileUrl(frame, tile)}
                 alt=""
-                style={{ left: tile.left, top: tile.top, width: TILE_SIZE * PRECIP_SCALE, height: TILE_SIZE * PRECIP_SCALE }}
+                onLoad={(event) => {
+                  const source = event.currentTarget.src
+                  setLoadedTiles((current) => current.has(source) ? current : new Set([...current, source]))
+                }}
+                onError={() => setImageFailed(true)}
+                style={{ left: tile.left, top: tile.top, width: TILE_SIZE * precipScale, height: TILE_SIZE * precipScale }}
                 loading="eager"
               />
             ))}
           </div>
-        )}
+        ))}
         {/* Circular range rings read wrong on a rectangular map crop; a plain home marker is enough. */}
         <div className="radar-rings" aria-hidden="true">
           <span className="radar-home-dot" />
         </div>
-        {(!currentFrame || !hasLocation) && (
+        {(!currentFrame || !hasLocation || imageFailed || !frameReady) && (
           <div className="radar-overlay">
             {!hasLocation
               ? <EmptyState size="compact" icon={<MapPinOff />} title="Home location not available" hint="Looks for latitude and longitude on the weather.* entity or on zone.home" />
-              : loadFailed
-                ? <InlineError message="Radar data unavailable" onRetry={retry} />
-                : <LoadingState size="compact" label="Loading radar frames" />}
+              : loadFailed || imageFailed
+                ? <InlineError message={imageFailed ? 'Map or radar tiles unavailable' : 'Radar data unavailable'} onRetry={retry} />
+                : <LoadingState size="compact" label={currentFrame ? 'Loading radar imagery' : 'Loading radar frames'} />}
           </div>
         )}
         <span className="radar-attribution on-glass-text">© OpenStreetMap · CARTO</span>
+        <div className="radar-zoom">
+          <button type="button" className="glass-pill" title="Zoom in" aria-label="Zoom in radar" disabled={!hasLocation || zoom >= 10} onClick={() => setZoom((current) => current + 1)}><Plus size={18} aria-hidden="true" /></button>
+          <button type="button" className="glass-pill" title="Zoom out" aria-label="Zoom out radar" disabled={!hasLocation || zoom <= 6} onClick={() => setZoom((current) => current - 1)}><Minus size={18} aria-hidden="true" /></button>
+        </div>
       </div>
       {quiet && (
         <div className="radar-quiet tone-good" role="status">
           <p className="radar-quiet-lead">
             <Sun size={16} aria-hidden="true" />
-            No precipitation in range or in the next 24 hours
+            Low forecast rain chance in the next 24 hours
             {outlook?.peakRainHour && outlook.peakRainChance !== null
               ? ` — highest chance ${Math.round(outlook.peakRainChance)}% around ${outlook.peakRainHour}`
               : ''}
@@ -311,17 +334,13 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
           type="button"
           className="radar-play-toggle glass-pill"
           onClick={() => setPlaying((current) => !current)}
-          disabled={frames.length < 2}
+          disabled={frames.length < 2 || !hasLocation || imageFailed}
           title={playing ? 'Pause radar animation' : 'Play radar animation'}
         >
           {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
           <span>{playing ? 'Pause' : 'Play'}</span>
         </button>
-        <div className="radar-frame-dots" role="img" aria-label={frames.length ? `Frame ${displayIndex + 1} of ${frames.length}` : 'No radar frames'}>
-          {frames.map((frame, index) => (
-            <span key={frame.time} className={index === displayIndex ? 'is-active' : ''} />
-          ))}
-        </div>
+        <input className="radar-timeline" type="range" min={0} max={Math.max(0, frames.length - 1)} value={displayIndex} disabled={frames.length < 2 || !hasLocation} aria-label="Radar time" aria-valuetext={currentFrame ? formatFrameClock(currentFrame.time) : 'No radar frames'} onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)) }} />
         <span className="radar-source"><RadarIcon size={12} aria-hidden="true" /> RainViewer</span>
       </div>
     </section>

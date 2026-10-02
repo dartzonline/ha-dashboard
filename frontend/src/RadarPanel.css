@@ -106,6 +106,10 @@
   gap: 8px;
 }
 
+.radar-timeline { flex: 1; min-width: 44px; height: 44px; accent-color: var(--accent); }
+.radar-zoom { position: absolute; top: 10px; right: 10px; z-index: 4; display: grid; gap: 6px; }
+.radar-zoom button { width: 44px; height: 44px; display: grid; place-items: center; background: var(--surface-solid); }
+
 .radar-play-toggle {
   display: flex;
   align-items: center;
