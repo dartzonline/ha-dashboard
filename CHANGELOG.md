@@ -3,6 +3,38 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.16.0 - 2026-10-02: Themes, navigation, and radar
+
+**Personalize each display in Settings > Theme.** Choose Modern, Retro, or Retro / Modern
+independently of six dark palettes: Phosphor, Arctic, Ember, Lavender, Halloween, and Holidays.
+Changes apply immediately and are saved in this browser across reloads. Theme settings work
+offline and do not modify the household's saved dashboard layout. Reset theme restores the
+rounded Retro / Modern Phosphor default. If browser storage is unavailable, settings report that
+the change is session-only.
+
+**Seasonal displays.** Holidays adds snowflakes, gifts, stars, and Christmas trees. Halloween
+adds larger drifting ghosts, moons, skulls, corner webs, slowly glowing lanterns, and a
+jack-o'-lantern that occasionally appears at changing positions near the middle of the screen.
+Decorations never capture taps, use a small fixed number
+of particles, and disappear when reduced motion is enabled. A separate Seasonal effects checkbox
+turns decorations off without changing the palette.
+
+**A retro-modern default.** Matte charcoal panels, phosphor accents, rounded controls, and
+self-hosted Space Mono readings replace the glass-heavy styling. Modern uses sans-serif headings;
+Retro uses sharper corners and instrument-style readings. Text and status colors are tested for
+AA contrast on each palette's raised surfaces.
+
+**Faster navigation and device search.** Phones have Home, Climate, and Security shortcuts plus
+a More drawer containing every section and Settings. The drawer isolates keyboard focus and
+supports Escape and Back. Home status collapses on phones. Device search matches labels and
+entity IDs, includes clear and empty states, and holds automatic rotation while a query is active.
+
+**More usable precipitation radar.** Playback starts at the newest frame and retains loaded
+imagery instead of replacing every tile on each step. Animation waits for buffered frames,
+failed tiles show an explicit retry state, and zoom buttons and a time scrubber make storms
+easier to inspect. A low or unknown forecast rain probability no longer incorrectly reports
+the radar as clear.
+
 ## 1.15.0 - 2026-09-28: UI overhaul
 
 **A new look: liquid glass, tuned for reading across a room.** Every panel is now a pane of dark,

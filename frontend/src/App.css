@@ -6,7 +6,7 @@
    page scrolls with the body) and `min-width: 761px` (wall panel: viewport-
    locked shell, pages fill their height). Earlier capped queries such as
    `max-width: 1440px` missed a Fire HD 10 in landscape (~1443 CSS px) and left
-   it on phone-sized rules; type now scales from the fluid root size in
+  it on phone-sized rules; type now uses the stable root size in
    index.css, so nothing here needs a width band.
 
    Readability first: every line of text sits on a pane (glass, glass-strong or
@@ -17,14 +17,14 @@
 /* ---------- Shell -------------------------------------------------------- */
 /* `position: relative` so the auto-dim overlay (AutoDim.css) and the fixed layers below share
    one root; nothing here sets a filter or transform, which would trap `position: fixed`. */
-.command-center { position: relative; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); }
+.command-center { position: relative; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); overflow-x: clip; }
 
 main { position: relative; width: 100%; max-width: 1600px; min-width: 0; margin: 0 auto; padding: 10px clamp(10px, 2vw, 28px) 24px; display: flex; flex-direction: column; }
 /* Everything in main sits above the photo backdrop, which is z-index 0 inside this same context.
    Each child therefore becomes its own stacking context, so the topbar needs a higher layer than
    its siblings or anything it opens would slide under the page. */
 main > *:not(.photo-backdrop) { position: relative; z-index: 1; }
-main > .topbar { position: sticky; top: 8px; z-index: 5; }
+main > .topbar { position: sticky; top: 0; z-index: 5; }
 .page-slide { flex: 1 1 auto; min-height: 0; animation: page-in .32s var(--ease); }
 
 /* Weather and Flights are full-bleed: the header floats over the map as its own pane. */
@@ -42,15 +42,19 @@ main.is-tall-view { max-width: none; overflow: hidden; }
    was. Symmetric 1fr side columns pin it to the true centre; the items are placed by column, so
    when the banner hides itself on a narrow panel the clock still lands on the right edge. */
 .topbar {
-  min-height: 68px;
-  padding: 8px 10px 8px 8px;
-  border-radius: var(--r-lg);
+  min-height: 100px;
+  padding: 12px 0 16px;
+  border: 0;
+  border-bottom: 2px solid var(--accent);
+  border-radius: 0;
+  background: var(--glass-bg-strong);
   display: grid;
   grid-template-columns: minmax(max-content, 1fr) minmax(0, auto) minmax(max-content, 1fr);
   align-items: center;
   gap: 14px;
 }
 .page-title { grid-column: 1; justify-self: start; min-width: 0; display: flex; align-items: center; gap: 12px; }
+.page-title > div { min-width: 0; }
 .topbar > .flight-banner { grid-column: 2; justify-self: center; }
 .clock-block { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 14px; }
 
@@ -60,7 +64,7 @@ main.is-tall-view { max-width: none; overflow: hidden; }
   height: var(--tap);
   padding: 0;
   border: 1px solid var(--glass-border);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-sm);
   color: var(--text);
   background: var(--surface-raised);
   box-shadow: var(--glass-edge);
@@ -72,8 +76,9 @@ main.is-tall-view { max-width: none; overflow: hidden; }
 .nav-toggle { width: 48px; height: 48px; border-radius: var(--r-sm); }
 .nav-toggle:hover, .topbar-chip:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border)); }
 
-.date { margin: 0; color: var(--muted); font-size: .72rem; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; }
-h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; letter-spacing: -.02em; }
+.shell-identity { margin: 0 0 5px; color: var(--accent); font: 600 .65rem var(--mono); text-transform: uppercase; }
+.date { margin: 6px 0 0; color: var(--muted); font-size: .7rem; font-weight: 500; letter-spacing: 0; }
+h1 { margin: 0; font: 700 1.65rem/1.15 var(--display-font, var(--mono)); letter-spacing: 0; text-transform: var(--heading-case, uppercase); overflow-wrap: anywhere; }
 
 /* A real <button>, not styled text: it opens World time, the same way the flight banner opens
    Flights. The clock is the hero of the header: the largest, heaviest thing on the panel. */
@@ -82,12 +87,10 @@ h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; let
   padding: 0 4px;
   border: 0;
   border-radius: var(--r-sm);
-  color: var(--text-strong);
+  color: var(--clock-color, var(--accent));
   background: transparent;
-  font-size: 2.5rem;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -.03em;
+  font: 700 2.3rem/1 var(--display-font, var(--mono));
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -155,7 +158,7 @@ h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; let
 /* Hidden on load and slid over the content when opened. z-index keeps it above main's fixed photo
    backdrop, which would otherwise paint over it (both positioned, main later in the DOM). */
 .sidebar {
-  position: fixed; z-index: 40; top: 0; left: 0; width: 248px; height: 100svh; padding: 16px 12px;
+  position: fixed; z-index: 40; top: 0; left: 0; width: min(340px, calc(100% - 24px)); height: 100svh; padding: 16px 12px;
   border-left: 0; border-radius: 0 var(--r-xl) var(--r-xl) 0;
   display: flex; flex-direction: column;
   transform: translateX(-104%); transition: transform .24s var(--ease);
@@ -169,7 +172,10 @@ h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; let
   animation: backdrop-in .18s ease-out;
 }
 .sidebar-scrim:active { transform: none; }
-.brand { height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 8px; color: var(--text); font-size: .9rem; font-weight: 750; letter-spacing: -.01em; }
+.brand { min-height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 4px; color: var(--text); font-size: .85rem; font-weight: 750; letter-spacing: 0; }
+.brand .topbar-chip { margin-left: auto; }
+.brand-mark { flex-shrink: 0; }
+.mobile-dock { display: none; }
 .brand-mark { width: 40px; height: 40px; border: 1px solid var(--glass-border); border-radius: var(--r-sm); display: grid; place-items: center; color: var(--accent-strong); background: var(--glass-highlight), var(--surface-raised); box-shadow: var(--glass-edge); }
 .sidebar nav { display: grid; gap: 4px; margin-top: 14px; overflow-y: auto; overscroll-behavior: contain; }
 .sidebar nav button, .settings-button {
@@ -197,13 +203,12 @@ h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; let
 .moment-copy strong { font-size: .86rem; font-weight: 700; }
 .moment-copy small { overflow: hidden; color: var(--muted); font-size: .74rem; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Night Mode: a deep indigo-to-violet wash over the pane, the moon in a frosted disc. */
 .night-mode-moment {
-  border-color: color-mix(in srgb, #8f87e8 36%, var(--glass-border));
-  background-image: var(--glass-highlight), linear-gradient(120deg, color-mix(in srgb, #4d52c8 26%, transparent), color-mix(in srgb, #8b5bd0 20%, transparent));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--glass-border));
+  background-image: var(--glass-highlight);
 }
-.night-mode-moment .moment-icon { color: #e3deff; background: color-mix(in srgb, #c9c3ff 20%, var(--surface-raised)); box-shadow: var(--glass-edge), 0 0 0 1px color-mix(in srgb, #c9c3ff 26%, transparent); }
-.night-mode-moment > svg { color: #c9c3ff; }
+.night-mode-moment .moment-icon { color: var(--accent); background: var(--accent-soft); }
+.night-mode-moment > svg { color: var(--accent); }
 .night-mode-moment.is-armed { border-color: var(--warn); background-image: var(--glass-highlight); background-color: color-mix(in srgb, var(--warn) 16%, var(--glass-bg)); }
 .night-mode-moment.is-armed strong, .night-mode-moment.is-armed > svg { color: var(--warn); }
 .night-mode-moment.is-armed .moment-icon { color: var(--warn-ink); background: var(--warn); }
@@ -222,15 +227,17 @@ h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; let
 
 /* ---------- Home: utility rail + attention strip ------------------------ */
 .utility-stack { margin-top: 8px; display: grid; gap: 8px; }
+.utility-disclosure > summary { display: none; }
 /* Up to six cells in one row, wrapping to fewer when a cell's title would not fit. One rail row,
    not two: a second row costs ~70px that the tile grid needs on 1280x800 panels. */
-.utility-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(8.5rem, calc((100% - 5 * 8px) / 6)), 1fr)); gap: 8px; }
+.utility-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(8.5rem, calc((100% - 5 * 8px) / 6)), 1fr)); gap: 0; border-block: 1px solid var(--border); }
 .utility-cell {
   --cell-tone: var(--accent);
   min-width: 0; min-height: 62px; padding: 8px 12px 8px 9px; border-radius: var(--r-md); color: var(--text);
   display: flex; align-items: center; gap: 10px; text-align: left;
 }
 .utility-cell:hover { border-color: color-mix(in srgb, var(--cell-tone) 40%, var(--glass-border)); }
+.utility-cell.glass { border: 0; border-radius: 0; background: var(--glass-bg-strong); box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
 .utility-cell.is-current { border-color: color-mix(in srgb, var(--accent) 50%, var(--glass-border)); }
 .utility-cell.is-good { --cell-tone: var(--good); }
 .utility-cell.is-warn, .utility-cell.is-weather { --cell-tone: var(--warn); }
@@ -265,6 +272,16 @@ h1 { margin: 2px 0 0; font-size: 1.5rem; line-height: 1.1; font-weight: 750; let
 .climate-hero .thermo-knob.size-large { width: 240px; }
 
 .entity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.entity-grid:empty { display: none; }
+.entity-grid.is-filtered { align-content: start; grid-auto-rows: minmax(150px, auto); }
+.device-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.device-toolbar > span { flex-shrink: 0; font: 600 .7rem var(--mono); color: var(--muted); }
+.device-search { display: flex; align-items: center; gap: 9px; min-height: var(--tap); width: min(340px, 100%); padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--muted); }
+.device-search:focus-within { border-color: var(--accent); }
+.device-search > svg { flex-shrink: 0; }
+.device-search input { min-width: 0; width: 100%; min-height: var(--tap); border: 0; background: transparent; color: var(--text); font-size: .8rem; }
+.device-search input::placeholder { color: var(--muted); }
+.device-search button { flex-shrink: 0; width: var(--tap); padding: 0; border: 0; background: transparent; color: var(--muted); display: grid; place-items: center; }
 
 /* Each tile is a pane. `--tile-bg` is the pane colour the tone washes mix into, so a backdrop
    page can swap in the stronger pane without re-stating every tint. */
@@ -290,28 +307,28 @@ main:has(.photo-backdrop) .entity-tile { --tile-bg: var(--glass-bg-strong); }
 
 .tile-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
 .tile-heading > div { min-width: 0; }
-.tile-icon { flex: 0 0 44px; height: 44px; border: 1px solid var(--glass-border); border-radius: 50%; color: var(--muted); background: var(--glass-highlight), var(--surface-raised); box-shadow: var(--glass-edge); display: grid; place-items: center; transition: color .16s ease, background-color .16s ease; }
-.tile-heading h3 { margin: 0 0 4px; color: var(--muted); font-size: .74rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile-heading p { margin: 0; color: var(--text); font-size: 1.1rem; font-weight: 750; line-height: 1.1; letter-spacing: -.01em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tile-icon { flex: 0 0 44px; height: 44px; border: 1px solid var(--glass-border); border-radius: var(--r-sm); color: var(--muted); background: var(--surface-raised); box-shadow: var(--glass-edge); display: grid; place-items: center; transition: color .16s ease, background-color .16s ease; }
+.tile-heading h3 { margin: 0 0 6px; color: var(--muted); font: 400 .7rem/1.4 var(--label-font, var(--mono)); letter-spacing: 0; text-transform: var(--heading-case, uppercase); white-space: normal; overflow-wrap: anywhere; }
+.tile-heading p { margin: 0; color: var(--text); font: 700 1.05rem/1.3 var(--display-font, var(--mono)); letter-spacing: 0; overflow: hidden; white-space: normal; overflow-wrap: anywhere; }
 
 /* Tone states: a wash of the tone on the pane, a matching edge, a soft inner glow and a filled
    icon. None of them changes the pane's opacity. */
 .entity-tile.is-active {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--glass-border));
   background-color: color-mix(in srgb, var(--accent) 12%, var(--tile-bg));
-  box-shadow: var(--glass-edge), inset 0 0 28px color-mix(in srgb, var(--accent) 14%, transparent), var(--glass-shadow);
+  box-shadow: inset 3px 0 var(--accent), var(--glass-shadow);
 }
 .entity-tile.is-active .tile-icon { color: var(--accent-ink); border-color: transparent; background: var(--accent); }
 .entity-tile.is-light-on {
   border-color: color-mix(in srgb, var(--warn) 50%, var(--glass-border));
   background-color: color-mix(in srgb, var(--warn) 14%, var(--tile-bg));
-  box-shadow: var(--glass-edge), inset 0 0 28px color-mix(in srgb, var(--warn) 16%, transparent), var(--glass-shadow);
+  box-shadow: inset 3px 0 var(--warn), var(--glass-shadow);
 }
 .entity-tile.is-light-on .tile-icon { color: var(--warn-ink); border-color: transparent; background: var(--warn); }
 .entity-tile.is-hazard {
   border-color: color-mix(in srgb, var(--danger) 52%, var(--glass-border));
   background-color: color-mix(in srgb, var(--danger) 14%, var(--tile-bg));
-  box-shadow: var(--glass-edge), inset 0 0 28px color-mix(in srgb, var(--danger) 14%, transparent), var(--glass-shadow);
+  box-shadow: inset 3px 0 var(--danger), var(--glass-shadow);
 }
 .entity-tile.is-hazard .tile-icon { color: var(--danger-ink); border-color: transparent; background: var(--danger); }
 .entity-tile.is-hazard .tile-heading p { color: var(--danger); }
@@ -426,7 +443,7 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
    Phone: the nav rail becomes a bottom tab bar and the page scrolls with the body.
    ============================================================================ */
 @media (max-width: 760px) {
-  .command-center { padding-bottom: 76px; }
+  .command-center { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
   main { padding: 8px 10px 26px; }
   /* The page scrolls with the body here, so a full-bleed view must not clip its own overflow. */
   main.is-fixed-view { overflow: visible; }
@@ -434,8 +451,8 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
   main.is-fixed-view > .topbar { top: 8px; left: 8px; right: 8px; }
   main.is-fixed-view > .shell-banners { top: 80px; left: 8px; right: 8px; }
 
-  .topbar { min-height: 60px; padding: 6px 8px 6px 14px; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-  .clock-block { grid-column: 2; gap: 8px; }
+  .topbar { min-height: 88px; padding: 10px 0; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .clock-block { grid-column: 2; gap: 8px; flex-direction: column; align-items: flex-end; }
   .nav-toggle { display: none; }
   .date { font-size: .64rem; }
   h1 { font-size: 1.25rem; }
@@ -443,16 +460,14 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
   .rotation-status { padding: 0; width: var(--tap); }
   .rotation-status span { display: none; }
 
-  .sidebar {
-    top: auto; bottom: 0; width: 100%; height: calc(70px + env(safe-area-inset-bottom)); padding: 5px 8px max(5px, env(safe-area-inset-bottom));
-    border-radius: var(--r-lg) var(--r-lg) 0 0; transform: none; box-shadow: var(--glass-edge), 0 -3px 14px rgba(0, 0, 0, .32);
-  }
-  .sidebar .brand, .sidebar .settings-button, .sidebar-scrim { display: none; }
-  .sidebar nav { height: 100%; margin: 0; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-  .sidebar nav::-webkit-scrollbar { display: none; }
-  .sidebar nav button { flex: 0 0 64px; min-height: 0; padding: 5px 1px; flex-direction: column; justify-content: center; gap: 3px; font-size: .62rem; text-align: center; }
-  .sidebar nav button span { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sidebar nav button.active::before { left: 18px; right: 18px; top: 2px; bottom: auto; width: auto; height: 3px; }
+  .sidebar { height: 100dvh; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .sidebar nav { scrollbar-width: thin; }
+  .sidebar nav button { min-height: 48px; }
+  .sidebar nav button span { overflow-wrap: anywhere; }
+  .mobile-dock { position: fixed; inset: auto 10px max(8px, env(safe-area-inset-bottom)); z-index: 25; min-height: 68px; padding: 5px; border-radius: var(--r-md); display: flex; gap: 4px; }
+  .mobile-dock button { flex: 1 1 0; min-width: 0; min-height: 54px; padding: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 0; background: transparent; color: var(--muted); font-size: .65rem; border-radius: var(--r-sm); }
+  .mobile-dock button span { max-width: 100%; overflow-wrap: anywhere; }
+  .mobile-dock button[aria-current] { background: var(--accent-soft); color: var(--accent-strong); }
 
   /* Above the tab bar, still the loudest thing on screen, just sized for a phone. */
   .alert-stack { bottom: calc(82px + env(safe-area-inset-bottom)); width: calc(100% - 20px); }
@@ -468,7 +483,15 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
   .attention-strip { grid-template-columns: 30px minmax(0, 1fr); }
   .attention-strip strong { overflow: hidden; text-overflow: ellipsis; }
   .attention-strip small { grid-column: 1 / -1; white-space: normal; }
-  .night-mode-moment, .thermostat-quick { min-height: 56px; }
+  .night-mode-moment, .thermostat-quick { min-height: 78px; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 10px; }
+  .moment-icon { width: 26px; height: 32px; background: transparent; }
+  .night-mode-moment > svg { display: none; }
+  .moment-copy strong { font-size: .8rem; }
+  .moment-copy small { white-space: normal; font-size: .68rem; line-height: 1.35; }
+  .utility-disclosure > summary { display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 8px 10px; color: var(--muted); background: var(--glass-bg-strong); border-bottom: 1px solid var(--border); cursor: pointer; font-size: .78rem; list-style: none; }
+  .utility-disclosure > summary::-webkit-details-marker { display: none; }
+  .utility-disclosure > summary svg:last-child { margin-left: auto; transition: transform .18s ease; }
+  .utility-disclosure[open] > summary svg:last-child { transform: rotate(180deg); }
 
   .overview { padding-top: 12px; }
   .entity-grid { gap: 9px; }
@@ -509,7 +532,7 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
   .tile-icon svg { width: clamp(24px, 1.9vw, 34px); height: clamp(24px, 1.9vw, 34px); }
   .tile-heading > div { flex: 1 1 auto; }
   .tile-heading h3 { margin-bottom: 6px; }
-  .tile-heading p { font-size: clamp(1.3rem, 2.2vw, 1.9rem); font-weight: 800; line-height: 1.05; letter-spacing: -.02em; }
+  .tile-heading p { font-size: 1.65rem; font-weight: 800; line-height: 1.1; letter-spacing: 0; }
   .entity-tile.is-unavailable .tile-heading p { font-size: 1rem; }
   /* Without a trend to fill the box, the reading centres instead of hugging the top. */
   .entity-tile:not(:has(.tile-spark)) .tile-heading { margin-block: auto; }

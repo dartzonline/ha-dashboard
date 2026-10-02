@@ -1,3 +1,6 @@
+@import '@fontsource/space-mono/latin-400.css';
+@import '@fontsource/space-mono/latin-700.css';
+
 /* Self-hosted so a LAN-only wall panel never blocks first paint on a font CDN it may not reach.
    Variable weight 400-800 in one file per subset; Latin + Latin Extended cover every label here. */
 @font-face {
@@ -18,53 +21,42 @@
 }
 
 /* ============================================================================
-   Design tokens — "liquid glass" on a deep, softly lit canvas.
-
-   The idea: the canvas carries a few large, slow colour washes; every panel on
-   top is a translucent pane that blurs and saturates whatever sits behind it,
-   with a thin light edge along its top-left where the "light" comes from. The
-   greys keep a slight warm cast so it reads as glass in a dim room rather than
-   a blue HUD. One accent (periwinkle) does emphasis; green/amber/red are
-   reserved for status and never double as series colours.
+  Retro-modern console: charcoal panels, phosphor highlights and rounded controls.
+  Chart series stay independent of the interface's status colours.
    ============================================================================ */
 :root {
   /* Canvas + ink */
-  --canvas: #0b0d12;
-  --canvas-2: #10131a;
-  --text: #f2f1ee;
-  --text-strong: #ffffff;
-  --muted: #bcb9b2;
-  --muted-2: #95928c;
+  --canvas: #101413;
+  --canvas-2: #19201d;
+  --text: #edf2df;
+  --text-strong: #f6f8eb;
+  --muted: #b8c5b8;
+  --muted-2: #98aa9b;
   --fg: var(--text);
 
-  /* Readability first: this is a wall dashboard read from across a room, so the glass is a
-     finish, not a see-through effect. Panes are ~80% opaque dark tint with a modest blur, the
-     edge light is faint, and the canvas washes are subtle. Text on any pane must hold WCAG AA
-     (4.5:1 body, 3:1 for large numerals); --text and --muted both clear that on --glass-bg. */
-  /* Glass surfaces. Alpha, not solid — the blur does the rest. Keep the old names so every
-     existing `background: var(--surface)` becomes thin glass without a rewrite. */
-  --surface: rgba(28, 31, 40, .80);
-  --surface-raised: rgba(44, 48, 60, .85);
-  --surface-solid: #171a21;
-  --border: rgba(255, 255, 255, .09);
-  --border-strong: rgba(255, 255, 255, .18);
-  --glass-bg: rgba(26, 29, 38, .78);
-  --glass-bg-strong: rgba(18, 20, 27, .90);
-  --glass-border: rgba(255, 255, 255, .10);
-  --glass-blur: 14px;
-  --glass-saturate: 125%;
+    /* Existing glass primitives share these matte surfaces without changing their public API. */
+  --surface: #1d2521;
+  --surface-raised: #2d3831;
+  --surface-solid: #1d2521;
+  --border: #46554a;
+  --border-strong: #81927f;
+  --glass-bg: #1d2521;
+  --glass-bg-strong: #151c18;
+  --glass-border: #46554a;
+  --glass-blur: 0px;
+  --glass-saturate: 100%;
   /* Specular: a soft light edge at the top-left, fading out fast. Layered under content as a
      background-image so components keep their own ::before/::after free. */
-  --glass-highlight: linear-gradient(135deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, .02) 30%, rgba(255, 255, 255, 0) 55%);
-  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, .10);
-  --glass-shadow: 0 1px 2px rgba(0, 0, 0, .28), 0 14px 40px rgba(0, 0, 0, .32);
+  --glass-highlight: none;
+  --glass-edge: inset 0 1px 0 rgba(237, 242, 223, .08);
+  --glass-shadow: 0 2px 6px rgba(8, 12, 9, .24), 0 10px 24px rgba(8, 12, 9, .18);
   --shadow: var(--glass-shadow);
 
   /* Accent */
-  --accent: #8fa9f0;
-  --accent-strong: #c3d1f7;
-  --accent-soft: rgba(143, 169, 240, .16);
-  --accent-ink: #0d1422;
+  --accent: #d0e779;
+  --accent-strong: #e2efac;
+  --accent-soft: rgba(208, 231, 121, .12);
+  --accent-ink: #17200d;
 
   /* Status — text-safe tints for UI copy, icons and edges. Always paired with an icon or word. */
   --good: #7fd1a8;
@@ -78,18 +70,15 @@
   --danger-soft: rgba(240, 144, 144, .16);
   --bad: var(--danger);
 
-  /* Chart series — a fixed-order categorical set validated (OKLCH band, chroma floor, CVD and
-     normal-vision separation, 3:1 on --canvas). Assign in order, never cycle; a 7th series folds
-     into "Other". Status tints above are NOT series colours. */
-  --chart-1: #4f8ee8;
-  --chart-2: #d95926;
-  --chart-3: #199e70;
-  --chart-4: #c98500;
-  --chart-5: #d55181;
-  --chart-6: #9085e9;
+    --chart-1: #4f8ee8;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #9085e9;
   --chart-line: var(--chart-1);
-  --chart-grid: rgba(255, 255, 255, .07);
-  --chart-axis: rgba(255, 255, 255, .16);
+  --chart-grid: rgba(184, 197, 184, .10);
+  --chart-axis: rgba(184, 197, 184, .24);
   --chart-ink: var(--muted);
 
   /* Rail (sidebar) */
@@ -98,17 +87,17 @@
   --rail-active: var(--text-strong);
 
   /* Shape + rhythm */
-  --r-sm: 12px;
-  --r-md: 18px;
-  --r-lg: 26px;
-  --r-xl: 34px;
+  --r-sm: 8px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
   --r-pill: 999px;
   --tap: 44px;
   --gap: 10px;
   --ease: cubic-bezier(.2, .8, .2, 1);
 
   --sans: 'Manrope', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
-  --mono: 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --mono: 'Space Mono', 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-family: var(--sans);
   color: var(--text);
   background: var(--canvas);
@@ -124,13 +113,9 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100svh;
-  /* Slow ambient washes give the glass something to refract. Fixed so they don't scroll with
-     content, and cheap: three gradients, no images. */
   background:
-    radial-gradient(60rem 36rem at 82% -8%, rgba(143, 169, 240, .12), transparent 70%),
-    radial-gradient(48rem 32rem at -6% 108%, rgba(230, 180, 122, .07), transparent 70%),
-    radial-gradient(40rem 28rem at 50% 60%, rgba(127, 209, 168, .03), transparent 70%),
-    linear-gradient(180deg, var(--canvas-2), var(--canvas));
+    repeating-linear-gradient(90deg, transparent 0 63px, rgba(184, 197, 184, .025) 63px 64px),
+    linear-gradient(150deg, var(--canvas-2), var(--canvas) 65%);
   background-attachment: fixed;
 }
 button, input, select, textarea { font: inherit; }
@@ -200,31 +185,24 @@ button:disabled:not(.toggle) {
 /* No backdrop-filter (old WebViews): panes go solid so text never sits on raw canvas washes. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass, .glass-pill { background-color: var(--surface-solid); }
-  .glass-strong { background-color: #141721; }
-  :root { --surface: #171a21; --surface-raised: #1f232c; --glass-bg: #171a21; --glass-bg-strong: #141721; }
+  .glass-strong { background-color: var(--glass-bg-strong); }
 }
 /* Users who asked for less transparency get the same solid treatment. */
 @media (prefers-reduced-transparency: reduce) {
   .glass, .glass-pill, .glass-strong { backdrop-filter: none; -webkit-backdrop-filter: none; background-color: var(--surface-solid); }
-  :root { --surface: #171a21; --surface-raised: #1f232c; }
 }
 /* Escape hatch for a struggling GPU (e.g. an older Fire tablet): <html data-glass="lite"> keeps the
    look but drops the blur, which is the expensive part. */
 html[data-glass='lite'] .glass, html[data-glass='lite'] .glass-pill, html[data-glass='lite'] .glass-strong {
-  backdrop-filter: none; -webkit-backdrop-filter: none; background-color: rgba(23, 26, 33, .92);
+  backdrop-filter: none; -webkit-backdrop-filter: none; background-color: var(--surface-solid);
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
 /* ---------- Type scale -------------------------------------------------- */
-/* Wall panels get larger base text for arm's-length reading. This is deliberately fluid rather
-   than a set of capped breakpoints: a Fire HD 10 in landscape reports ~1443 CSS px, so every
-   `max-width: 1440px` rule missed it and the panel fell back to phone-sized 16px text.
-   Every panel sizes in rem, so raising this root value scales the whole dashboard together —
-   a Fire HD 10 lands near 24px base, readable from across a room. */
 @media (min-width: 700px) {
-  :root { font-size: clamp(19px, 1.15vw + .9vh, 26px); }
+  :root { font-size: 20px; }
 }
 /* Handheld width still gets a nudge over the 16px browser default. */
 @media (max-width: 699px) {
