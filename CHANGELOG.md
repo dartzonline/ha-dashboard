@@ -3,6 +3,22 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.16.1 - 2026-10-02: Full-panel radar and Halloween props
+
+**Weather radar fills the lower panel.** The map is now edge-to-edge, with an overlaid
+play/pause button and timeline, floating heading and zoom controls, and expandable dry-weather
+details. Weather-specific CSS classes prevent the Flights page's circular radar styles from
+turning the precipitation map into a circle after navigation.
+
+**More Halloween appearances.** Ghosts float along all four screen borders with varied starting
+points, speeds, and drift offsets. In the middle, a jack-o'-lantern alternates with randomly
+selected photographic cutouts at changing positions. The photos include The Shining axe,
+a Halloween costume knife, Pennywise cosplay and balloon, a Scooby-Doo mascot, a Harry Potter
+wand, and a Beetlejuice theme-park character. They are bundled locally with source credits and
+licenses linked from Theme settings; costume photos are not represented as screen-used props.
+Gentle fades, the Seasonal effects toggle, and reduced-motion support are preserved.
+No sound or flashing effects are added.
+
 ## 1.16.0 - 2026-10-02: Themes, navigation, and radar
 
 **Personalize each display in Settings > Theme.** Choose Modern, Retro, or Retro / Modern

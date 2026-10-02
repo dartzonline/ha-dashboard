@@ -1,22 +1,25 @@
-.radar-panel {
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  /* .weather-panel starts its rows at the top; the map row has to claim the leftover height
-     instead, or the scope collapses to a letterbox strip. */
-  align-content: stretch;
+.weather-panel.weather-radar-panel {
+  position: relative;
+  display: block;
+  padding: 0;
+  isolation: isolate;
 }
 
-.radar-scope {
-  position: relative;
-  /* The map must not be squeezed to a sliver when the dry-day summary appears below it. */
-  min-height: 150px;
+.weather-radar-scope {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
   display: grid;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border: 0;
+  border-radius: inherit;
   background: var(--canvas);
   overflow: hidden;
 }
+
+.weather-radar-panel > .weather-panel-heading { position: absolute; top: 12px; left: 12px; right: 76px; z-index: 5; width: fit-content; max-width: calc(100% - 88px); padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--glass-bg-strong); flex-wrap: wrap; }
+.weather-radar-panel > .weather-panel-heading h3 { letter-spacing: 0; }
 
 /* Two absolutely-positioned tile planes filling the scope: the dark basemap, and the radar over it.
    Tiles are placed by pixel offset (see planTiles) so home stays dead centre at any panel size. */
@@ -53,7 +56,7 @@
 .radar-attribution {
   position: absolute;
   right: 10px;
-  bottom: 8px;
+  bottom: 84px;
   z-index: 3;
   color: var(--muted);
   font-size: .6rem;
@@ -86,7 +89,7 @@
   z-index: 3;
   display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 72px 68px 104px 16px;
 }
 
 .radar-overlay > .state-message {
@@ -100,10 +103,21 @@
 }
 
 .radar-controls {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  padding: 6px 10px;
+  min-height: 58px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--glass-bg-strong);
+  box-shadow: var(--glass-shadow);
 }
 
 .radar-timeline { flex: 1; min-width: 44px; height: 44px; accent-color: var(--accent); }
@@ -115,7 +129,10 @@
   align-items: center;
   gap: 6px;
   min-height: var(--tap);
-  padding: 0 16px;
+  padding: 0;
+  width: 44px;
+  flex: 0 0 44px;
+  justify-content: center;
   color: var(--text);
   font-size: .78rem;
   font-weight: 650;
@@ -151,19 +168,38 @@
 /* Dry-day stand-in: the map stays, but the panel spends its words on what is actually happening.
    The good tint is a status (paired with the sun icon and the sentence), not decoration. */
 .radar-quiet {
+  position: absolute;
+  top: 72px;
+  left: 12px;
+  z-index: 4;
+  max-width: min(360px, calc(100% - 88px));
+  max-height: calc(100% - 170px);
+  overflow: auto;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
+  background: var(--glass-bg-strong);
 }
 
 .radar-quiet-lead {
-  margin: 0 0 6px;
+  margin: 0;
   color: var(--good);
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: .78rem;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.radar-quiet[open] .radar-quiet-lead { margin-bottom: 10px; }
+
+@media (max-width: 600px) {
+  .weather-radar-panel > .weather-panel-heading { flex-direction: column; align-items: flex-start; gap: 3px; }
+  .radar-quiet { top: 88px; max-height: calc(100% - 186px); }
+  .radar-source { font-size: .6rem; }
+  .radar-source > svg { display: none; }
+  .radar-controls { left: 8px; right: 8px; bottom: 8px; padding: 4px 8px; gap: 6px; }
 }
 
 .radar-quiet-lead svg { flex: 0 0 auto; }

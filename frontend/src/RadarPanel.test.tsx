@@ -17,6 +17,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('precipitation radar', () => {
+  it('uses weather-specific map classes and groups its overlay controls', async () => {
+    const { container } = render(<RadarPanel latitude={40} longitude={-74} outlook={{ ...outlook, peakRainChance: 10 }} />)
+    await screen.findByText(/^As of/)
+    const panel = screen.getByRole('region', { name: 'Precipitation radar' })
+    expect(panel.classList.contains('weather-radar-panel')).toBe(true)
+    expect(panel.querySelector('.weather-radar-scope')).toBeTruthy()
+    expect(container.querySelector('.radar-panel, .radar-scope')).toBeNull()
+    expect(screen.getByRole('group', { name: 'Radar playback' }).contains(screen.getByRole('slider', { name: 'Radar time' }))).toBe(true)
+    expect((container.querySelector('.radar-quiet') as HTMLDetailsElement).open).toBe(false)
+  })
+
   it('starts at the latest frame and keeps image nodes while playing buffered frames', async () => {
     const { container } = render(<RadarPanel latitude={40} longitude={-74} />)
     const timeline = screen.getByRole('slider', { name: 'Radar time' }) as HTMLInputElement
@@ -30,7 +41,7 @@ describe('precipitation radar', () => {
     expect(timeline.value).toBe('0')
     expect(container.querySelector('.radar-precip img')).toBe(images[0])
     fireEvent.change(timeline, { target: { value: '1' } })
-    expect(screen.getByRole('button', { name: 'Play' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Play radar animation' })).toBeTruthy()
     expect(timeline.value).toBe('1')
   })
 
