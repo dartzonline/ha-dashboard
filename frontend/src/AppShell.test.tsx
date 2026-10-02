@@ -29,7 +29,7 @@ vi.mock('./TrackedAircraftBadge', () => ({ TrackedAircraftBadge: () => null }))
 vi.mock('./ConnectionStatus', () => ({ ConnectionStatus: () => null }))
 
 beforeEach(() => { window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 describe('dashboard shell', () => {
   it('toggles seasonal decorations without changing the selected palette', () => {
@@ -42,13 +42,33 @@ describe('dashboard shell', () => {
     expect(document.documentElement.dataset.themeEffects).toBe('off')
     expect(container.querySelector('.seasonal-effects')?.getAttribute('aria-hidden')).toBe('true')
     expect(container.querySelectorAll('.haunted-lantern')).toHaveLength(2)
-    const pumpkin = container.querySelector('.haunted-pumpkin') as HTMLElement
-    expect(pumpkin.style.left).toBe('50%')
-    fireEvent.animationIteration(pumpkin)
-    expect(parseFloat(pumpkin.style.left)).toBeGreaterThanOrEqual(36)
-    expect(parseFloat(pumpkin.style.left)).toBeLessThanOrEqual(64)
-    expect(parseFloat(pumpkin.style.top)).toBeGreaterThanOrEqual(36)
-    expect(parseFloat(pumpkin.style.top)).toBeLessThanOrEqual(64)
+    const visitor = container.querySelector('.haunted-visitor') as HTMLElement
+    expect(visitor.style.left).toBe('50%')
+    expect(visitor.dataset.apparition).toBe('jack-o-lantern')
+    expect(container.querySelectorAll('.seasonal-halloween .border-ghost')).toHaveLength(12)
+    for (const edge of ['left', 'right', 'top', 'bottom']) {
+      expect(container.querySelectorAll(`.seasonal-halloween [data-edge="${edge}"]`)).toHaveLength(3)
+    }
+    expect(container.querySelectorAll('.seasonal-halloween .seasonal-particle img')).toHaveLength(0)
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const topGhost = container.querySelector('.ghost-edge-top') as HTMLElement
+    fireEvent(topGhost, new Event('webkitAnimationIteration', { bubbles: true }))
+    expect(topGhost.style.getPropertyValue('--ghost-offset')).toBe('0px')
+    for (const name of ['shining-axe', 'halloween-knife', 'pennywise', 'red-balloon', 'scooby-doo', 'harry-potter-wand', 'beetlejuice']) {
+      fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
+      expect(visitor.dataset.apparition).toBe(name)
+      expect(visitor.querySelector('img')?.getAttribute('src')).toContain(`/seasonal/${name}.webp`)
+      expect(visitor.querySelector('svg')).toBeNull()
+      expect(container.querySelectorAll('.haunted-visitor')).toHaveLength(1)
+      expect(parseFloat(visitor.style.left)).toBeGreaterThanOrEqual(36)
+      expect(parseFloat(visitor.style.left)).toBeLessThanOrEqual(64)
+      expect(parseFloat(visitor.style.top)).toBeGreaterThanOrEqual(36)
+      expect(parseFloat(visitor.style.top)).toBeLessThanOrEqual(64)
+      fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
+      expect(visitor.dataset.apparition).toBe('jack-o-lantern')
+      expect(visitor.querySelector('.haunted-pumpkin')).toBeTruthy()
+      expect(visitor.querySelector('img')).toBeNull()
+    }
     expect(fixtures.callService).not.toHaveBeenCalled()
   })
 

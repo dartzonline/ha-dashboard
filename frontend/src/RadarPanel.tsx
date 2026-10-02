@@ -251,12 +251,12 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
     : []
 
   return (
-    <section className="weather-panel radar-panel" aria-label="Precipitation radar" data-swipe-ignore>
+    <section className="weather-panel weather-radar-panel" aria-label="Precipitation radar" data-swipe-ignore>
       <header className="weather-panel-heading">
         <h3>Precipitation radar</h3>
         {statusLabel && <span>{statusLabel}</span>}
       </header>
-      <div className="radar-scope" ref={scopeRef}>
+      <div className="weather-radar-scope" ref={scopeRef}>
         {tiles.length > 0 && (
           <div className="radar-layer radar-basemap" aria-hidden="true">
             {tiles.map((tile) => (
@@ -311,14 +311,14 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
         </div>
       </div>
       {quiet && (
-        <div className="radar-quiet tone-good" role="status">
-          <p className="radar-quiet-lead">
+        <details className="radar-quiet">
+          <summary className="radar-quiet-lead">
             <Sun size={16} aria-hidden="true" />
             Low forecast rain chance in the next 24 hours
             {outlook?.peakRainHour && outlook.peakRainChance !== null
               ? ` — highest chance ${Math.round(outlook.peakRainChance)}% around ${outlook.peakRainHour}`
               : ''}
-          </p>
+          </summary>
           <div className="radar-quiet-grid">
             {quietFacts.map((fact) => (
               <div key={fact.label}>
@@ -327,21 +327,21 @@ export function RadarPanel({ latitude, longitude, outlook }: RadarPanelProps) {
               </div>
             ))}
           </div>
-        </div>
+        </details>
       )}
-      <div className="radar-controls">
+      <div className="radar-controls" role="group" aria-label="Radar playback">
         <button
           type="button"
           className="radar-play-toggle glass-pill"
           onClick={() => setPlaying((current) => !current)}
           disabled={frames.length < 2 || !hasLocation || imageFailed}
           title={playing ? 'Pause radar animation' : 'Play radar animation'}
+          aria-label={playing ? 'Pause radar animation' : 'Play radar animation'}
         >
           {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
-          <span>{playing ? 'Pause' : 'Play'}</span>
         </button>
         <input className="radar-timeline" type="range" min={0} max={Math.max(0, frames.length - 1)} value={displayIndex} disabled={frames.length < 2 || !hasLocation} aria-label="Radar time" aria-valuetext={currentFrame ? formatFrameClock(currentFrame.time) : 'No radar frames'} onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)) }} />
-        <span className="radar-source"><RadarIcon size={12} aria-hidden="true" /> RainViewer</span>
+        <span className="radar-source"><RadarIcon size={12} aria-hidden="true" /><span>RainViewer</span></span>
       </div>
     </section>
   )
