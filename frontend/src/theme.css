@@ -1,0 +1,21 @@
+:root[data-theme-style='modern'] {
+  --display-font: var(--sans);
+  --label-font: var(--sans);
+  --heading-case: none;
+  --clock-color: var(--text-strong);
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-xl: 28px;
+}
+
+:root[data-theme-style='retro'] {
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 6px;
+  --r-xl: 8px;
+  --r-pill: 4px;
+  --glass-shadow: 0 3px 0 rgba(0, 0, 0, .5);
+}
+
+:root[data-theme-style='modern'] .topbar { border-bottom-width: 1px; border-bottom-color: var(--border); }

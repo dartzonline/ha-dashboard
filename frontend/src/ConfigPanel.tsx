@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, Check, ListPlus, Moon, PackagePlus, Pencil, Plus, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Blend, Check, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
 import type { DashboardSection, HAEntity, TileConfig, TileKind } from './types'
 import type { TileProposal } from './entityClassifier'
 import { friendlyName } from './entityNames'
@@ -9,13 +9,19 @@ import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
 import { useDialog } from './ui/useDialog'
 import { useTwoTapConfirm } from './ui/useTwoTapConfirm'
+import { defaultTheme, readTheme, saveTheme, themePalettes, type ThemePalette, type ThemePreference } from './theme'
 import './ConfigPanel.css'
 
 const tileKinds: TileKind[] = ['sensor', 'toggle', 'lock', 'thermostat', 'vacuum']
 const iconNames = Object.keys(icons).sort()
 
-type ConfigTab = 'tiles' | 'discovery' | 'night-mode'
-const configTabs: readonly ConfigTab[] = ['tiles', 'discovery', 'night-mode']
+type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode'
+const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode']
+const styleOptions = [
+  { id: 'modern', label: 'Modern', Icon: Monitor },
+  { id: 'retro', label: 'Retro', Icon: Radio },
+  { id: 'hybrid', label: 'Retro / Modern', Icon: Blend },
+] as const
 
 /** Editing the layout is slow, deliberate work; the default two-minute sheet timeout would throw
  *  away a half-built section. Ten minutes still keeps an abandoned panel off the wall. */
@@ -51,7 +57,9 @@ function proposalFromEntity(entity: HAEntity): TileProposal {
 export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave, onReset, onClose, ready, loadError }: ConfigPanelProps) {
   const ref = useDialog<HTMLElement>({ onClose, idleMs: CONFIG_IDLE_MS })
   const editableSections = sections.filter((section) => editableSectionIds.has(section.id))
-  const [tab, setTab] = useState<ConfigTab>('tiles')
+  const [tab, setTab] = useState<ConfigTab>('theme')
+  const [theme, setTheme] = useState(readTheme)
+  const [themeMessage, setThemeMessage] = useState('')
   const [activeSectionId, setActiveSectionId] = useState(editableSections[0]?.id ?? '')
   const [draftSections, setDraftSections] = useState<DashboardSection[]>(() => cloneSections(sections))
   const [draftLights, setDraftLights] = useState<string[]>(nightModeIndoorLights)
@@ -73,6 +81,11 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
     .sort((left, right) => friendlyName(left).localeCompare(friendlyName(right)))
   const knownLightIds = new Set(lightEntities.map((entity) => entity.entity_id))
   const offlineLights = draftLights.filter((entityId) => !knownLightIds.has(entityId))
+
+  function updateTheme(next: ThemePreference) {
+    setTheme(next)
+    setThemeMessage(saveTheme(next) ? 'Saved on this device.' : 'Applied for this session. Browser storage is unavailable.')
+  }
 
   function updateSectionTiles(sectionId: string, updater: (tiles: TileConfig[]) => TileConfig[]) {
     setDraftSections((current) => current.map((section) => (section.id === sectionId ? { ...section, tiles: updater(section.tiles) } : section)))
@@ -231,11 +244,11 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
         <div className="sheet-handle" aria-hidden="true" />
         <header>
           <span className="detail-icon"><Wrench size={24} aria-hidden="true" /></span>
-          <div><p>Dashboard configuration</p><h2 id="config-title">Configure</h2></div>
+          <div><p>Home / Control</p><h2 id="config-title">Settings</h2></div>
           <button type="button" className="sheet-close" data-autofocus onClick={onClose} title="Close" aria-label="Close configuration"><X size={20} aria-hidden="true" /></button>
         </header>
 
-        {!ready && (
+        {!ready && tab !== 'theme' && (
           <p className={loadError ? 'detail-error' : 'config-waiting'} role="status">
             {loadError ? `Could not load the saved layout: ${loadError}. Saving is disabled so it cannot be overwritten.` : NOT_READY_HINT}
           </p>
@@ -254,6 +267,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
               className={tab === id ? 'active' : ''}
               onClick={() => setTab(id)}
             >
+              {id === 'theme' && <><Palette size={16} aria-hidden="true" /> Theme</>}
               {id === 'tiles' && 'Dashboard tiles'}
               {id === 'discovery' && (
                 <>
@@ -265,6 +279,51 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
             </button>
           ))}
         </div>
+
+        {tab === 'theme' && (
+          <div className="config-theme" role="tabpanel" id="config-panel-theme" aria-labelledby="config-tab-theme">
+            <fieldset>
+              <legend>Style</legend>
+              <div className="theme-style-options">
+                {styleOptions.map(({ id, label, Icon }) => (
+                  <label className="theme-style-option" key={id}>
+                    <input className="sr-only" type="radio" name="theme-style" value={id} checked={theme.style === id} onChange={() => updateTheme({ ...theme, style: id })} />
+                    <Icon size={22} aria-hidden="true" />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Color palette</legend>
+              <div className="theme-palette-options">
+                {(Object.keys(themePalettes) as ThemePalette[]).map((id) => {
+                  const palette = themePalettes[id]
+                  return (
+                    <label className="theme-palette-option" key={id}>
+                      <input className="sr-only" type="radio" name="theme-palette" value={id} checked={theme.palette === id} onChange={() => updateTheme({ ...theme, palette: id })} />
+                      <span className="theme-swatches" aria-hidden="true">
+                        {[palette.canvas, palette.raised, palette.accent, palette.text].map((color) => <span key={color} style={{ backgroundColor: color }} />)}
+                      </span>
+                      <span>{palette.label}</span>
+                      <Check className="theme-selected" size={18} aria-hidden="true" />
+                    </label>
+                  )
+                })}
+              </div>
+            </fieldset>
+            {(theme.palette === 'holidays' || theme.palette === 'halloween') && <label className="config-light-check theme-effects-toggle">
+              <input type="checkbox" checked={theme.effects !== false} onChange={(event) => updateTheme({ ...theme, effects: event.target.checked })} />
+              <span>Seasonal effects</span>
+            </label>}
+            <div className="config-footer">
+              <button type="button" className="detail-action" onClick={() => updateTheme({ ...defaultTheme })}>
+                <RotateCcw size={16} aria-hidden="true" /><span>Reset theme</span>
+              </button>
+            </div>
+            <p className="theme-save-status" role="status">{themeMessage}</p>
+          </div>
+        )}
 
         {tab === 'tiles' && (
           <div className="config-tiles" role="tabpanel" id="config-panel-tiles" aria-labelledby="config-tab-tiles">
@@ -407,10 +466,10 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
           </div>
         )}
 
-        {message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
+        {tab !== 'theme' && message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
         {pending && <div className="detail-progress" role="status">Saving</div>}
 
-        <div className="config-footer">
+        {tab !== 'theme' && <div className="config-footer">
           <button
             type="button"
             className={`detail-action ${resetConfirm.armed ? 'is-armed' : ''}`.trim()}
@@ -423,7 +482,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
           <button type="button" className="detail-action primary" onClick={() => void handleSave()} disabled={pending || !ready} title={ready ? undefined : NOT_READY_HINT}>
             <Check size={16} aria-hidden="true" /><span>{ready ? 'Save changes' : NOT_READY_HINT}</span>
           </button>
-        </div>
+        </div>}
       </section>
     </div>
   )
