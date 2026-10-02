@@ -322,6 +322,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
               </button>
             </div>
             <p className="theme-save-status" role="status">{themeMessage}</p>
+            <a className="theme-credits" href={`${import.meta.env.BASE_URL}seasonal/ATTRIBUTION.md`} target="_blank" rel="noreferrer">Seasonal image credits</a>
           </div>
         )}
 

@@ -108,6 +108,7 @@
 .theme-palette-option:has(input:checked) .theme-selected { visibility: visible; }
 .theme-save-status { min-height: 2.8em; margin: 10px 0 0; color: var(--muted); font-size: .75rem; }
 .theme-effects-toggle { margin-bottom: 18px; }
+.theme-credits { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--accent-strong); font-size: .72rem; }
 
 @media (max-width: 760px) {
   .detail-sheet.config-sheet { width: 100%; }
