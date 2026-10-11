@@ -3,6 +3,23 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.16.2 - 2026-10-10: House watch and bigger Halloween cast
+
+**Things left on or open now get noticed automatically.** A new house-watch check reads how long
+a light has been on, a door or garage has been open, a lock left unlocked, irrigation has been
+running, or the fridge door ajar -- and raises it as a Home health attention item once it has
+gone on too long (30 minutes for most; 5 minutes for the fridge). Lights left on past two hours
+and irrigation past one hour are switched off automatically after a further grace period (4h and
+2h), landscape lighting and light groups are exempt, and the Utility rail now surfaces the
+longest-running light directly. Garages and locks are only ever warned about, never acted on.
+Errors always fail safe: an unreachable device is retried later rather than hammered, and a
+missing timestamp leaves the entity alone.
+
+**Bigger, more varied Halloween visitor.** The center-stage apparition that alternates with the
+jack-o'-lantern was capped at a tiny 150px -- now closer to twice that size so it reads from
+across the room. Three hand-drawn characters (a ghost, a skull, and a black cat) join the
+rotation of photographic cutouts.
+
 ## 1.16.1 - 2026-10-02: Full-panel radar and Halloween props
 
 **Weather radar fills the lower panel.** The map is now edge-to-edge, with an overlaid

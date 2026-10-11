@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import connectivity, home_health, maintenance
+from . import connectivity, home_health, house_watch, maintenance
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .entity_registry import RegistrySnapshot
@@ -33,6 +33,7 @@ settings = load_settings()
 bridge = EventBridge(settings)
 ha_client = HomeAssistantClient(settings)
 registry_snapshot = RegistrySnapshot(bridge)
+house_watcher = house_watch.HouseWatch(get_states=ha_client.states, call_service=ha_client.call_service)
 
 NIGHT_MODE_INDOOR_LIGHTS_DEFAULT = {
     "light.smart_wi_fi_switch_2",
@@ -117,14 +118,19 @@ def addon_version(config_path: Path | None = None) -> str:
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     task = asyncio.create_task(bridge.run())
+    # Runs server-side so lights and sprinklers still get switched off when no tablet is awake.
+    watchdog_task = asyncio.create_task(house_watcher.run()) if settings.configured else None
     if settings.configured:
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(bridge.wait_until_connected(), timeout=5)
     yield
     await bridge.stop()
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
+    for background in (task, watchdog_task):
+        if background is None:
+            continue
+        background.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await background
     await ha_client.close()
     await close_http_client()
     await close_photos_http_client()
@@ -854,6 +860,23 @@ async def home_health_insights(
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
     return home_health.health_summary(all_states)
+
+
+@app.get("/api/insights/watch", dependencies=[Depends(require_configuration)])
+async def house_watch_insights(
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """Things left on or open too long, the limits in use, and recent automatic switch-offs."""
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return {
+        "thresholds": house_watch.THRESHOLDS,
+        "exemptLightTerms": list(house_watch.EXEMPT_LIGHT_TERMS),
+        "findings": [item.as_dict() for item in house_watch.findings(all_states)],
+        "recentActions": house_watcher.recent,
+    }
 
 
 @app.get("/api/insights/maintenance", dependencies=[Depends(require_configuration)])

@@ -191,7 +191,7 @@ class TestAttentionItems:
         """A panel that cries wolf gets ignored, and then the one real problem
         in it goes unread too."""
         states = [
-            row("light.kitchen", "on", changed_ago=5 * DAY),
+            row("light.kitchen", "on", changed_ago=30 * 60.0),
             row("sensor.office_temperature", 21.4, changed_ago=120.0, device_class="temperature"),
             row("sensor.front_door_battery", 88, changed_ago=40 * DAY, device_class="battery", unit="%"),
             row("binary_sensor.front_door", "off", changed_ago=6 * HOUR, device_class="door"),

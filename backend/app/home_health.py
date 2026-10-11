@@ -25,6 +25,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from . import house_watch
+
 DEAD_STATES = {"unavailable", "unknown"}
 
 # Battery percentage below which a cell is worth replacing soon. Chosen low
@@ -222,6 +224,13 @@ def attention_items(states: Iterable[dict[str, Any]], now: float | None = None) 
 
     items += _backup_items(states, moment)
     items += _consumable_items(states)
+
+    # A timed finding ("garage open for 45m") replaces the plain "Open" note
+    # for the same entity, so nothing is listed twice.
+    watched = house_watch.attention_items(states, moment)
+    watched_ids = {item["entityId"] for item in watched}
+    items = [item for item in items if not (item["category"] == "opening" and item["entityId"] in watched_ids)]
+    items += watched
 
     for entity in stale_sensors(states, moment):
         hours = entity["staleSeconds"] / 3600

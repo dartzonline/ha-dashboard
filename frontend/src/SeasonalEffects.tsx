@@ -1,15 +1,25 @@
 import { useState, type CSSProperties } from 'react'
-import { Flame, Gift, Snowflake, Star, TreePine } from 'lucide-react'
+import { Cat, Flame, Ghost, Gift, Skull, Snowflake, Star, TreePine } from 'lucide-react'
 import './SeasonalEffects.css'
 
 const holidayIcons = [Snowflake, Snowflake, Gift, Snowflake, Star, Snowflake, TreePine, Snowflake]
-const apparitions = [
+const photoApparitions = [
   'shining-axe', 'halloween-knife', 'pennywise', 'red-balloon',
   'scooby-doo', 'harry-potter-wand', 'beetlejuice',
 ] as const
+const drawnApparitions = ['ghost', 'skull', 'black-cat'] as const
+const apparitions = [...photoApparitions, ...drawnApparitions] as const
+const DRAWN_ICONS = { ghost: Ghost, skull: Skull, 'black-cat': Cat } as const
 
-const propImage = (name: typeof apparitions[number]) => `${import.meta.env.BASE_URL}seasonal/${name}.webp`
+const isDrawnApparition = (name: typeof apparitions[number]): name is typeof drawnApparitions[number] =>
+  (drawnApparitions as readonly string[]).includes(name)
+const propImage = (name: typeof photoApparitions[number]) => `${import.meta.env.BASE_URL}seasonal/${name}.webp`
 const ghostEdges = ['left', 'right', 'top', 'bottom'] as const
+
+function DrawnApparition({ kind }: { kind: typeof drawnApparitions[number] }) {
+  const Icon = DRAWN_ICONS[kind]
+  return <Icon className="haunted-icon" strokeWidth={1.1} />
+}
 
 export function SeasonalEffects() {
   const [ghosts, setGhosts] = useState(() => Array.from({ length: 12 }, () => ({
@@ -37,7 +47,9 @@ export function SeasonalEffects() {
               <span className="pumpkin-eye pumpkin-eye-right" />
               <span className="pumpkin-nose" />
               <span className="pumpkin-grin" />
-            </div> : <img src={propImage(apparition)} alt="" draggable={false} decoding="async" />}
+            </div> : isDrawnApparition(apparition)
+              ? <DrawnApparition kind={apparition} />
+              : <img src={propImage(apparition)} alt="" draggable={false} decoding="async" />}
           </div>
         </>}
         {Array.from({ length: season === 'holidays' ? 20 : ghosts.length }, (_, index) => {

@@ -33,6 +33,7 @@ import { useAutoDim } from './useAutoDim'
 import { WeatherView } from './WeatherView'
 import { WorldTimeMap } from './WorldTimeMap'
 import { friendlyName } from './entityNames'
+import { formatOnDuration, longRunningLights } from './longRunningLights'
 import { formatNumber, isThroughputUnit, toMbps } from './units'
 import { clampSlide, parseShellHash, readRotationHold, shellHash, writeRotationHold } from './urlState'
 import { PageFrame } from './ui/PageFrame'
@@ -230,6 +231,8 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
     return Number.isFinite(numericState(entity)) && /(plant|soil|flower|garden|maple|magnolia)/.test(searchable) && /(humidity|moisture)/.test(searchable)
   })
   const dryPlants = plants.filter((entity) => numericState(entity) <= 20)
+  // Lights on 2h+ (landscape exempt). The backend switches them off at 4h.
+  const longLights = longRunningLights(all, now.getTime())
   // The router publishes one device_tracker per client, so online clients are counted from those states.
   const trackers = all.filter((entity) => entity.entity_id.startsWith('device_tracker.'))
   const onlineDevices = trackers.filter((entity) => entity.state === 'home')
@@ -261,9 +264,14 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
     activeProblems.length ? nameOf(activeProblems[0]) : '',
     lowBatteries.length ? `${nameOf(lowBatteries[0])} ${displayState(lowBatteries[0])}` : '',
     dryPlants.length ? `${nameOf(dryPlants[0])} ${displayState(dryPlants[0])}` : '',
+    longLights.length
+      ? longLights.length === 1
+        ? `${nameOf(longLights[0].entity)} on ${formatOnDuration(longLights[0].onMs)}`
+        : `${longLights.length} lights on 2h+`
+      : '',
   ].filter(Boolean)
-  const issueCount = securityIssues + activeProblems.length + lowBatteries.length + dryPlants.length
-  const attentionTarget = securityIssues > 0 ? 'security' : activeProblems.length ? 'roborock' : 'insights'
+  const issueCount = securityIssues + activeProblems.length + lowBatteries.length + dryPlants.length + longLights.length
+  const attentionTarget = securityIssues > 0 ? 'security' : activeProblems.length ? 'roborock' : longLights.length ? 'health' : 'insights'
   const finalUtilityTitle = batteryEntity ? `Tablet ${displayState(batteryEntity)}` : vacuum ? `Vacuum ${displayState(vacuum)}` : 'Home systems'
   const finalUtilityDetail = autoRotate ? 'Rotating' : 'Rotate paused'
 
