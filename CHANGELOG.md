@@ -3,7 +3,7 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
-## 1.16.2 - 2026-10-10: House watch and bigger Halloween cast
+## 1.17.0 - 2026-10-10: House watch and bigger Halloween cast
 
 **Things left on or open now get noticed automatically.** A new house-watch check reads how long
 a light has been on, a door or garage has been open, a lock left unlocked, irrigation has been
