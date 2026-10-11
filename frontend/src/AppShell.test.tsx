@@ -54,16 +54,23 @@ describe('dashboard shell', () => {
     const topGhost = container.querySelector('.ghost-edge-top') as HTMLElement
     fireEvent(topGhost, new Event('webkitAnimationIteration', { bubbles: true }))
     expect(topGhost.style.getPropertyValue('--ghost-offset')).toBe('0px')
-    for (const name of ['shining-axe', 'halloween-knife', 'pennywise', 'red-balloon', 'scooby-doo', 'harry-potter-wand', 'beetlejuice']) {
+    const photoNames = ['shining-axe', 'halloween-knife', 'pennywise', 'red-balloon', 'scooby-doo', 'harry-potter-wand', 'beetlejuice']
+    const drawnNames = ['ghost', 'skull', 'black-cat']
+    for (const name of [...photoNames, ...drawnNames]) {
       fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
       expect(visitor.dataset.apparition).toBe(name)
-      expect(visitor.querySelector('img')?.getAttribute('src')).toContain(`/seasonal/${name}.webp`)
-      expect(visitor.querySelector('svg')).toBeNull()
       expect(container.querySelectorAll('.haunted-visitor')).toHaveLength(1)
       expect(parseFloat(visitor.style.left)).toBeGreaterThanOrEqual(36)
       expect(parseFloat(visitor.style.left)).toBeLessThanOrEqual(64)
       expect(parseFloat(visitor.style.top)).toBeGreaterThanOrEqual(36)
       expect(parseFloat(visitor.style.top)).toBeLessThanOrEqual(64)
+      if (drawnNames.includes(name)) {
+        expect(visitor.querySelector('svg.haunted-icon')).toBeTruthy()
+        expect(visitor.querySelector('img')).toBeNull()
+      } else {
+        expect(visitor.querySelector('img')?.getAttribute('src')).toContain(`/seasonal/${name}.webp`)
+        expect(visitor.querySelector('svg')).toBeNull()
+      }
       fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
       expect(visitor.dataset.apparition).toBe('jack-o-lantern')
       expect(visitor.querySelector('.haunted-pumpkin')).toBeTruthy()

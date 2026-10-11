@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   AlertTriangle, BatteryLow, CheckCircle2, DoorOpen, HardDriveDownload,
-  HeartPulse, RefreshCw, ShieldAlert, Trash2, Wrench,
+  HeartPulse, Lightbulb, RefreshCw, ShieldAlert, Trash2, Wrench,
 } from 'lucide-react'
 import { cachedJson, isAbortError } from './cachedFetch'
 import type { TileConfig } from './types'
@@ -42,6 +42,7 @@ const CATEGORY_ICON: Record<string, typeof AlertTriangle> = {
   backup: HardDriveDownload,
   battery: BatteryLow,
   consumable: Wrench,
+  light: Lightbulb,
   problem: AlertTriangle,
   safety: ShieldAlert,
   opening: DoorOpen,
@@ -53,6 +54,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   backup: 'Backup',
   battery: 'Battery',
   consumable: 'Consumable',
+  light: 'Light left on',
   problem: 'Problem',
   safety: 'Safety',
   opening: 'Left open',
