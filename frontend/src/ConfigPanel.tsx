@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, Blend, Check, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
-import type { DashboardSection, HAEntity, TileConfig, TileKind } from './types'
+import { ArrowDown, ArrowUp, Blend, Check, Lightbulb, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
+import type { DashboardSection, HAEntity, LightAutoOffSettings, TileConfig, TileKind } from './types'
 import type { TileProposal } from './entityClassifier'
 import { friendlyName } from './entityNames'
 import { icons } from './icons'
@@ -15,8 +15,12 @@ import './ConfigPanel.css'
 const tileKinds: TileKind[] = ['sensor', 'toggle', 'lock', 'thermostat', 'vacuum']
 const iconNames = Object.keys(icons).sort()
 
-type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode'
-const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode']
+type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode' | 'auto-off'
+const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode', 'auto-off']
+
+/** Mirrors the server's bounds: a minute at least, a day at most. */
+const AUTO_OFF_MIN_MINUTES = 1
+const AUTO_OFF_MAX_MINUTES = 24 * 60
 const styleOptions = [
   { id: 'modern', label: 'Modern', Icon: Monitor },
   { id: 'retro', label: 'Retro', Icon: Radio },
@@ -33,8 +37,10 @@ interface ConfigPanelProps {
   entities: Map<string, HAEntity>
   sections: DashboardSection[]
   nightModeIndoorLights: string[]
+  lightAutoOff: LightAutoOffSettings
+  onSaveLightAutoOff: (settings: LightAutoOffSettings) => Promise<void>
   onSave: (sections: DashboardSection[], lights: string[]) => Promise<void>
-  onReset: () => Promise<{ sections: DashboardSection[]; nightModeIndoorLights: string[] }>
+  onReset: () => Promise<{ sections: DashboardSection[]; nightModeIndoorLights: string[]; lightAutoOff: LightAutoOffSettings }>
   onClose: () => void
   /**
    * False until the saved layout has actually loaded. Until then the draft here is the factory
@@ -54,7 +60,7 @@ function proposalFromEntity(entity: HAEntity): TileProposal {
   return { entityId: entity.entity_id, sectionId: 'home', label: friendlyName(entity), kind: 'sensor', icon: 'circle-dot' }
 }
 
-export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave, onReset, onClose, ready, loadError }: ConfigPanelProps) {
+export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAutoOff, onSaveLightAutoOff, onSave, onReset, onClose, ready, loadError }: ConfigPanelProps) {
   const ref = useDialog<HTMLElement>({ onClose, idleMs: CONFIG_IDLE_MS })
   const editableSections = sections.filter((section) => editableSectionIds.has(section.id))
   const [tab, setTab] = useState<ConfigTab>('theme')
@@ -65,6 +71,10 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
   const [draftLights, setDraftLights] = useState<string[]>(nightModeIndoorLights)
   const [newTile, setNewTile] = useState({ entityId: '', label: '', kind: 'sensor' as TileKind, icon: iconNames[0] })
   const [manualLight, setManualLight] = useState('')
+  const [draftExcluded, setDraftExcluded] = useState<string[]>(lightAutoOff.excludedIds)
+  const [draftMinutes, setDraftMinutes] = useState(String(lightAutoOff.minutes))
+  const [excludePick, setExcludePick] = useState('')
+  const [manualExcluded, setManualExcluded] = useState('')
   const [pending, setPending] = useState(false)
   const resetConfirm = useTwoTapConfirm()
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null)
@@ -81,6 +91,10 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
     .sort((left, right) => friendlyName(left).localeCompare(friendlyName(right)))
   const knownLightIds = new Set(lightEntities.map((entity) => entity.entity_id))
   const offlineLights = draftLights.filter((entityId) => !knownLightIds.has(entityId))
+  const parsedMinutes = Number(draftMinutes)
+  const minutesValid = draftMinutes.trim() !== '' && Number.isInteger(parsedMinutes)
+    && parsedMinutes >= AUTO_OFF_MIN_MINUTES && parsedMinutes <= AUTO_OFF_MAX_MINUTES
+  const excludableLights = lightEntities.filter((entity) => !draftExcluded.includes(entity.entity_id))
 
   function updateTheme(next: ThemePreference) {
     setTheme(next)
@@ -130,6 +144,16 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
     if (!entityId || draftLights.includes(entityId)) return
     setDraftLights((current) => [...current, entityId])
     setManualLight('')
+  }
+
+  function excludeLight(entityId: string) {
+    const id = entityId.trim()
+    if (!id.startsWith('light.') || draftExcluded.includes(id)) return
+    setDraftExcluded((current) => [...current, id])
+  }
+
+  function includeLight(entityId: string) {
+    setDraftExcluded((current) => current.filter((id) => id !== entityId))
   }
 
   function updateProposalField<K extends keyof TileProposal>(proposal: TileProposal, field: K, value: TileProposal[K]) {
@@ -210,9 +234,18 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
 
   async function handleSave() {
     if (!ready) return
+    if (tab === 'auto-off' && !minutesValid) {
+      setMessage({ tone: 'error', text: `Enter a whole number of minutes from ${AUTO_OFF_MIN_MINUTES} to ${AUTO_OFF_MAX_MINUTES}.` })
+      return
+    }
     setPending(true)
     setMessage(null)
     try {
+      if (tab === 'auto-off') {
+        await onSaveLightAutoOff({ minutes: parsedMinutes, excludedIds: draftExcluded })
+        setMessage({ tone: 'success', text: 'Light auto-off settings saved.' })
+        return
+      }
       await onSave(draftSections, draftLights)
       setMessage({ tone: 'success', text: 'Dashboard configuration saved.' })
     } catch (error) {
@@ -230,6 +263,8 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
       const result = await onReset()
       setDraftSections(cloneSections(result.sections))
       setDraftLights(result.nightModeIndoorLights)
+      setDraftExcluded(result.lightAutoOff.excludedIds)
+      setDraftMinutes(String(result.lightAutoOff.minutes))
       setMessage({ tone: 'success', text: 'Restored the default dashboard configuration.' })
     } catch (error) {
       setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Reset failed' })
@@ -276,6 +311,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
                 </>
               )}
               {id === 'night-mode' && <><Moon size={16} aria-hidden="true" /> Night Mode lights</>}
+              {id === 'auto-off' && <><Lightbulb size={16} aria-hidden="true" /> Light auto-off</>}
             </button>
           ))}
         </div>
@@ -463,6 +499,66 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, onSave,
             <div className="config-add-row config-add-light">
               <input placeholder="light.entity_id" value={manualLight} onChange={(event) => setManualLight(event.target.value)} />
               <button type="button" className="detail-action" onClick={addManualLight} disabled={!manualLight.trim()}><ListPlus size={16} aria-hidden="true" /><span>Add by ID</span></button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'auto-off' && (
+          <div className="config-auto-off" role="tabpanel" id="config-panel-auto-off" aria-labelledby="config-tab-auto-off">
+            <p className="config-hint">
+              Lights left on are flagged at two hours, or halfway to the switch-off time when that is sooner, and switched off
+              automatically at the time below. Landscape lighting and light groups are never touched.
+            </p>
+            <label className="config-auto-off-minutes">
+              <span>Switch lights off after (minutes)</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={AUTO_OFF_MIN_MINUTES}
+                max={AUTO_OFF_MAX_MINUTES}
+                step={1}
+                value={draftMinutes}
+                aria-invalid={!minutesValid}
+                onChange={(event) => setDraftMinutes(event.target.value)}
+              />
+            </label>
+            {!minutesValid && <p className="detail-error" role="status">Enter a whole number of minutes from {AUTO_OFF_MIN_MINUTES} to {AUTO_OFF_MAX_MINUTES}.</p>}
+
+            <h3 className="config-subhead">Never switched off · {draftExcluded.length}</h3>
+            {draftExcluded.length === 0 && <p className="config-empty">Every light is switched off after the time above.</p>}
+            <ul className="config-excluded-list">
+              {draftExcluded.map((entityId) => {
+                const entity = entities.get(entityId)
+                return (
+                  <li key={entityId} className="config-excluded-item">
+                    <span>{entity ? friendlyName(entity) : entityId}{entity ? <em>{entityId}</em> : <em>not reporting</em>}</span>
+                    <button type="button" className="config-remove" onClick={() => includeLight(entityId)} title="Switch off automatically again" aria-label={`Remove ${entityId} from the exclusions`}>
+                      <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+
+            <div className="config-add-row config-add-light">
+              <select value={excludePick} onChange={(event) => setExcludePick(event.target.value)} aria-label="Light to exclude from auto-off">
+                <option value="">Choose a light…</option>
+                {excludableLights.map((entity) => <option key={entity.entity_id} value={entity.entity_id}>{friendlyName(entity)}</option>)}
+              </select>
+              <button type="button" className="detail-action" onClick={() => { excludeLight(excludePick); setExcludePick('') }} disabled={!excludePick}>
+                <Plus size={16} aria-hidden="true" /><span>Exclude</span>
+              </button>
+            </div>
+            <div className="config-add-row config-add-light">
+              <input placeholder="light.entity_id" value={manualExcluded} onChange={(event) => setManualExcluded(event.target.value)} aria-label="Light entity ID to exclude" />
+              <button
+                type="button"
+                className="detail-action"
+                onClick={() => { excludeLight(manualExcluded); setManualExcluded('') }}
+                disabled={!manualExcluded.trim().startsWith('light.')}
+              >
+                <ListPlus size={16} aria-hidden="true" /><span>Add by ID</span>
+              </button>
             </div>
           </div>
         )}

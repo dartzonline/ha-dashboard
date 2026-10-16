@@ -3,6 +3,15 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.18.0 - 2026-10-16: Light auto-off settings
+
+**Choose which lights are switched off, and when.** Settings has a new *Light auto-off* tab. Set
+the number of minutes a light may stay on before house watch switches it off (1 to 1440; the
+default stays 4 hours), and add or remove lights from a "never switched off" list. The nursery clock
+is on that list by default. The warning still appears at two hours, or halfway to the switch-off
+time when that comes sooner, and the Utility rail follows the same settings. Landscape lighting and
+light groups remain exempt. Changes apply immediately, without restarting the add-on.
+
 ## 1.17.0 - 2026-10-10: House watch and bigger Halloween cast
 
 **Things left on or open now get noticed automatically.** A new house-watch check reads how long

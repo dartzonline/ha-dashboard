@@ -1,10 +1,11 @@
 import { friendlyName } from './entityNames'
-import type { HAEntity } from './types'
+import type { HAEntity, LightAutoOffSettings } from './types'
 
 /**
- * Lights the backend's house-watch flags as left on (2h+), mirrored here so the
- * UtilityRail can surface the same finding without an extra round trip. Kept in
- * sync with `house_watch.py`'s LIGHT_WARN_AFTER_S and EXEMPT_LIGHT_TERMS.
+ * Lights the backend's house-watch flags as left on (2h, or halfway to the switch-off
+ * when that is sooner), mirrored here so the UtilityRail can surface the same finding
+ * without an extra round trip. Kept in sync with `house_watch.py`'s LIGHT_WARN_AFTER_S,
+ * EXEMPT_LIGHT_TERMS and the household's auto-off settings.
  */
 const WARN_AFTER_MS = 2 * 60 * 60 * 1000
 const EXEMPT_LIGHT_TERMS = ['landscape']
@@ -23,12 +24,17 @@ export interface LongRunningLight {
   onMs: number
 }
 
-export function longRunningLights(entities: HAEntity[], nowMs: number): LongRunningLight[] {
+export function lightWarnAfterMs(autoOffMinutes: number): number {
+  return Math.min(WARN_AFTER_MS, (autoOffMinutes * 60_000) / 2)
+}
+
+export function longRunningLights(entities: HAEntity[], nowMs: number, settings: LightAutoOffSettings): LongRunningLight[] {
+  const warnAfterMs = lightWarnAfterMs(settings.minutes)
   return entities
     .filter((entity) => entity.entity_id.startsWith('light.') && entity.state === 'on')
-    .filter((entity) => !isExemptLight(entity) && !isGroup(entity))
+    .filter((entity) => !settings.excludedIds.includes(entity.entity_id) && !isExemptLight(entity) && !isGroup(entity))
     .map((entity) => ({ entity, onMs: nowMs - new Date(entity.last_changed).getTime() }))
-    .filter(({ onMs }) => Number.isFinite(onMs) && onMs >= WARN_AFTER_MS)
+    .filter(({ onMs }) => Number.isFinite(onMs) && onMs >= warnAfterMs)
     .sort((left, right) => right.onMs - left.onMs)
 }
 

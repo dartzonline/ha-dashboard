@@ -2,10 +2,19 @@ import { useEffect, useState } from 'react'
 import { apiUrl, responseError, timeoutSignal } from './api'
 import { dashboardSections as defaultSections } from './dashboardConfig'
 import { primeIgnoredEntityIds } from './useEntityDiscovery'
-import type { DashboardConfigResponse, DashboardSection } from './types'
+import type { DashboardConfigResponse, DashboardSection, LightAutoOffSettings } from './types'
 
 /** Sections rendered from the shared tile grid; Insights/World/Weather have dedicated views that ignore section.tiles. */
 export const editableSectionIds = new Set(['home', 'climate', 'security', 'lights', 'appliances', 'roborock', 'scenes'])
+
+export const defaultLightAutoOff: LightAutoOffSettings = { minutes: 240, excludedIds: ['light.my_rest_clock'] }
+
+function lightAutoOffFrom(data: DashboardConfigResponse): LightAutoOffSettings {
+  return {
+    minutes: Number.isFinite(data.lightAutoOffMinutes) ? data.lightAutoOffMinutes : defaultLightAutoOff.minutes,
+    excludedIds: data.lightAutoOffExcludedIds ?? defaultLightAutoOff.excludedIds,
+  }
+}
 
 const RETRY_MIN_MS = 3_000
 const RETRY_MAX_MS = 30_000
@@ -28,6 +37,7 @@ export function useDashboardConfig() {
   const [sections, setSections] = useState<DashboardSection[]>(defaultSections)
   const [nightModeIndoorLights, setNightModeIndoorLights] = useState<string[]>([])
   const [energyRatePerKwh, setEnergyRatePerKwh] = useState(0.15)
+  const [lightAutoOff, setLightAutoOff] = useState<LightAutoOffSettings>(defaultLightAutoOff)
   const [customized, setCustomized] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +59,7 @@ export function useDashboardConfig() {
         }
         setNightModeIndoorLights(data.nightModeIndoorLights)
         if (Number.isFinite(data.energyRatePerKwh)) setEnergyRatePerKwh(data.energyRatePerKwh)
+        setLightAutoOff(lightAutoOffFrom(data))
         // Entity discovery owns this slice (it writes dismissals back through the same merging PUT),
         // but this response already carries it -- hand it over instead of fetching /api/config twice.
         primeIgnoredEntityIds(data.ignoredEntityIds ?? [])
@@ -108,6 +119,18 @@ export function useDashboardConfig() {
     }
   }
 
+  /** Persists only the light auto-off settings; the server merge leaves everything else alone. */
+  async function saveLightAutoOff(next: LightAutoOffSettings) {
+    const response = await fetch(apiUrl('config'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lightAutoOffMinutes: next.minutes, lightAutoOffExcludedIds: next.excludedIds }),
+    })
+    if (!response.ok) throw await responseError(response, 'Could not save the light auto-off settings')
+    const data: DashboardConfigResponse = await response.json()
+    setLightAutoOff(lightAutoOffFrom(data))
+  }
+
   async function reset() {
     const response = await fetch(apiUrl('config'), { method: 'DELETE' })
     if (!response.ok) throw await responseError(response, 'Could not reset the dashboard configuration')
@@ -115,14 +138,16 @@ export function useDashboardConfig() {
     setSections(defaultSections)
     setNightModeIndoorLights(data.nightModeIndoorLights)
     if (Number.isFinite(data.energyRatePerKwh)) setEnergyRatePerKwh(data.energyRatePerKwh)
+    const resetAutoOff = lightAutoOffFrom(data)
+    setLightAutoOff(resetAutoOff)
     // A reset clears the stored overrides, dismissals included, so discovery starts proposing again.
     primeIgnoredEntityIds(data.ignoredEntityIds ?? [])
     setCustomized(false)
-    return { sections: defaultSections, nightModeIndoorLights: data.nightModeIndoorLights }
+    return { sections: defaultSections, nightModeIndoorLights: data.nightModeIndoorLights, lightAutoOff: resetAutoOff }
   }
 
   /** True once the stored configuration has actually been read; saving before that would clobber it with defaults. */
   const ready = !loading && error === null
 
-  return { sections, nightModeIndoorLights, energyRatePerKwh, customized, loading, error, ready, save, saveEnergyRate, reset }
+  return { sections, nightModeIndoorLights, energyRatePerKwh, lightAutoOff, customized, loading, error, ready, save, saveEnergyRate, saveLightAutoOff, reset }
 }

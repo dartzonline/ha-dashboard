@@ -38,6 +38,11 @@ class DashboardConfigPayload(BaseModel):
     # Entities the household has explicitly declined from the "New devices" tray, so discovery
     # (docs/auto-entity-discovery.md) stops re-proposing them every session.
     ignoredEntityIds: list[str] | None = None
+    # House watch switches a light off after it has been on this long; the excluded lights are the
+    # ones it must never touch (the nursery clock, say). Only the minutes are bounded here: a day
+    # is already past any reason to have the watch at all.
+    lightAutoOffMinutes: int | None = Field(default=None, ge=1, le=24 * 60)
+    lightAutoOffExcludedIds: list[str] | None = None
 
     @field_validator("nightModeIndoorLights")
     @classmethod
@@ -48,6 +53,16 @@ class DashboardConfigPayload(BaseModel):
         if bad:
             raise ValueError(f"Night Mode lights must be light.* entities, got: {', '.join(bad[:5])}")
         return value
+
+    @field_validator("lightAutoOffExcludedIds")
+    @classmethod
+    def _excluded_are_lights(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        bad = [item for item in value if not re.match(r"^light\.", item)]
+        if bad:
+            raise ValueError(f"Auto-off exclusions must be light.* entities, got: {', '.join(bad[:5])}")
+        return list(dict.fromkeys(value))
 
 
 def _storage_path() -> Path:

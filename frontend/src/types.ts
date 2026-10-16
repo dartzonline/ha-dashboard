@@ -37,6 +37,15 @@ export interface DashboardConfigResponse {
   energyRatePerKwh: number
   /** Entities dismissed from the "New devices" tray, so discovery stops re-proposing them. */
   ignoredEntityIds: string[]
+  /** Minutes a light may stay on before house watch switches it off. */
+  lightAutoOffMinutes: number
+  /** Lights house watch must never warn about or switch off. */
+  lightAutoOffExcludedIds: string[]
+}
+
+export interface LightAutoOffSettings {
+  minutes: number
+  excludedIds: string[]
 }
 
 export interface NightModeResponse {

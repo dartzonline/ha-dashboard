@@ -11,7 +11,7 @@ take action, and only after a much longer delay than the warning:
 
 | Rule            | Warns  | Escalates | Action                    |
 | --------------- | ------ | --------- | ------------------------- |
-| Light left on   | 2h     | --        | switched off at 4h        |
+| Light left on   | 2h     | --        | switched off at 4h (*)    |
 | Irrigation      | 1h     | --        | shut off at 2h            |
 | Fridge door     | --     | 5m        | --                        |
 | Garage open     | 30m    | 2h        | --                        |
@@ -24,9 +24,13 @@ Garages and locks are never acted on. Closing a garage door that nobody can
 see, or throwing a deadbolt on a door that may be ajar, is the kind of thing
 a person should decide.
 
+(*) The light switch-off time is a setting, as is the list of lights left out of it
+(the nursery clock by default). The warning comes at 2h, or halfway to the switch-off
+when that is sooner.
+
 Lights meant to stay on are exempt. Landscape lighting runs all night, so any
-light whose entity id or name contains one of `EXEMPT_LIGHT_TERMS` is ignored
-by every rule. Light *groups* (Home Assistant light groups and Hue rooms) are
+light whose entity id or name contains one of `EXEMPT_LIGHT_TERMS`, and any light
+on the household's excluded list, is ignored by every rule. Light *groups* (Home Assistant light groups and Hue rooms) are
 skipped too. Their members are judged one by one, and switching off a group
 could switch off an exempt light inside it.
 
@@ -52,6 +56,7 @@ HOUR = 3600.0
 
 LIGHT_WARN_AFTER_S = 2 * HOUR
 LIGHT_AUTO_OFF_AFTER_S = 4 * HOUR
+DEFAULT_LIGHT_EXCLUDED_IDS: tuple[str, ...] = ("light.my_rest_clock",)
 IRRIGATION_WARN_AFTER_S = 1 * HOUR
 IRRIGATION_AUTO_OFF_AFTER_S = 2 * HOUR
 FRIDGE_CRITICAL_AFTER_S = 5 * MINUTE
@@ -79,6 +84,54 @@ CHECK_INTERVAL_S = 60.0
 RETRY_AFTER_S = 15 * MINUTE
 
 SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
+
+
+# --- household settings ---------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WatchSettings:
+    """What the household can change from the Settings page."""
+
+    light_auto_off_s: float = LIGHT_AUTO_OFF_AFTER_S
+    # Lights that are warned about and switched off like any other, except these.
+    light_excluded_ids: frozenset[str] = frozenset(DEFAULT_LIGHT_EXCLUDED_IDS)
+
+    @property
+    def light_warn_s(self) -> float:
+        """Warn at the usual 2h, or halfway to the switch-off when that comes sooner."""
+        return min(LIGHT_WARN_AFTER_S, self.light_auto_off_s / 2)
+
+
+def settings_from_overrides(overrides: dict[str, Any]) -> WatchSettings:
+    """Reads the stored overrides; a missing or malformed value falls back to its default."""
+    minutes = overrides.get("lightAutoOffMinutes")
+    excluded = overrides.get("lightAutoOffExcludedIds")
+    return WatchSettings(
+        light_auto_off_s=(
+            minutes * MINUTE
+            if isinstance(minutes, (int, float)) and not isinstance(minutes, bool) and minutes >= 1
+            else LIGHT_AUTO_OFF_AFTER_S
+        ),
+        light_excluded_ids=(
+            frozenset(item for item in excluded if isinstance(item, str))
+            if isinstance(excluded, list)
+            else frozenset(DEFAULT_LIGHT_EXCLUDED_IDS)
+        ),
+    )
+
+
+_settings = WatchSettings()
+
+
+def apply_settings(settings: WatchSettings) -> None:
+    """Makes `settings` the ones every rule and the background loop use from now on."""
+    global _settings
+    _settings = settings
+
+
+def current_settings() -> WatchSettings:
+    return _settings
 
 
 # --- entity helpers -------------------------------------------------------
@@ -126,10 +179,11 @@ def is_group(entity: dict[str, Any]) -> bool:
     return isinstance(attributes.get("entity_id"), list) or bool(attributes.get("is_hue_group"))
 
 
-def _watched_light(entity: dict[str, Any]) -> bool:
+def _watched_light(entity: dict[str, Any], ctx: "Context") -> bool:
     return (
         _domain(entity) == "light"
         and entity.get("state") == "on"
+        and entity.get("entity_id") not in ctx.settings.light_excluded_ids
         and not is_exempt_light(entity)
         and not is_group(entity)
     )
@@ -139,6 +193,14 @@ def duration_label(seconds: float) -> str:
     """'2h 05m', or '45m' under an hour."""
     hours, minutes = divmod(int(seconds) // 60, 60)
     return f"{hours}h {minutes:02d}m" if hours else f"{minutes}m"
+
+
+def _limit_label(seconds: float) -> str:
+    """'4h', '1h 30m' or '45m' for a limit, without a padded zero."""
+    hours, minutes = divmod(int(seconds) // 60, 60)
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    return f"{hours}h" if hours else f"{minutes}m"
 
 
 # --- house-wide context ---------------------------------------------------
@@ -151,9 +213,10 @@ class Context:
     away_since: float | None
     # "heating" or "cooling" if any thermostat is actively running, else None.
     hvac_action: str | None
+    settings: WatchSettings
 
 
-def build_context(states: list[dict[str, Any]], now: float) -> Context:
+def build_context(states: list[dict[str, Any]], now: float, settings: WatchSettings | None = None) -> Context:
     people = [entity for entity in states if _domain(entity) == "person"]
     away_since: float | None = None
     # Everyone must be known *and* away. A person in `unknown` might be home,
@@ -171,7 +234,7 @@ def build_context(states: list[dict[str, Any]], now: float) -> Context:
         if action in ("heating", "cooling"):
             hvac_action = action
             break
-    return Context(now=now, away_since=away_since, hvac_action=hvac_action)
+    return Context(now=now, away_since=away_since, hvac_action=hvac_action, settings=settings or _settings)
 
 
 # --- rules ----------------------------------------------------------------
@@ -207,17 +270,18 @@ Rule = Callable[[dict[str, Any], float, Context], "Finding | None"]
 
 
 def _light_left_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
-    if not _watched_light(entity):
+    if not _watched_light(entity, ctx):
         return None
     on_for = ctx.now - since
-    if on_for < LIGHT_WARN_AFTER_S:
+    limit = ctx.settings.light_auto_off_s
+    if on_for < ctx.settings.light_warn_s:
         return None
-    overdue = on_for >= LIGHT_AUTO_OFF_AFTER_S
+    overdue = on_for >= limit
     return Finding(
         rule="light_left_on", category="light", severity="warning",
         entity_id=str(entity["entity_id"]), name=_name(entity), seconds=on_for,
-        detail=f"On for {duration_label(on_for)} — " + ("switching off now" if overdue else "switches off at 4h"),
-        action=("light", "turn_off"), action_at=since + LIGHT_AUTO_OFF_AFTER_S,
+        detail=f"On for {duration_label(on_for)} — " + ("switching off now" if overdue else f"switches off at {_limit_label(limit)}"),
+        action=("light", "turn_off"), action_at=since + limit,
     )
 
 
@@ -314,7 +378,7 @@ def _away_and_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
         return None
     domain = _domain(entity)
     if domain == "light":
-        if not _watched_light(entity):
+        if not _watched_light(entity, ctx):
             return None
         verb = "On"
     elif domain == "media_player":
@@ -354,11 +418,11 @@ def _better(candidate: Finding, current: Finding) -> bool:
     return candidate.action is not None and current.action is None
 
 
-def findings(states: Iterable[dict[str, Any]], now: float | None = None) -> list[Finding]:
+def findings(states: Iterable[dict[str, Any]], now: float | None = None, settings: WatchSettings | None = None) -> list[Finding]:
     """Every current finding, most severe first, then longest-running."""
     moment = now if now is not None else time.time()
     states = list(states)
-    ctx = build_context(states, moment)
+    ctx = build_context(states, moment, settings)
     by_entity: dict[str, Finding] = {}
     for entity in states:
         since = _parse_time(entity.get("last_changed"))
@@ -375,12 +439,14 @@ def findings(states: Iterable[dict[str, Any]], now: float | None = None) -> list
     return ordered
 
 
-def due_actions(states: Iterable[dict[str, Any]], now: float | None = None) -> list[tuple[str, str, str]]:
+def due_actions(
+    states: Iterable[dict[str, Any]], now: float | None = None, settings: WatchSettings | None = None
+) -> list[tuple[str, str, str]]:
     """(domain, service, entity_id) for every finding whose action time has passed."""
     moment = now if now is not None else time.time()
     return [
         (item.action[0], item.action[1], item.entity_id)
-        for item in findings(states, moment)
+        for item in findings(states, moment, settings)
         if item.action is not None and item.action_at is not None and item.action_at <= moment
     ]
 
@@ -397,6 +463,15 @@ def attention_items(states: Iterable[dict[str, Any]], now: float | None = None) 
         }
         for item in findings(states, now)
     ]
+
+
+def thresholds() -> dict[str, float]:
+    """The limits in force right now, including the household's own light switch-off time."""
+    return {
+        **THRESHOLDS,
+        "lightWarnAfterSeconds": _settings.light_warn_s,
+        "lightAutoOffAfterSeconds": _settings.light_auto_off_s,
+    }
 
 
 THRESHOLDS = {
