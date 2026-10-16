@@ -18,7 +18,7 @@ const fixtures = vi.hoisted(() => ({
   ],
 }))
 vi.mock('./useHomeAssistant', () => ({ useHomeAssistant: () => ({ entities: fixtures.entities, health: { home_assistant: { configured: true, connected: true } }, loading: false, error: null, callService: fixtures.callService, runNightMode: vi.fn(), connection: 'live', lastMessageAt: null, authFailed: false }) }))
-vi.mock('./useDashboardConfig', () => ({ editableSectionIds: new Set(['home', 'climate', 'security']), useDashboardConfig: () => ({ sections: fixtures.sections, nightModeIndoorLights: [], energyRatePerKwh: .15, customized: false, ready: fixtures.ready, error: null, save: fixtures.save, saveEnergyRate: vi.fn(), reset: vi.fn() }) }))
+vi.mock('./useDashboardConfig', () => ({ editableSectionIds: new Set(['home', 'climate', 'security']), useDashboardConfig: () => ({ sections: fixtures.sections, nightModeIndoorLights: [], energyRatePerKwh: .15, lightAutoOff: { minutes: 240, excludedIds: [] }, saveLightAutoOff: vi.fn(), customized: false, ready: fixtures.ready, error: null, save: fixtures.save, saveEnergyRate: vi.fn(), reset: vi.fn() }) }))
 vi.mock('./useEntityDiscovery', () => ({ useEntityDiscovery: () => ({ proposals: [], needsReview: [], loading: false }) }))
 vi.mock('./useInsights', () => ({ useInsights: () => ({ series: {}, loading: false }) }))
 vi.mock('./useAutoDim', () => ({ useAutoDim: () => '' }))

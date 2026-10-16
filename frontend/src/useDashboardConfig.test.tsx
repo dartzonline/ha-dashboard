@@ -26,6 +26,25 @@ describe('useDashboardConfig', () => {
     expect(result.current.error).toBeNull()
   })
 
+  it('loads the light auto-off settings and saves only those keys', async () => {
+    const withAutoOff = { ...CONFIG, lightAutoOffMinutes: 90, lightAutoOffExcludedIds: ['light.clock'] }
+    let sent: unknown
+    mockConfig(
+      (body) => {
+        sent = JSON.parse(String(body))
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...withAutoOff, lightAutoOffMinutes: 30, lightAutoOffExcludedIds: [] }) } as Response)
+      },
+      () => Promise.resolve({ ok: true, json: () => Promise.resolve(withAutoOff) } as Response),
+    )
+    const { result } = renderHook(() => useDashboardConfig())
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    expect(result.current.lightAutoOff).toEqual({ minutes: 90, excludedIds: ['light.clock'] })
+
+    await act(async () => { await result.current.saveLightAutoOff({ minutes: 30, excludedIds: [] }) })
+    expect(sent).toEqual({ lightAutoOffMinutes: 30, lightAutoOffExcludedIds: [] })
+    expect(result.current.lightAutoOff).toEqual({ minutes: 30, excludedIds: [] })
+  })
+
   it('rolls the energy rate back when the save is refused', async () => {
     mockConfig(() => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ detail: 'disk full' }) } as Response))
     const { result } = renderHook(() => useDashboardConfig())

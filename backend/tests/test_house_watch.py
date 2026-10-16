@@ -50,6 +50,55 @@ class TestLightLeftOn:
         states = [row("light.landscape_path", "on", changed_ago=10 * HOUR, name="Landscape path lights")]
         assert house_watch.findings(states, BASE) == []
 
+    def test_nursery_clock_is_exempt_and_never_switched_off(self):
+        states = [row("light.my_rest_clock", "on", changed_ago=10 * HOUR, name="Nursery clock")]
+        assert house_watch.findings(states, BASE) == []
+        assert house_watch.due_actions(states, BASE) == []
+
+    def test_the_excluded_list_is_the_household_s_to_change(self):
+        states = [row("light.my_rest_clock", "on", changed_ago=10 * HOUR), row("light.kitchen", "on", changed_ago=10 * HOUR)]
+        custom = house_watch.WatchSettings(light_excluded_ids=frozenset({"light.kitchen"}))
+        assert [f.entity_id for f in house_watch.findings(states, BASE, custom)] == ["light.my_rest_clock"]
+        assert house_watch.due_actions(states, BASE, custom) == [("light", "turn_off", "light.my_rest_clock")]
+
+    def test_the_switch_off_time_follows_the_setting(self):
+        states = [row("light.kitchen", "on", changed_ago=40 * MINUTE)]
+        assert house_watch.due_actions(states, BASE) == []
+        custom = house_watch.WatchSettings(light_auto_off_s=30 * MINUTE)
+        assert house_watch.due_actions(states, BASE, custom) == [("light", "turn_off", "light.kitchen")]
+
+    def test_a_short_limit_warns_halfway_and_names_the_limit(self):
+        custom = house_watch.WatchSettings(light_auto_off_s=30 * MINUTE)
+        states = [row("light.kitchen", "on", changed_ago=20 * MINUTE)]
+        [finding] = house_watch.findings(states, BASE, custom)
+        assert "switches off at 30m" in finding.detail
+        assert house_watch.findings([row("light.kitchen", "on", changed_ago=10 * MINUTE)], BASE, custom) == []
+
+    def test_applied_settings_drive_the_background_loop(self):
+        calls = []
+
+        async def call_service(domain, service, data):
+            calls.append((domain, service, data["entity_id"]))
+
+        async def get_states():
+            return [row("light.kitchen", "on", changed_ago=1 * HOUR)]
+
+        house_watch.apply_settings(house_watch.WatchSettings(light_auto_off_s=45 * MINUTE))
+        try:
+            run(house_watch.HouseWatch(get_states, call_service).check_once(BASE))
+        finally:
+            house_watch.apply_settings(house_watch.WatchSettings())
+        assert calls == [("light", "turn_off", {"entity_id": "light.kitchen"}["entity_id"])]
+
+    def test_stored_overrides_fall_back_to_defaults_when_malformed(self):
+        defaults = house_watch.settings_from_overrides({})
+        assert defaults.light_auto_off_s == 4 * HOUR
+        assert defaults.light_excluded_ids == frozenset({"light.my_rest_clock"})
+        bad = house_watch.settings_from_overrides({"lightAutoOffMinutes": "soon", "lightAutoOffExcludedIds": "light.x"})
+        assert bad == defaults
+        empty = house_watch.settings_from_overrides({"lightAutoOffMinutes": 90, "lightAutoOffExcludedIds": []})
+        assert empty.light_auto_off_s == 90 * MINUTE and empty.light_excluded_ids == frozenset()
+
     def test_light_group_is_skipped_members_judged_individually(self):
         group = row("light.living_room_group", "on", changed_ago=10 * HOUR)
         group["attributes"]["entity_id"] = ["light.lamp_1", "light.lamp_2"]

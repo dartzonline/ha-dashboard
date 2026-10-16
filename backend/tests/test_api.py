@@ -181,6 +181,31 @@ class TestDashboardConfig:
         assert response.status_code == 422
         assert "switch.not_a_light" in response.text
 
+    def test_auto_off_settings_default_save_and_apply(self, isolated_config):
+        from app import house_watch
+
+        try:
+            first = client.get("/api/config").json()
+            assert first["lightAutoOffMinutes"] == 240
+            assert first["lightAutoOffExcludedIds"] == ["light.my_rest_clock"]
+
+            saved = client.put("/api/config", json={"lightAutoOffMinutes": 90, "lightAutoOffExcludedIds": []}).json()
+            assert saved["lightAutoOffMinutes"] == 90 and saved["lightAutoOffExcludedIds"] == []
+            assert house_watch.current_settings().light_auto_off_s == 90 * 60
+            assert client.get("/api/config").json()["lightAutoOffExcludedIds"] == []
+
+            assert client.delete("/api/config").json()["lightAutoOffMinutes"] == 240
+            assert house_watch.current_settings() == house_watch.WatchSettings()
+        finally:
+            house_watch.apply_settings(house_watch.WatchSettings())
+
+    @pytest.mark.parametrize("body", [
+        {"lightAutoOffMinutes": 0}, {"lightAutoOffMinutes": 1441}, {"lightAutoOffMinutes": 1.5},
+        {"lightAutoOffExcludedIds": ["switch.nope"]},
+    ])
+    def test_bad_auto_off_settings_are_rejected(self, isolated_config, body):
+        assert client.put("/api/config", json=body).status_code == 422
+
     def test_saves_are_written_atomically(self, isolated_config):
         client.put("/api/config", json={"energyRatePerKwh": 0.2})
         assert sorted(p.name for p in isolated_config.iterdir()) == ["dashboard-config.json"]

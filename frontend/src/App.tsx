@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 import { icons, sectionIcons } from './icons'
-import type { HAEntity, TileConfig } from './types'
+import type { HAEntity, LightAutoOffSettings, TileConfig } from './types'
 import { useHomeAssistant } from './useHomeAssistant'
 import type { HAStateChange } from './useHomeAssistant'
 import { useInsights } from './useInsights'
@@ -197,9 +197,10 @@ interface UtilityRailProps {
   onSelect: (sectionId: string) => void
   onInspectSecurity: () => void
   now: Date
+  lightAutoOff: LightAutoOffSettings
 }
 
-function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectSecurity, now }: UtilityRailProps) {
+function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectSecurity, now, lightAutoOff }: UtilityRailProps) {
   const compact = useMediaQuery('(max-width: 760px)')
   const [newDeviceIndex, setNewDeviceIndex] = useState(0)
   const all = Array.from(entities.values())
@@ -231,8 +232,9 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
     return Number.isFinite(numericState(entity)) && /(plant|soil|flower|garden|maple|magnolia)/.test(searchable) && /(humidity|moisture)/.test(searchable)
   })
   const dryPlants = plants.filter((entity) => numericState(entity) <= 20)
-  // Lights on 2h+ (landscape exempt). The backend switches them off at 4h.
-  const longLights = longRunningLights(all, now.getTime())
+  // Lights past the warning point (landscape and the household's excluded lights exempt). The backend
+  // switches them off at the configured auto-off time.
+  const longLights = longRunningLights(all, now.getTime(), lightAutoOff)
   // The router publishes one device_tracker per client, so online clients are counted from those states.
   const trackers = all.filter((entity) => entity.entity_id.startsWith('device_tracker.'))
   const onlineDevices = trackers.filter((entity) => entity.state === 'home')
@@ -267,7 +269,7 @@ function UtilityRail({ entities, activeSection, autoRotate, onSelect, onInspectS
     longLights.length
       ? longLights.length === 1
         ? `${nameOf(longLights[0].entity)} on ${formatOnDuration(longLights[0].onMs)}`
-        : `${longLights.length} lights on 2h+`
+        : `${longLights.length} lights left on`
       : '',
   ].filter(Boolean)
   const issueCount = securityIssues + activeProblems.length + lowBatteries.length + dryPlants.length + longLights.length
@@ -796,10 +798,12 @@ function App() {
     sections: dashboardSections,
     nightModeIndoorLights,
     energyRatePerKwh,
+    lightAutoOff,
     ready: configReady,
     error: configError,
     save: saveDashboardConfig,
     saveEnergyRate,
+    saveLightAutoOff,
     reset: resetDashboardConfig,
   } = useDashboardConfig()
   // An unknown id from an old URL falls back to the first section rather than a blank page.
@@ -1239,7 +1243,7 @@ function App() {
                 </span>
               </button>
             </section>
-            <UtilityRail entities={entities} activeSection={activeSection} autoRotate={autoRotate} onSelect={selectSection} onInspectSecurity={() => { stopRotation(); setSecurityOpen(true) }} now={now} />
+            <UtilityRail entities={entities} activeSection={activeSection} autoRotate={autoRotate} onSelect={selectSection} onInspectSecurity={() => { stopRotation(); setSecurityOpen(true) }} now={now} lightAutoOff={lightAutoOff} />
           </>
         )}
 
@@ -1319,6 +1323,8 @@ function App() {
           entities={entities}
           sections={dashboardSections}
           nightModeIndoorLights={nightModeIndoorLights}
+          lightAutoOff={lightAutoOff}
+          onSaveLightAutoOff={saveLightAutoOff}
           onSave={saveDashboardConfig}
           onReset={resetDashboardConfig}
           onClose={() => setConfigOpen(false)}

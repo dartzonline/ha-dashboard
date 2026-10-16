@@ -117,6 +117,7 @@ def addon_version(config_path: Path | None = None) -> str:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    house_watch.apply_settings(house_watch.settings_from_overrides(load_overrides()))
     task = asyncio.create_task(bridge.run())
     # Runs server-side so lights and sprinklers still get switched off when no tablet is awake.
     watchdog_task = asyncio.create_task(house_watcher.run()) if settings.configured else None
@@ -346,11 +347,14 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
     lights = overrides.get("nightModeIndoorLights")
     rate = overrides.get("energyRatePerKwh")
     ignored = overrides.get("ignoredEntityIds")
+    watch = house_watch.settings_from_overrides(overrides)
     return {
         "sections": overrides.get("sections"),
         "nightModeIndoorLights": sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT) if lights is None else lights,
         "energyRatePerKwh": default_energy_rate() if rate is None else rate,
         "ignoredEntityIds": [] if ignored is None else ignored,
+        "lightAutoOffMinutes": round(watch.light_auto_off_s / 60),
+        "lightAutoOffExcludedIds": sorted(watch.light_excluded_ids),
     }
 
 
@@ -361,12 +365,15 @@ async def get_dashboard_config() -> dict[str, Any]:
 
 @app.put("/api/config")
 async def put_dashboard_config(payload: DashboardConfigPayload) -> dict[str, Any]:
-    return config_response(save_overrides(payload))
+    saved = save_overrides(payload)
+    house_watch.apply_settings(house_watch.settings_from_overrides(saved))
+    return config_response(saved)
 
 
 @app.delete("/api/config")
 async def delete_dashboard_config() -> dict[str, Any]:
     clear_overrides()
+    house_watch.apply_settings(house_watch.settings_from_overrides({}))
     return config_response({})
 
 
@@ -872,8 +879,9 @@ async def house_watch_insights(
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
     return {
-        "thresholds": house_watch.THRESHOLDS,
+        "thresholds": house_watch.thresholds(),
         "exemptLightTerms": list(house_watch.EXEMPT_LIGHT_TERMS),
+        "excludedLightIds": sorted(house_watch.current_settings().light_excluded_ids),
         "findings": [item.as_dict() for item in house_watch.findings(all_states)],
         "recentActions": house_watcher.recent,
     }
