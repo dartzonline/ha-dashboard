@@ -4,8 +4,6 @@
 :root[data-theme-palette='halloween']:not([data-theme-effects='off']) .seasonal-halloween { display: block; }
 .seasonal-particle { position: absolute; top: -40px; left: var(--particle-left); color: #eef9f4; opacity: .42; animation: seasonal-fall var(--particle-duration) var(--particle-delay) linear infinite; }
 .seasonal-ornament { opacity: .24; color: #f1b5b9; }
-.seasonal-holidays .seasonal-ornament:nth-child(3n) { color: #e8d291; }
-.seasonal-holidays .seasonal-ornament:nth-child(4n) { color: #9ee4b5; }
 .seasonal-halloween .seasonal-ornament { color: #ffb36b; opacity: .58; animation-name: haunted-drift; }
 .border-ghost { display: block; position: relative; width: 38px; height: 54px; border-radius: 48% 48% 0 0; background: linear-gradient(110deg, #eee9f5, #b3a9c9 65%, #817392); clip-path: polygon(0 0, 100% 0, 100% 100%, 83% 87%, 65% 100%, 48% 85%, 30% 100%, 14% 87%, 0 100%); }
 .border-ghost-face { position: absolute; top: 18px; left: 9px; width: 6px; height: 10px; border-radius: 50%; background: #292032; box-shadow: 14px 0 #292032; }

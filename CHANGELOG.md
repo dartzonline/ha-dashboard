@@ -3,6 +3,16 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.19.0 - 2026-11-02: A snowy Holidays theme
+
+**The Holidays palette now moves like Halloween does.** Snow falls in layers, from fine drifting
+specks to large slowly turning snowflakes, and soft snow drifts settle along the bottom edge.
+Twinkling string lights droop across the top of the screen. Every so often Santa's sleigh crosses
+the sky behind a red-nosed reindeer, and a shooting star streaks past. In the middle, a visitor
+fades in at a changing spot, rotating through a snowman, a decorated Christmas tree, a gingerbread
+man, a wreath, a gift, a candy cane and a bell. All of it is drawn locally (no images or sound),
+is hidden by the Seasonal effects toggle, and respects reduced-motion settings.
+
 ## 1.18.0 - 2026-10-16: Light auto-off settings
 
 **Choose which lights are switched off, and when.** Settings has a new *Light auto-off* tab. Set

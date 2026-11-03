@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { holidayVisitors } from './HolidayScene'
 import { defaultTheme, readTheme, THEME_STORAGE_KEY } from './theme'
 
 const fixtures = vi.hoisted(() => ({
@@ -76,6 +77,27 @@ describe('dashboard shell', () => {
       expect(visitor.querySelector('.haunted-pumpkin')).toBeTruthy()
       expect(visitor.querySelector('img')).toBeNull()
     }
+    expect(fixtures.callService).not.toHaveBeenCalled()
+  })
+
+  it('shows snowfall, string lights, a sleigh and a rotating visitor in the Holidays palette', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'All sections' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Holidays' }))
+    expect(document.documentElement.dataset.themePalette).toBe('holidays')
+    expect(container.querySelectorAll('.seasonal-holidays .snowflake').length).toBeGreaterThanOrEqual(40)
+    expect(container.querySelectorAll('.seasonal-holidays .snowflake-big').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('.seasonal-holidays .holiday-bulb').length).toBeGreaterThanOrEqual(16)
+    expect(container.querySelector('.seasonal-holidays .holiday-sleigh svg')).toBeTruthy()
+    const visitor = container.querySelector('.holiday-visitor') as HTMLElement
+    const seen = [visitor.dataset.visitor]
+    for (let step = 0; step < holidayVisitors.length - 1; step += 1) {
+      fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
+      seen.push(visitor.dataset.visitor)
+      expect(visitor.firstElementChild).toBeTruthy()
+    }
+    expect(seen).toEqual([...holidayVisitors])
     expect(fixtures.callService).not.toHaveBeenCalled()
   })
 
