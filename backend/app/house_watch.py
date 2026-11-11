@@ -33,6 +33,15 @@ take action, and only after a much longer delay than the warning:
 | Heating empty house | 2h | --        | --                        |
 | Laundry waiting | 20m    | --        | --                        |
 | Bath fan        | 1h     | --        | --                        |
+| Pantry door     | 10m    | --        | pantry light off at 10m   |
+| Car, garage open | --    | after dark | --                       |
+
+"Everyone is away" needs more than the phones saying so: any motion in the last hour means
+someone is home. Phone location that only updates while the app is open left the house looking
+empty while people moved around in it.
+
+A car's lock is not a house door. An unlocked car in a closed garage is fine; an unlocked car
+with the garage open after dark is the problem, and that is what the car rule reports.
 
 "After dark" and "daytime" come from `sun.sun`; "raining" from the weather entity. Without
 them those rules stay quiet. Outdoor lights in daylight and bath fans are offered by the
@@ -72,7 +81,7 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
@@ -115,6 +124,12 @@ BATH_FAN_TERMS: tuple[str, ...] = ("bath", "exhaust")
 RAIN_CONDITIONS = {"rainy", "pouring", "lightning-rainy", "snowy-rainy", "hail"}
 
 NIGHT_OPEN_WARN_AFTER_S = 30 * MINUTE
+MOTION_MEANS_HOME_S = 1 * HOUR
+PANTRY_DOOR_LIGHT_OFF_AFTER_S = 10 * MINUTE
+CAR_TERMS: tuple[str, ...] = ("volvo", "car", "xc60", "tesla", "vehicle")
+# Rooms whose light follows a door: the light is on because the door is open.
+DOOR_LIT_ROOMS: tuple[str, ...] = ("pantry", "closet")
+MOTION_CLASSES = {"motion", "occupancy", "presence"}
 NIGHT_GARAGE_CRITICAL_AFTER_S = 15 * MINUTE
 NIGHT_LOCK_CRITICAL_AFTER_S = 30 * MINUTE
 RAIN_WINDOW_WARN_AFTER_S = 5 * MINUTE
@@ -283,6 +298,9 @@ class Context:
     dark_since: float | None = None
     light_since: float | None = None
     raining: bool = False
+    garage_open: bool = False
+    # Room word -> when its door opened, for doors that are open now ("pantry" -> timestamp).
+    open_doors: dict[str, float] = field(default_factory=dict)
 
 
 def build_context(states: list[dict[str, Any]], now: float, settings: WatchSettings | None = None) -> Context:
@@ -294,6 +312,9 @@ def build_context(states: list[dict[str, Any]], now: float, settings: WatchSetti
         stamps = [_parse_time(entity.get("last_changed")) for entity in people]
         if all(stamp is not None for stamp in stamps):
             away_since = max(stamp for stamp in stamps if stamp is not None)
+    last_motion = latest_motion(states, now)
+    if away_since is not None and last_motion is not None and now - last_motion < MOTION_MEANS_HOME_S:
+        away_since = None
 
     hvac_action: str | None = None
     for entity in states:
@@ -314,11 +335,36 @@ def build_context(states: list[dict[str, Any]], now: float, settings: WatchSetti
             elif sun.get("state") == "above_horizon":
                 light_since = changed
     raining = any(_domain(entity) == "weather" and entity.get("state") in RAIN_CONDITIONS for entity in states)
+    garage_open = any(_is_garage(entity) for entity in states)
+    open_doors: dict[str, float] = {}
+    for entity in states:
+        if _domain(entity) != "binary_sensor" or entity.get("state") != "on" or _device_class(entity) not in OPENING_CLASSES:
+            continue
+        opened = _parse_time(entity.get("last_changed"))
+        for room in DOOR_LIT_ROOMS:
+            if opened is not None and _mentions(entity, (room,)):
+                open_doors[room] = opened
     return Context(
         now=now, away_since=away_since, hvac_action=hvac_action, settings=settings or _settings,
         outdoor_temp_c=outdoor_temperature_c(states),
         dark_since=dark_since, light_since=light_since, raining=raining,
+        garage_open=garage_open, open_doors=open_doors,
     )
+
+
+def latest_motion(states: list[dict[str, Any]], now: float) -> float | None:
+    """The last moment any motion or occupancy sensor saw someone: now if one is on, else when it cleared."""
+    latest: float | None = None
+    for entity in states:
+        if _domain(entity) != "binary_sensor" or _device_class(entity) not in MOTION_CLASSES:
+            continue
+        changed = _parse_time(entity.get("last_changed"))
+        if changed is None or entity.get("state") not in ("on", "off"):
+            continue
+        seen = now if entity.get("state") == "on" else changed
+        if latest is None or seen > latest:
+            latest = seen
+    return latest
 
 
 def _celsius(value: Any, unit: Any) -> float | None:
@@ -512,8 +558,12 @@ def _garage_open(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
     )
 
 
+def _is_car(entity: dict[str, Any]) -> bool:
+    return _mentions(entity, CAR_TERMS)
+
+
 def _lock_unlocked(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
-    if _domain(entity) != "lock" or entity.get("state") != "unlocked":
+    if _domain(entity) != "lock" or entity.get("state") != "unlocked" or _is_car(entity):
         return None
     unlocked_for = ctx.now - since
     if ctx.dark_since is not None and ctx.now - max(since, ctx.dark_since) >= NIGHT_LOCK_CRITICAL_AFTER_S:
@@ -571,6 +621,39 @@ def _away_and_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
         rule="away_and_on", category="away", severity="warning",
         entity_id=str(entity["entity_id"]), name=_name(entity), seconds=wasted,
         detail=f"{verb} while everyone is away ({duration_label(wasted)})",
+    )
+
+
+def _car_unlocked_garage_open(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if _domain(entity) != "lock" or entity.get("state") != "unlocked" or not _is_car(entity):
+        return None
+    if ctx.dark_since is None or not ctx.garage_open:
+        return None
+    return Finding(
+        rule="car_unlocked_garage_open", category="car", severity="critical",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail="Car unlocked with the garage open after dark",
+    )
+
+
+def _door_lit_room(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    """A pantry (or closet) light left on because its door was left open."""
+    if _domain(entity) != "light" or entity.get("state") != "on" or is_group(entity):
+        return None
+    room = next((term for term in DOOR_LIT_ROOMS if _mentions(entity, (term,))), None)
+    if room is None:
+        return None
+    door_open_since = ctx.open_doors.get(room)
+    if door_open_since is None:
+        return None
+    open_for = ctx.now - door_open_since
+    if open_for < PANTRY_DOOR_LIGHT_OFF_AFTER_S:
+        return None
+    return Finding(
+        rule="door_lit_room", category="light", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"{room.capitalize()} door open {duration_label(open_for)} — switching the light off",
+        action=("light", "turn_off"), action_at=door_open_since + PANTRY_DOOR_LIGHT_OFF_AFTER_S,
     )
 
 
@@ -736,6 +819,8 @@ RULES: tuple[Rule, ...] = (
     _lock_unlocked,
     _open_while_hvac,
     _away_and_on,
+    _door_lit_room,
+    _car_unlocked_garage_open,
 )
 
 
@@ -861,8 +946,11 @@ class HouseWatch:
     def __init__(
         self, get_states: StatesFn, call_service: ServiceFn, interval: float = CHECK_INTERVAL_S,
         store_path: Path | None = None,
+        on_tick: Callable[[list[dict[str, Any]], float], Awaitable[None]] | None = None,
     ) -> None:
         self._get_states = get_states
+        # Other per-minute observers (salt log, morning run) ride on the same state read.
+        self._on_tick = on_tick
         self._call_service = call_service
         self._interval = interval
         self._failed_at: dict[str, float] = {}
@@ -952,6 +1040,11 @@ class HouseWatch:
         states = await self._get_states()
         current = findings(states, moment)
         self._record(current, moment)
+        if self._on_tick is not None:
+            try:
+                await self._on_tick(states, moment)
+            except Exception as error:  # noqa: BLE001 - an observer failing must not stop the switch-offs
+                logger.warning("House watch observer failed: %s", error)
         due = [
             (item.action[0], item.action[1], item.entity_id)
             for item in current

@@ -6,7 +6,7 @@ export type ThemeStyle = typeof themeStyles[number]
 
 export const themePalettes = {
   halloween: { label: 'Halloween', canvas: '#17121b', canvas2: '#241b2b', panel: '#291f30', raised: '#382b3f', strong: '#1e1624', text: '#f5ecdf', muted: '#d3c0d5', muted2: '#bca6c4', border: '#665070', edge: '#a38baa', accent: '#ffb36b', highlight: '#ffd4a3', ink: '#301c0d' },
-  fall: { label: 'Fall', canvas: '#1b1410', canvas2: '#271c15', panel: '#2d2119', raised: '#3a2a1f', strong: '#221812', text: '#f8ecdd', muted: '#e0c8b0', muted2: '#cbb096', border: '#6b5240', edge: '#ad8c70', accent: '#f2a057', highlight: '#ffd2a0', ink: '#2c1505' },
+  fall: { label: 'Fall', canvas: '#120e0b', canvas2: '#1c1611', panel: '#211913', raised: '#2e231b', strong: '#18120e', text: '#fbf3e8', muted: '#e6d3bf', muted2: '#d0b79e', border: '#55402f', edge: '#a9886b', accent: '#f58a2e', highlight: '#ffc792', ink: '#2a1204' },
   holidays: { label: 'Holidays', canvas: '#101b18', canvas2: '#182b24', panel: '#1e3028', raised: '#2a3c32', strong: '#14251e', text: '#f4f1e7', muted: '#c6d3c9', muted2: '#a8beb0', border: '#4f6858', edge: '#8cab95', accent: '#f1b5b9', highlight: '#ffdadc', ink: '#30171c' },
   phosphor: { label: 'Phosphor', canvas: '#101413', canvas2: '#19201d', panel: '#1d2521', raised: '#2d3831', strong: '#151c18', text: '#edf2df', muted: '#b8c5b8', muted2: '#98aa9b', border: '#46554a', edge: '#81927f', accent: '#d0e779', highlight: '#e2efac', ink: '#17200d' },
   arctic: { label: 'Arctic', canvas: '#111719', canvas2: '#1a2327', panel: '#202b30', raised: '#303c42', strong: '#172024', text: '#e9f3f5', muted: '#bccdd1', muted2: '#a4b8bd', border: '#4a5e65', edge: '#829ca4', accent: '#7bd9e5', highlight: '#b5eef4', ink: '#102529' },

@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import bins, connectivity, garden, home_health, house_watch, local_time, maintenance, notifier, weather_advice, weekly
+from . import bins, connectivity, garden, home_health, house_watch, local_time, maintenance, morning_run, notifier, salt_watch, weather_advice, weekly
 from .storage import data_file
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
@@ -35,9 +35,33 @@ settings = load_settings()
 bridge = EventBridge(settings)
 ha_client = HomeAssistantClient(settings)
 registry_snapshot = RegistrySnapshot(bridge)
+salt_log = salt_watch.SaltWatch(data_file("salt-log.json"))
+run_tracker = morning_run.MorningRun()
+
+
+async def watch_tick(states: list[dict[str, Any]], moment: float) -> None:
+    """Per-minute observers riding on house watch's state read: the salt log and the morning run."""
+    salt = maintenance.salt_status(states)
+    if salt is not None and not salt.get("sensorFault"):
+        salt_log.record(salt.get("percent"), moment)
+    overrides = load_overrides()
+    run_settings = morning_run.settings_from_overrides(overrides)
+    zone = await local_time.home_zone(ha_client.config)
+    run_tracker.observe(states, moment, datetime.fromtimestamp(moment, zone), run_settings)
+    await run_tracker.maybe_vacuum(states, moment, run_settings, ha_client.call_service)
+
+
 house_watcher = house_watch.HouseWatch(
     get_states=ha_client.states, call_service=ha_client.call_service, store_path=data_file("house-watch-journal.json"),
+    on_tick=watch_tick,
 )
+
+
+async def run_status_now(states: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    states = states if states is not None else await ha_client.states()
+    zone = await local_time.home_zone(ha_client.config)
+    moment = time.time()
+    return run_tracker.status(states, moment, datetime.fromtimestamp(moment, zone), morning_run.settings_from_overrides(load_overrides()))
 
 NIGHT_MODE_INDOOR_LIGHTS_DEFAULT = {
     "light.smart_wi_fi_switch_2",
@@ -128,6 +152,8 @@ phone_notifier = notifier.Notifier(notifier.Sources(
     get_imperial=lambda: local_time.home_is_imperial(ha_client.config),
     watcher=house_watcher,
     location=lambda states: home_location(states),
+    get_run_status=lambda: run_status_now(),
+    get_salt_forecast=lambda: salt_log.forecast(),
 ))
 
 
@@ -349,12 +375,25 @@ async def health(client: HomeAssistantClient = Depends(get_client)) -> dict[str,
     }
 
 
+# The household's flat-rate tariff: delivery $0.022546 + transmission $0.020688 + base power
+# $0.0659 per kWh, plus a $32.50 monthly service availability charge.
+TARIFF_RATE_PER_KWH = 0.109134
+TARIFF_FIXED_MONTHLY = 32.50
+
+
 def default_energy_rate() -> float:
     """Fallback $/kWh when nobody has set one, overridable per install without a rebuild."""
     try:
-        return float(os.getenv("ENERGY_RATE_PER_KWH", "") or 0.15)
+        return float(os.getenv("ENERGY_RATE_PER_KWH", "") or TARIFF_RATE_PER_KWH)
     except ValueError:
-        return 0.15
+        return TARIFF_RATE_PER_KWH
+
+
+def default_fixed_monthly() -> float:
+    try:
+        return float(os.getenv("ENERGY_FIXED_MONTHLY", "") or TARIFF_FIXED_MONTHLY)
+    except ValueError:
+        return TARIFF_FIXED_MONTHLY
 
 
 def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
@@ -369,11 +408,13 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
         "sections": overrides.get("sections"),
         "nightModeIndoorLights": sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT) if lights is None else lights,
         "energyRatePerKwh": default_energy_rate() if rate is None else rate,
+        "energyFixedMonthly": default_fixed_monthly() if overrides.get("energyFixedMonthly") is None else overrides["energyFixedMonthly"],
         "ignoredEntityIds": [] if ignored is None else ignored,
         "lightAutoOffMinutes": round(watch.light_auto_off_s / 60),
         "lightAutoOffExcludedIds": sorted(watch.light_excluded_ids),
         "binSchedule": bins.schedule_as_dict(bins.schedule_from_overrides(overrides)),
         "notifications": notifier.settings_as_dict(notifier.settings_from_overrides(overrides)),
+        "morningRun": morning_run.settings_as_dict(morning_run.settings_from_overrides(overrides)),
     }
 
 
@@ -995,6 +1036,8 @@ async def morning_brief(
         "garden": garden_items,
         "weekly": weekly.weekly_report(house_watcher.report_journal(), house_watcher.actions, time.time()),
         "bins": await bins_status_now(client),
+        "replaceNow": maintenance.replace_now(all_states, salt_log.forecast()),
+        "run": await run_status_now(all_states),
     }
 
 
@@ -1019,6 +1062,62 @@ async def bins_done(request: BinsDoneRequest, client: HomeAssistantClient = Depe
     """"Bins are out": silences that pickup's reminders on the dashboard and on phones."""
     bins.save_done_for(request.pickupDate)
     return {"bins": await bins_status_now(client)}
+
+
+@app.get("/api/morning-run", dependencies=[Depends(require_configuration)])
+async def morning_run_status(client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return await run_status_now(states)
+
+
+class SecureHouseRequest(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/api/actions/secure-house", dependencies=[Depends(require_configuration)])
+async def secure_house(request: SecureHouseRequest, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Locks the house doors and switches off lights and media that were left on. Worked out again
+    here from live state, so a stale screen can only ever secure what is still left."""
+    if not request.confirm:
+        raise HTTPException(400, "Securing the house requires explicit confirmation")
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    _, actions = morning_run.left_behind(states)
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for domain, service, entity_id in actions:
+        grouped.setdefault((domain, service), []).append(entity_id)
+    done: list[str] = []
+    failures: list[dict[str, str]] = []
+    for (domain, service), entity_ids in grouped.items():
+        await run_group(client, domain, service, entity_ids, done, failures)
+    return {"status": "partial" if failures else "completed", "secured": done, "failures": failures}
+
+
+class ShoppingItemRequest(BaseModel):
+    item: str
+
+
+@app.post("/api/actions/shopping-list", dependencies=[Depends(require_configuration)])
+async def add_to_shopping_list(request: ShoppingItemRequest, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Adds one item to the household's shopping list -- the only to-do action the panel can take."""
+    item = request.item.strip()[:120]
+    if not item:
+        raise HTTPException(400, "Nothing to add")
+    try:
+        states = await client.states()
+        todo = [entity for entity in states if str(entity.get("entity_id", "")).startswith("todo.")]
+        target = next((entity for entity in todo if "shopping" in str(entity.get("entity_id"))), todo[0] if todo else None)
+        if target is None:
+            raise HTTPException(404, "Home Assistant has no to-do list to add to")
+        await client.call_service("todo", "add_item", {"entity_id": target["entity_id"], "item": item})
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return {"status": "added", "list": target["entity_id"], "item": item}
 
 
 @app.get("/api/insights/weekly", dependencies=[Depends(require_configuration)])
@@ -1071,7 +1170,12 @@ async def maintenance_insights(
         all_states = await client.states()
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
-    return maintenance.maintenance_summary(all_states)
+    forecast = salt_log.forecast()
+    return {
+        **maintenance.maintenance_summary(all_states),
+        "saltForecast": forecast,
+        "replaceNow": maintenance.replace_now(all_states, forecast),
+    }
 
 
 @app.get("/api/insights/clients", dependencies=[Depends(require_configuration)])

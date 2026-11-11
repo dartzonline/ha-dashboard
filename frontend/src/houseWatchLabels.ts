@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
-  AlertTriangle, BatteryLow, CloudRain, CookingPot, DoorOpen, Droplets, Fan, Flame, HardDriveDownload, Lightbulb, Lock,
+  AlertTriangle, BatteryLow, Car, CloudRain, CookingPot, DoorOpen, Droplets, Fan, Flame, HardDriveDownload, Lightbulb, Lock,
   LogOut, Moon, RefreshCw, Refrigerator, ShieldAlert, Warehouse, WashingMachine, Wrench, Zap,
 } from 'lucide-react'
 
@@ -22,6 +22,7 @@ export const CATEGORY_ICON: Record<string, LucideIcon> = {
   kitchen: CookingPot,
   laundry: WashingMachine,
   fan: Fan,
+  car: Car,
   problem: AlertTriangle,
   safety: ShieldAlert,
   opening: DoorOpen,
@@ -46,6 +47,7 @@ export const CATEGORY_LABEL: Record<string, string> = {
   kitchen: 'Kitchen',
   laundry: 'Laundry',
   fan: 'Fan',
+  car: 'Car',
   problem: 'Problem',
   safety: 'Safety',
   opening: 'Left open',

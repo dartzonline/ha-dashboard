@@ -31,6 +31,8 @@ FORGET_AFTER_S = 3 * 86400.0
 TOMORROW_FROM_HOUR = 17
 WEEKLY_WEEKDAY = 6  # Sunday
 WEEKLY_HOUR = 19
+RUN_NOTICE_AFTER_S = 5 * 60.0
+SALT_NOTICE_DAYS = 10.0
 _CLOCK = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
@@ -109,6 +111,8 @@ class Sources:
     get_imperial: Callable[[], Awaitable[bool]] | None = None
     watcher: house_watch.HouseWatch | None = None
     location: Callable[[list[dict[str, Any]]], tuple[float, float] | None] = field(default=lambda states: None)
+    get_run_status: Callable[[], Awaitable[dict[str, Any]]] | None = None
+    get_salt_forecast: Callable[[], dict[str, Any]] | None = None
 
 
 class Notifier:
@@ -163,6 +167,26 @@ class Notifier:
                         ))
                 except Exception as error:  # noqa: BLE001 - no forecast this minute; the rest still goes out
                     logger.debug("Notifier skipped the forecast: %s", error)
+
+        if settings.house_watch and self.sources.get_run_status is not None:
+            run = await self.sources.get_run_status()
+            left = [item["label"] for item in run.get("leftBehind", [])]
+            departed = run.get("departedAt")
+            if run.get("phase") == "out" and left and departed:
+                started = datetime.fromisoformat(departed).timestamp()
+                if moment - started >= RUN_NOTICE_AFTER_S:
+                    messages.append(Message(
+                        f"run:{departed}", f"You left {len(left)} thing{'s' if len(left) != 1 else ''}",
+                        " · ".join(left[:5]) + ". Open the dashboard to secure the house.", tag="home-panel-run",
+                    ))
+
+        if settings.house_watch and not quiet and self.sources.get_salt_forecast is not None:
+            salt = self.sources.get_salt_forecast()
+            if salt.get("daysToLow") is not None and salt["daysToLow"] <= SALT_NOTICE_DAYS:
+                messages.append(Message(
+                    f"salt:{salt.get('lowOn')}", "Buy water softener salt",
+                    f"The softener reaches 20% in about {salt['daysToLow']:.0f} days.", tag="home-panel-salt",
+                ))
 
         if settings.weekly and not quiet and local.weekday() == WEEKLY_WEEKDAY and local.hour >= WEEKLY_HOUR and self.sources.watcher is not None:
             report = weekly.weekly_report(self.sources.watcher.report_journal(), self.sources.watcher.actions, moment)

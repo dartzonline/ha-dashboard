@@ -6,6 +6,8 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { CATEGORY_ICON, CATEGORY_LABEL } from './houseWatchLabels'
 import { LeftOnAction } from './LeftOnAction'
+import { ReplaceNow } from './ReplaceNow'
+import type { ReactNode } from 'react'
 import { formatOnDuration } from './longRunningLights'
 import { christmasCountdown } from './seasons'
 import type { Advice, JournalEntry, MorningBrief } from './useMorningBrief'
@@ -74,9 +76,11 @@ interface MorningViewProps {
   slide: number
   onSelectSlide: (index: number) => void
   onRetry: () => void
+  /** The live morning-run card, shown at the top of Today while a run is on. */
+  run?: ReactNode
 }
 
-export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry }: MorningViewProps) {
+export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry, run }: MorningViewProps) {
   const sky = skyFor(brief?.today?.weatherCode ?? null)
   const overnight = brief ? overnightEntries(brief.journal, now) : []
   const nightStart = new Date(now)
@@ -104,6 +108,7 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry 
 
     {brief && <div className="morning-panel" role="tabpanel" id="morning-panel" aria-labelledby={`morning-tab-${slide}`}>
       {slide === 0 && <div className="morning-today">
+        {run}
         {brief.today ? <div className="morning-sky glass">
           <sky.Icon size={54} aria-hidden="true" />
           <div className="morning-temps">
@@ -162,6 +167,7 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry 
             })}</ul>}
           <LeftOnAction count={brief.leftOn.length} onDone={onRetry} />
         </section>
+        {(brief.replaceNow?.length ?? 0) > 0 && <ReplaceNow items={brief.replaceNow ?? []} />}
       </div>}
 
       {slide === 2 && <div className="morning-ahead">

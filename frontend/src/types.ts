@@ -35,6 +35,8 @@ export interface DashboardConfigResponse {
   sections: DashboardSection[] | null
   nightModeIndoorLights: string[]
   energyRatePerKwh: number
+  /** The utility's fixed monthly charge, added to the bill whatever the usage. */
+  energyFixedMonthly?: number
   /** Entities dismissed from the "New devices" tray, so discovery stops re-proposing them. */
   ignoredEntityIds: string[]
   /** Minutes a light may stay on before house watch switches it off. */

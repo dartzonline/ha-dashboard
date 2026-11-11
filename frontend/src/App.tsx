@@ -22,6 +22,7 @@ import { MorningView, MORNING_SLIDES } from './MorningView'
 import { nextRotationSection } from './morningRotation'
 import { headsUp, preferredUnits, useMorningBrief, type Advice } from './useMorningBrief'
 import { useReminders } from './useReminders'
+import { MorningRunCard, useMorningRun } from './MorningRunCard'
 import { repaintTheme } from './theme'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
@@ -809,6 +810,7 @@ function App() {
   const morning = useMorningBrief(preferredUnits(entities), health?.home_assistant.configured !== false)
   const forecastHeadsUp = headsUp(morning.brief)
   const reminders = useReminders(health?.home_assistant.configured !== false)
+  const morningRun = useMorningRun(health?.home_assistant.configured !== false)
   const binReminder = reminders.bins?.phase ? reminders.bins : null
   const [binMessage, setBinMessage] = useState<string | null>(null)
   // Each new reminder slot (every half hour by default) also pops a toast, so a glance at the
@@ -828,6 +830,8 @@ function App() {
     sections: dashboardSections,
     nightModeIndoorLights,
     energyRatePerKwh,
+    energyFixedMonthly,
+    saveEnergyFixed,
     lightAutoOff,
     ready: configReady,
     error: configError,
@@ -1084,6 +1088,12 @@ function App() {
       : Promise.reject(new Error('Saved settings are still loading, so the rate cannot be saved yet. Try again in a moment.'))),
     [configReady, saveEnergyRate],
   )
+  const saveFixedWhenReady = useCallback(
+    (amount: number) => (configReady
+      ? saveEnergyFixed(amount)
+      : Promise.reject(new Error('Saved settings are still loading, so the charge cannot be saved yet. Try again in a moment.'))),
+    [configReady, saveEnergyFixed],
+  )
 
   async function activateNightMode() {
     // Two taps rather than window.confirm, which kiosk WebViews can suppress outright -- making
@@ -1266,6 +1276,7 @@ function App() {
 
         {activeSection === 'home' && (
           <>
+            <MorningRunCard status={morningRun.status} onChanged={morningRun.reload} />
             {forecastHeadsUp.length > 0 && <div className="forecast-heads-up" role="status" aria-label="Forecast heads-up">
               {forecastHeadsUp.map((item) => <button type="button" key={item.id} className={`is-${item.severity}`} onClick={() => openMorningFor(item)}>
                 <AlertTriangle size={16} aria-hidden="true" />{item.title}
@@ -1318,7 +1329,7 @@ function App() {
         ) : activeSection === 'flights' ? (
           lazyView('Preparing flights', <FlightsView entities={entities} slide={flightsSlide} onSelectSlide={selectFlightsSlide} />)
         ) : activeSection === 'morning' ? (
-          <MorningView brief={morning.brief} failed={morning.failed} now={now} slide={morningSlide} onSelectSlide={selectMorningSlide} onRetry={morning.reload} />
+          <MorningView brief={morning.brief} failed={morning.failed} now={now} slide={morningSlide} onSelectSlide={selectMorningSlide} onRetry={morning.reload} run={<MorningRunCard status={morningRun.status} onChanged={morningRun.reload} />} />
         ) : activeSection === 'health' ? (
           lazyView('Checking home health', <HealthView onExpand={expandTile} />)
         ) : activeSection === 'maintenance' ? (
@@ -1330,7 +1341,7 @@ function App() {
         ) : activeSection === 'roborock' ? (
           lazyView('Preparing Roborock', <RoborockView entities={entities} onService={callService} onExpand={expandTile} />)
         ) : activeSection === 'energy' ? (
-          lazyView('Preparing energy usage', <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveRateWhenReady} />)
+          lazyView('Preparing energy usage', <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveRateWhenReady} fixedMonthly={energyFixedMonthly} onSaveFixed={saveFixedWhenReady} />)
         ) : activeSection === 'volvo' ? (
           lazyView('Preparing Volvo', <VolvoView entities={entities} onExpand={expandTile} />)
         ) : (

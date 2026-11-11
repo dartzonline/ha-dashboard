@@ -75,7 +75,8 @@ class HomeAssistantClient:
         one series per entity, which is the difference between one request and ninety-eight when
         summarising every device_tracker on the network.
         """
-        start = datetime.now(timezone.utc) - timedelta(hours=hours)
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
         # Home Assistant treats both flags as present-or-absent -- `no_attributes=false` still
         # switched attributes *off*, so this was always attribute-free in practice. Every consumer
         # (sparklines, timelines, the network/health insights) reads only `state` and
@@ -86,6 +87,9 @@ class HomeAssistantClient:
             f"/api/history/period/{start.isoformat()}",
             params={
                 "filter_entity_id": ",".join(entity_ids),
+                # Without an end, Home Assistant returns only the first day after `start`: a 30-day
+                # request came back as one day from a month ago (empty once that is past retention).
+                "end_time": end.isoformat(),
                 "minimal_response": "true",
                 "no_attributes": "true",
             },

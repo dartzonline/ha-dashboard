@@ -56,6 +56,18 @@ export interface MorningBrief {
   /** Watering advice from the plant sensors and the rain forecast. Absent from older backends. */
   garden?: Advice[]
   weekly?: WeeklyReport
+  replaceNow?: import('./ReplaceNow').ReplaceItem[]
+  run?: MorningRunStatus
+}
+
+export interface MorningRunStatus {
+  phase: 'before' | 'out' | 'back' | null
+  checks?: { id: string; ok: boolean; label: string }[]
+  departedAt?: string
+  returnedAt?: string
+  leftBehind?: { entityId: string; label: string; fixable: boolean }[]
+  canSecure?: boolean
+  vacuumStarted?: boolean
 }
 
 /** Same rule as the Weather page: the outdoor sensor's unit decides °C or °F for the whole brief. */
