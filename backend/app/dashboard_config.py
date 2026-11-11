@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
@@ -26,6 +27,36 @@ class DashboardSection(BaseModel):
     tiles: list[TileConfig]
 
 
+class BinSchedulePayload(BaseModel):
+    enabled: bool = True
+    # Monday is 0, as in Python's `date.weekday()`; Thursday is 3.
+    trashWeekday: int = Field(default=3, ge=0, le=6)
+    recycling: Literal["biweekly", "weekly", "none"] = "biweekly"
+    # Any date recycling is (or was) collected; fortnightly weeks are counted from it.
+    recyclingAnchorDate: date | None = None
+    remindStart: str = Field(default="16:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    remindEnd: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    intervalMinutes: int = Field(default=30, ge=10, le=180)
+
+
+class NotificationsPayload(BaseModel):
+    targets: list[str] = Field(default_factory=list)
+    forecast: bool = True
+    houseWatch: bool = True
+    bins: bool = True
+    weekly: bool = True
+    quietStart: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    quietEnd: str = Field(default="07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+    @field_validator("targets")
+    @classmethod
+    def _notify_services(cls, value: list[str]) -> list[str]:
+        bad = [item for item in value if not re.match(r"^notify\.[a-z0-9_]+$", item)]
+        if bad:
+            raise ValueError(f"Notification targets must be notify.* services, got: {', '.join(bad[:5])}")
+        return list(dict.fromkeys(value))
+
+
 class DashboardConfigPayload(BaseModel):
     sections: list[DashboardSection] | None = None
     # Night Mode only ever calls `light.turn_off` on these, so anything that is not a `light.`
@@ -43,6 +74,8 @@ class DashboardConfigPayload(BaseModel):
     # is already past any reason to have the watch at all.
     lightAutoOffMinutes: int | None = Field(default=None, ge=1, le=24 * 60)
     lightAutoOffExcludedIds: list[str] | None = None
+    binSchedule: BinSchedulePayload | None = None
+    notifications: NotificationsPayload | None = None
 
     @field_validator("nightModeIndoorLights")
     @classmethod
@@ -92,7 +125,7 @@ def save_overrides(payload: DashboardConfigPayload) -> dict[str, Any]:
     Callers send only the slice they own -- the tile editor sends sections and Night Mode lights,
     the energy panel sends just its rate -- so a partial save must not wipe the other's settings.
     """
-    data = {**load_overrides(), **payload.model_dump(exclude_none=True)}
+    data = {**load_overrides(), **payload.model_dump(mode="json", exclude_none=True)}
     # Atomic so a crash mid-write cannot leave a truncated file that `load_overrides` then reads
     # as "no overrides" -- which would silently reset every tile the household has arranged.
     write_text_atomic(_storage_path(), json.dumps(data, indent=2))

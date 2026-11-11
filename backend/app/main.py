@@ -3,8 +3,9 @@ import contextlib
 import math
 import os
 import re
+import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
 from urllib.parse import urlencode
@@ -18,7 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import connectivity, home_health, house_watch, maintenance, weather_advice
+from . import bins, connectivity, garden, home_health, house_watch, local_time, maintenance, notifier, weather_advice, weekly
+from .storage import data_file
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .entity_registry import RegistrySnapshot
@@ -33,7 +35,9 @@ settings = load_settings()
 bridge = EventBridge(settings)
 ha_client = HomeAssistantClient(settings)
 registry_snapshot = RegistrySnapshot(bridge)
-house_watcher = house_watch.HouseWatch(get_states=ha_client.states, call_service=ha_client.call_service)
+house_watcher = house_watch.HouseWatch(
+    get_states=ha_client.states, call_service=ha_client.call_service, store_path=data_file("house-watch-journal.json"),
+)
 
 NIGHT_MODE_INDOOR_LIGHTS_DEFAULT = {
     "light.smart_wi_fi_switch_2",
@@ -115,18 +119,31 @@ def addon_version(config_path: Path | None = None) -> str:
     return "0.0.0"
 
 
+phone_notifier = notifier.Notifier(notifier.Sources(
+    get_states=ha_client.states,
+    call_service=ha_client.call_service,
+    get_zone=lambda: local_time.home_zone(ha_client.config),
+    get_overrides=load_overrides,
+    get_forecast=lambda latitude, longitude: weather_advice.fetch_forecast(get_http_client(), latitude, longitude),
+    get_imperial=lambda: local_time.home_is_imperial(ha_client.config),
+    watcher=house_watcher,
+    location=lambda states: home_location(states),
+))
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     house_watch.apply_settings(house_watch.settings_from_overrides(load_overrides()))
     task = asyncio.create_task(bridge.run())
     # Runs server-side so lights and sprinklers still get switched off when no tablet is awake.
     watchdog_task = asyncio.create_task(house_watcher.run()) if settings.configured else None
+    notifier_task = asyncio.create_task(phone_notifier.run()) if settings.configured else None
     if settings.configured:
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(bridge.wait_until_connected(), timeout=5)
     yield
     await bridge.stop()
-    for background in (task, watchdog_task):
+    for background in (task, watchdog_task, notifier_task):
         if background is None:
             continue
         background.cancel()
@@ -355,6 +372,8 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
         "ignoredEntityIds": [] if ignored is None else ignored,
         "lightAutoOffMinutes": round(watch.light_auto_off_s / 60),
         "lightAutoOffExcludedIds": sorted(watch.light_excluded_ids),
+        "binSchedule": bins.schedule_as_dict(bins.schedule_from_overrides(overrides)),
+        "notifications": notifier.settings_as_dict(notifier.settings_from_overrides(overrides)),
     }
 
 
@@ -947,6 +966,7 @@ async def morning_brief(
         raise upstream_error(error) from error
 
     summary: dict[str, Any] | None = None
+    garden_items: list[dict[str, Any]] = []
     advice: list[dict[str, Any]] = []
     days: list[dict[str, Any]] = []
     forecast_error: str | None = None
@@ -959,6 +979,7 @@ async def morning_brief(
             summary = weather_advice.today_summary(forecast, imperial)
             advice = [item.as_dict() for item in weather_advice.build_advice(forecast, imperial)]
             days = weather_advice.week_ahead(forecast, imperial)
+            garden_items = [item.as_dict() for item in garden.garden_advice(all_states, forecast, imperial)]
         except (httpx.HTTPError, ValueError) as error:
             forecast_error = f"Forecast unavailable: {error}"
 
@@ -971,7 +992,74 @@ async def morning_brief(
         "journal": house_watcher.journal_entries(),
         "recentActions": house_watcher.recent,
         "leftOn": [entity_id for _, _, entity_id in house_watch.switch_off_targets(all_states)],
+        "garden": garden_items,
+        "weekly": weekly.weekly_report(house_watcher.report_journal(), house_watcher.actions, time.time()),
+        "bins": await bins_status_now(client),
     }
+
+
+async def bins_status_now(client: HomeAssistantClient) -> dict[str, Any]:
+    zone = await local_time.home_zone(client.config)
+    return bins.status(datetime.now(zone), bins.schedule_from_overrides(load_overrides()), bins.load_done_for())
+
+
+@app.get("/api/reminders", dependencies=[Depends(require_configuration)])
+async def reminders(client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Bin night: the next pickup and whether a reminder is due right now, in the house's own time."""
+    return {"bins": await bins_status_now(client)}
+
+
+class BinsDoneRequest(BaseModel):
+    # The pickup being acknowledged; null takes the acknowledgement back.
+    pickupDate: date | None
+
+
+@app.post("/api/reminders/bins/done", dependencies=[Depends(require_configuration)])
+async def bins_done(request: BinsDoneRequest, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """"Bins are out": silences that pickup's reminders on the dashboard and on phones."""
+    bins.save_done_for(request.pickupDate)
+    return {"bins": await bins_status_now(client)}
+
+
+@app.get("/api/insights/weekly", dependencies=[Depends(require_configuration)])
+async def weekly_insights() -> dict[str, Any]:
+    return weekly.weekly_report(house_watcher.report_journal(), house_watcher.actions, time.time())
+
+
+@app.get("/api/notifications/targets", dependencies=[Depends(require_configuration)])
+async def notification_targets(client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Home Assistant's notify services, phones first, for the Reminders settings tab."""
+    try:
+        services = await client.services()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    names = [
+        f"notify.{name}"
+        for domain in services if isinstance(domain, dict) and domain.get("domain") == "notify"
+        for name in (domain.get("services") or {})
+        if name not in ("send_message", "persistent_notification")
+    ]
+    names.sort(key=lambda name: (not name.startswith("notify.mobile_app_"), name))
+    return {"targets": names}
+
+
+class TestNotificationRequest(BaseModel):
+    targets: list[str] | None = None
+
+
+@app.post("/api/notifications/test", dependencies=[Depends(require_configuration)])
+async def test_notification(request: TestNotificationRequest) -> dict[str, Any]:
+    chosen = request.targets if request.targets is not None else list(notifier.settings_from_overrides(load_overrides()).targets)
+    targets = tuple(target for target in chosen if re.match(r"^notify\.[a-z0-9_]+$", target))
+    if not targets:
+        raise HTTPException(400, "Choose at least one phone to notify")
+    delivered = await phone_notifier.send(
+        notifier.Message("test", "Home Panel", "Notifications are working. You will hear about bin night, the weather and the house here.", tag="home-panel-test"),
+        targets,
+    )
+    if not delivered:
+        raise HTTPException(502, "Home Assistant could not deliver the test notification")
+    return {"status": "sent", "targets": list(targets)}
 
 
 @app.get("/api/insights/maintenance", dependencies=[Depends(require_configuration)])

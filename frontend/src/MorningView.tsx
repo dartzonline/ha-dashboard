@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from 'react'
 import {
   Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Coffee, Droplet, Droplets, Gift, House, Leaf,
-  ShieldCheck, Shirt, Snowflake, Sun, SunMedium, Sunrise, Sunset, ThermometerSnowflake, ThermometerSun, Umbrella, Wind,
+  ShieldCheck, Shirt, Snowflake, Sprout, Sun, SunMedium, Sunrise, Sunset, ThermometerSnowflake, ThermometerSun, TrendingDown, TrendingUp, Umbrella, Wind,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { CATEGORY_ICON, CATEGORY_LABEL } from './houseWatchLabels'
@@ -13,12 +13,12 @@ import { PageFrame } from './ui/PageFrame'
 import { InlineError, LoadingState } from './ui/StateMessages'
 import './MorningView.css'
 
-export const MORNING_SLIDES = ['Today', 'Around the house', 'Ahead'] as const
+export const MORNING_SLIDES = ['Today', 'Around the house', 'Ahead', 'Week'] as const
 
 const ADVICE_ICON: Record<string, LucideIcon> = {
   snow: Snowflake, ice: ThermometerSnowflake, freeze: ThermometerSnowflake, frost: ThermometerSnowflake, cold: ThermometerSnowflake,
   wind: Wind, leaves: Leaf, storm: CloudLightning, rain: Umbrella, heat: ThermometerSun, warm: ThermometerSun,
-  humid: Droplets, dry: Droplet, uv: SunMedium, fog: CloudFog, evening: Sunset, laundry: Shirt,
+  humid: Droplets, dry: Droplet, uv: SunMedium, fog: CloudFog, evening: Sunset, laundry: Shirt, garden: Sprout,
 }
 
 /** WMO weather codes, as Open-Meteo reports them, to a glyph and a word. */
@@ -119,6 +119,10 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry 
         </div> : <p className="morning-quiet">{brief.forecastError ?? 'No forecast yet.'}</p>}
         <h3>Today and tonight</h3>
         <AdviceList items={todayAdvice} empty="Nothing to prepare for today." />
+        {(brief.garden?.length ?? 0) > 0 && <>
+          <h3><Sprout size={16} aria-hidden="true" />Garden</h3>
+          <AdviceList items={brief.garden ?? []} empty="" />
+        </>}
       </div>}
 
       {slide === 1 && <div className="morning-house">
@@ -175,6 +179,31 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry 
         <h3>Worth preparing for</h3>
         <AdviceList items={aheadAdvice} empty="Nothing unusual in the next few days." />
         {countdown && <p className="morning-countdown"><Gift size={18} aria-hidden="true" />{countdown}</p>}
+      </div>}
+
+      {slide === 3 && <div className="morning-week">
+        {brief.weekly ? <>
+          <p className="morning-week-headline">{brief.weekly.headline}</p>
+          <div className="morning-week-stats">
+            {brief.weekly.stats.map((stat) => {
+              const change = stat.value - stat.previous
+              return <div className="glass morning-week-stat" key={stat.key}>
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+                <small>
+                  {change === 0 ? 'Same as last week' : <>{change < 0 ? <TrendingDown size={13} aria-hidden="true" /> : <TrendingUp size={13} aria-hidden="true" />}{Math.abs(change)} {change < 0 ? 'fewer' : 'more'} than last week</>}
+                  {stat.detail ? ` · ${stat.detail}` : ''}
+                </small>
+              </div>
+            })}
+          </div>
+          {brief.weekly.top.length > 0 && <>
+            <h3>Most often</h3>
+            <ul className="morning-journal">{brief.weekly.top.map((item) => <li key={item.name} className="is-info">
+              <House size={16} aria-hidden="true" /><span><strong>{item.name}</strong></span><small>{item.count} time{item.count === 1 ? '' : 's'} this week</small>
+            </li>)}</ul>
+          </>}
+        </> : <p className="morning-quiet">No weekly report yet.</p>}
       </div>}
     </div>}
 

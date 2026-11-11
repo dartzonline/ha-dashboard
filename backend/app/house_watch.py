@@ -69,10 +69,12 @@ A missing timestamp means the entity is left alone.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Iterable
 
 logger = logging.getLogger(__name__)
@@ -126,8 +128,9 @@ EMPTY_HOUSE_HVAC_AFTER_S = 2 * HOUR
 LAUNDRY_WAITING_AFTER_S = 20 * MINUTE
 LAUNDRY_FORGET_AFTER_S = 12 * HOUR
 BATH_FAN_WARN_AFTER_S = 1 * HOUR
-JOURNAL_KEEP_S = 48 * HOUR
-JOURNAL_MAX = 300
+# Two weeks and a day, so the weekly report can compare this week with the one before.
+JOURNAL_KEEP_S = 15 * 24 * HOUR
+JOURNAL_MAX = 3000
 IRRIGATION_TERMS: tuple[str, ...] = ("irrigation", "sprinkler", "drip")
 FRIDGE_TERMS: tuple[str, ...] = ("fridge", "freezer", "refrigerator")
 GARAGE_TERMS: tuple[str, ...] = ("garage", "garrage")
@@ -855,7 +858,10 @@ ServiceFn = Callable[[str, str, dict[str, Any]], Awaitable[Any]]
 class HouseWatch:
     """Background loop that carries out due actions (switching things off)."""
 
-    def __init__(self, get_states: StatesFn, call_service: ServiceFn, interval: float = CHECK_INTERVAL_S) -> None:
+    def __init__(
+        self, get_states: StatesFn, call_service: ServiceFn, interval: float = CHECK_INTERVAL_S,
+        store_path: Path | None = None,
+    ) -> None:
         self._get_states = get_states
         self._call_service = call_service
         self._interval = interval
@@ -863,9 +869,37 @@ class HouseWatch:
         # Most recent automatic actions, newest first, for the status endpoint.
         self.recent: list[dict[str, Any]] = []
         # Findings seen while they lasted: when they started, ended, and how long they ran. This is
-        # what the morning brief reads to say "the garage was open 40 min after dark last night".
+        # what the morning brief reads to say "the garage was open 40 min after dark last night",
+        # and the weekly report counts. Kept on disk so a restart does not wipe the fortnight.
         self.journal: list[dict[str, Any]] = []
+        self.actions: list[dict[str, Any]] = []
         self._open: dict[tuple[str, str], dict[str, Any]] = {}
+        self._store_path = store_path
+        self._dirty = False
+        self._load()
+
+    def _load(self) -> None:
+        if self._store_path is None or not self._store_path.is_file():
+            return
+        try:
+            stored = json.loads(self._store_path.read_text())
+        except (OSError, ValueError) as error:
+            logger.warning("Could not read the house watch journal: %s", error)
+            return
+        if isinstance(stored, dict):
+            self.journal = [entry for entry in stored.get("journal", []) if isinstance(entry, dict) and "startedAt" in entry]
+            self.actions = [entry for entry in stored.get("actions", []) if isinstance(entry, dict) and "at" in entry]
+
+    def _save(self) -> None:
+        if self._store_path is None or not self._dirty:
+            return
+        from .atomic import write_text_atomic
+
+        try:
+            write_text_atomic(self._store_path, json.dumps({"journal": self.journal, "actions": self.actions}))
+            self._dirty = False
+        except OSError as error:
+            logger.warning("Could not save the house watch journal: %s", error)
 
     def _record(self, current: list[Finding], moment: float) -> None:
         seen: set[tuple[str, str]] = set()
@@ -886,8 +920,14 @@ class HouseWatch:
         for key in [key for key in self._open if key not in seen]:
             entry = self._open.pop(key)
             self.journal.append({**entry, "endedAt": moment})
+            self._dirty = True
         cutoff = moment - JOURNAL_KEEP_S
         self.journal = [entry for entry in self.journal if entry["endedAt"] >= cutoff][-JOURNAL_MAX:]
+        self.actions = [action for action in self.actions if action["at"] >= cutoff][-JOURNAL_MAX:]
+
+    def report_journal(self) -> list[dict[str, Any]]:
+        """Finished and running entries with raw float times, for the weekly report."""
+        return [*self.journal, *({**entry, "endedAt": None} for entry in self._open.values())]
 
     def journal_entries(self, now: float | None = None) -> list[dict[str, Any]]:
         """Finished and still-running findings, newest first, with ISO times and durations."""
@@ -932,8 +972,11 @@ class HouseWatch:
             self._failed_at.pop(entity_id, None)
             acted.append(entity_id)
             self.recent.insert(0, {"entityId": entity_id, "name": names.get(entity_id, entity_id), "service": f"{domain}.{service}", "at": _iso(moment)})
+            self.actions.append({"entityId": entity_id, "name": names.get(entity_id, entity_id), "service": f"{domain}.{service}", "at": moment})
+            self._dirty = True
             logger.info("House watch ran %s.%s on %s", domain, service, entity_id)
         del self.recent[20:]
+        self._save()
         return acted
 
     async def run(self) -> None:

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, Blend, Check, Lightbulb, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, Blend, Check, Lightbulb, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
 import type { DashboardSection, HAEntity, LightAutoOffSettings, TileConfig, TileKind } from './types'
 import type { TileProposal } from './entityClassifier'
 import { friendlyName } from './entityNames'
 import { icons } from './icons'
+import { RemindersSettings } from './RemindersSettings'
 import { tabListKeyHandler } from './tablist'
 import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
@@ -16,8 +17,8 @@ import './ConfigPanel.css'
 const tileKinds: TileKind[] = ['sensor', 'toggle', 'lock', 'thermostat', 'vacuum']
 const iconNames = Object.keys(icons).sort()
 
-type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode' | 'auto-off'
-const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode', 'auto-off']
+type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode' | 'auto-off' | 'reminders'
+const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode', 'auto-off', 'reminders']
 
 /** Mirrors the server's bounds: a minute at least, a day at most. */
 const AUTO_OFF_MIN_MINUTES = 1
@@ -315,6 +316,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
               )}
               {id === 'night-mode' && <><Moon size={16} aria-hidden="true" /> Night Mode lights</>}
               {id === 'auto-off' && <><Lightbulb size={16} aria-hidden="true" /> Light auto-off</>}
+              {id === 'reminders' && <><BellRing size={16} aria-hidden="true" /> Reminders</>}
             </button>
           ))}
         </div>
@@ -593,10 +595,12 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
           </div>
         )}
 
-        {tab !== 'theme' && message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
+        {tab === 'reminders' && <RemindersSettings />}
+
+        {tab !== 'theme' && tab !== 'reminders' && message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
         {pending && <div className="detail-progress" role="status">Saving</div>}
 
-        {tab !== 'theme' && <div className="config-footer">
+        {tab !== 'theme' && tab !== 'reminders' && <div className="config-footer">
           <button
             type="button"
             className={`detail-action ${resetConfirm.armed ? 'is-armed' : ''}`.trim()}

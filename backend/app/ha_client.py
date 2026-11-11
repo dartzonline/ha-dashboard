@@ -50,6 +50,17 @@ class HomeAssistantClient:
         response.raise_for_status()
         return response.json()
 
+    async def config(self) -> dict[str, Any]:
+        """Home Assistant's core config: location, units, and the time zone the house lives in."""
+        response = await self.client.get("/api/config")
+        response.raise_for_status()
+        return response.json()
+
+    async def services(self) -> list[dict[str, Any]]:
+        response = await self.client.get("/api/services")
+        response.raise_for_status()
+        return response.json()
+
     async def raw_get(self, path: str) -> httpx.Response:
         """Fetch an arbitrary Home-Assistant-relative path (e.g. an entity_picture) with auth attached."""
         return await self.client.get(path)

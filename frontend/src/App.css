@@ -119,6 +119,8 @@ h1 { margin: 0; font: 700 1.65rem/1.15 var(--display-font, var(--mono)); letter-
   font-weight: 600;
   line-height: 1.35;
 }
+.bin-banner > span { flex: 1; }
+.bin-banner .detail-action { min-height: var(--tap); padding: 0 16px; white-space: nowrap; }
 .status-banner.tone-warn { background-color: color-mix(in srgb, var(--warn) 14%, var(--glass-bg-strong)); }
 .status-banner.tone-danger { background-color: color-mix(in srgb, var(--danger) 16%, var(--glass-bg-strong)); }
 .status-banner.tone-warn > svg { flex: none; color: var(--warn); }

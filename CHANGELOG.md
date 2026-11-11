@@ -3,6 +3,36 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.22.0 - 2026-11-10: Bin night, phone notifications, plant care and a weekly report
+
+**Bin night reminders.** Trash goes out every Thursday and recycling every other Thursday: this
+week is trash only, and recycling is next on November 19. On Wednesday a banner shows on every
+page from 4 pm until 10 pm, with a toast every 30 minutes. It reads "Trash out tonight", or
+"Trash and recycling out tonight" on recycling weeks. On pickup morning it asks once more until
+10 am. Tap *Bins are out* and the reminders stop for that week, on the dashboard and on phones.
+The pickup day, recycling weeks, reminder window and interval are all in Settings > Reminders.
+
+**Phone notifications** through Home Assistant's notify services (the Home Assistant phone app).
+Pick the phones in Settings > Reminders and choose what to hear about:
+- **Bin night:** each reminder replaces the last on the phone instead of stacking up.
+- **Weather warnings:** today's and tonight's anytime; tomorrow's from 5 pm the evening before.
+- **Critical house alerts:** such as the garage open after dark or a freezer warming up.
+- **The weekly report:** Sunday at 7 pm.
+
+Each notification is sent once. Quiet hours (10 pm to 7 am by default) hold back everything except
+critical house alerts. *Send a test* checks the phones are reachable.
+
+**Plant care.** The Morning page's Today panel adds a Garden section. It reads the soil moisture
+sensors against the next 24 hours of rain. You get "Skip watering Lawn maple: 0.4 in of rain is due
+tonight", "Water it today" when the soil is dry and no rain is coming (water early when it will be
+hot), and "Pause the sprinklers" when rain will do the watering.
+
+**A weekly house report** on a new *Week* panel of the Morning page. It shows how many things
+house watch noticed, lights left on and for how long, what was switched off for you, the garage,
+locks, doors and windows after dark, and oven and fridge alerts. Each is compared with the week
+before, along with what came up most often. House watch now keeps its log for 15 days on disk, so
+the report and the overnight history survive add-on restarts.
+
 ## 1.21.0 - 2026-11-10: Morning brief, forecast alerts, weather effects and a watchful house
 
 **A Morning page that runs itself.** From 5 to 11 am, rotation brings the new *Morning* page round

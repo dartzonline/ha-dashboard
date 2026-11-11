@@ -28,6 +28,13 @@ export interface JournalEntry extends WatchFinding {
   ongoing: boolean
 }
 
+export interface WeeklyReport {
+  headline: string
+  stats: { key: string; label: string; value: number; previous: number; detail?: string }[]
+  top: { name: string; count: number }[]
+  days: number
+}
+
 export interface MorningBrief {
   today: {
     date: string
@@ -46,6 +53,9 @@ export interface MorningBrief {
   journal: JournalEntry[]
   recentActions: { entityId: string; name?: string; service: string; at: string }[]
   leftOn: string[]
+  /** Watering advice from the plant sensors and the rain forecast. Absent from older backends. */
+  garden?: Advice[]
+  weekly?: WeeklyReport
 }
 
 /** Same rule as the Weather page: the outdoor sensor's unit decides °C or °F for the whole brief. */
