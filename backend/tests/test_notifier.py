@@ -96,3 +96,19 @@ def test_quiet_hours_wrap_past_midnight():
     assert notifier.in_quiet_hours(time(6, 59), settings)
     assert not notifier.in_quiet_hours(time(7, 0), settings)
     assert not notifier.in_quiet_hours(time(21, 59), settings)
+
+
+def test_a_late_routine_gets_one_nudge_even_in_quiet_hours_and_then_stops():
+    async def report():
+        return {"label": "Patio Door", "routines": [{"minute": 22 * 60, "time": "10:00 pm", "daysSeen": 9, "daysObserved": 10, "status": "late"}]}
+
+    notes, sent = make(overrides={"notifications": {"targets": ["notify.mobile_app_pixel"], "bins": False, "forecast": False}})
+    notes.sources.get_routines = report
+    key = "routine:2026-11-10:1320"
+    assert run(notes.check_once(at(11, 10, 22, 35))) == [key]
+    assert sent[0][2]["title"] == "Patio Door: usual 10:00 pm trip hasn't happened"
+    assert run(notes.check_once(at(11, 10, 22, 50))) == []
+    # Past two hours the nudge is not chased.
+    notes2, _ = make(overrides={"notifications": {"targets": ["notify.mobile_app_pixel"], "bins": False, "forecast": False}})
+    notes2.sources.get_routines = report
+    assert run(notes2.check_once(at(11, 11, 0, 30))) == []

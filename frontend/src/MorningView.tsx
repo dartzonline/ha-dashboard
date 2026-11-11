@@ -1,11 +1,12 @@
 import type { KeyboardEvent } from 'react'
 import {
-  Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Coffee, Droplet, Droplets, Gift, House, Leaf,
+  AirVent, Cloud, CloudDrizzle, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Coffee, Droplet, Droplets, Gift, House, Leaf,
   ShieldCheck, Shirt, Snowflake, Sprout, Sun, SunMedium, Sunrise, Sunset, ThermometerSnowflake, ThermometerSun, TrendingDown, TrendingUp, Umbrella, Wind,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { CATEGORY_ICON, CATEGORY_LABEL } from './houseWatchLabels'
 import { LeftOnAction } from './LeftOnAction'
+import { AirStrip, BackupCard, RoutineCard } from './HouseCards'
 import { ReplaceNow } from './ReplaceNow'
 import type { ReactNode } from 'react'
 import { formatOnDuration } from './longRunningLights'
@@ -20,7 +21,7 @@ export const MORNING_SLIDES = ['Today', 'Around the house', 'Ahead', 'Week'] as 
 const ADVICE_ICON: Record<string, LucideIcon> = {
   snow: Snowflake, ice: ThermometerSnowflake, freeze: ThermometerSnowflake, frost: ThermometerSnowflake, cold: ThermometerSnowflake,
   wind: Wind, leaves: Leaf, storm: CloudLightning, rain: Umbrella, heat: ThermometerSun, warm: ThermometerSun,
-  humid: Droplets, dry: Droplet, uv: SunMedium, fog: CloudFog, evening: Sunset, laundry: Shirt, garden: Sprout,
+  humid: Droplets, dry: Droplet, uv: SunMedium, fog: CloudFog, evening: Sunset, laundry: Shirt, garden: Sprout, air: AirVent,
 }
 
 /** WMO weather codes, as Open-Meteo reports them, to a glyph and a word. */
@@ -128,6 +129,11 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry,
           <h3><Sprout size={16} aria-hidden="true" />Garden</h3>
           <AdviceList items={brief.garden ?? []} empty="" />
         </>}
+        {(brief.air?.length ?? 0) > 0 && <>
+          <h3><AirVent size={16} aria-hidden="true" />Air</h3>
+          <AdviceList items={brief.air ?? []} empty="" />
+        </>}
+        <AirStrip air={brief.airSnapshot} />
       </div>}
 
       {slide === 1 && <div className="morning-house">
@@ -167,6 +173,8 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry,
             })}</ul>}
           <LeftOnAction count={brief.leftOn.length} onDone={onRetry} />
         </section>
+        <RoutineCard report={brief.routine} />
+        <BackupCard backup={brief.backup} />
         {(brief.replaceNow?.length ?? 0) > 0 && <ReplaceNow items={brief.replaceNow ?? []} />}
       </div>}
 

@@ -432,3 +432,68 @@ def test_history_asks_for_the_whole_window():
     ha.client = _Recorder()
     _asyncio.run(ha.history_many(["sensor.x"], hours=720))
     assert "end_time" in seen["params"]
+
+
+class TestGuestWifi:
+    def test_the_password_is_stored_but_never_in_the_config_response(self, isolated_config):
+        saved = client.put("/api/config", json={"guestWifi": {"ssid": "HomeNet", "security": "WPA", "password": "correct horse"}}).json()
+        assert saved["guestWifi"] == {"ssid": "HomeNet", "security": "WPA", "hidden": False, "hasPassword": True}
+        assert "correct horse" not in client.get("/api/config").text
+        response = client.get("/api/wifi")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json() == {"configured": True, "ssid": "HomeNet", "password": "correct horse", "security": "WPA", "hidden": False}
+
+    def test_editing_without_a_password_keeps_the_old_one(self, isolated_config):
+        client.put("/api/config", json={"guestWifi": {"ssid": "HomeNet", "password": "correct horse"}})
+        client.put("/api/config", json={"guestWifi": {"ssid": "HomeNet-guest", "hidden": True}})
+        body = client.get("/api/wifi").json()
+        assert (body["ssid"], body["password"], body["hidden"]) == ("HomeNet-guest", "correct horse", True)
+
+    def test_an_open_network_has_no_password_and_a_new_one_needs_one(self, isolated_config):
+        assert client.put("/api/config", json={"guestWifi": {"ssid": "HomeNet"}}).status_code == 422
+        client.put("/api/config", json={"guestWifi": {"ssid": "cafe", "security": "nopass"}})
+        assert client.get("/api/wifi").json()["password"] == ""
+
+    def test_validation(self, isolated_config):
+        assert client.put("/api/config", json={"guestWifi": {"ssid": "HomeNet", "password": "short"}}).status_code == 422
+        assert client.put("/api/config", json={"guestWifi": {"ssid": "x" * 33, "password": "long enough"}}).status_code == 422
+        assert client.put("/api/config", json={"guestWifi": {"ssid": "", "password": "long enough"}}).status_code == 422
+
+    def test_unconfigured(self, isolated_config):
+        assert client.get("/api/wifi").json() == {"configured": False}
+        assert client.get("/api/config").json()["guestWifi"] is None
+
+
+class _PatioClient(FakeClient):
+    """A re-paired door sensor leaves an unavailable twin; the working one has the history."""
+
+    async def states(self):
+        return [
+            {"entity_id": "binary_sensor.patio_door_door", "state": "unavailable", "last_changed": "2026-11-11T05:17:00+00:00",
+             "attributes": {"friendly_name": "Patio Door Door", "device_class": "door"}},
+            {"entity_id": "binary_sensor.living_room_patio_door_door", "state": "off", "last_changed": "2026-11-11T05:17:00+00:00",
+             "attributes": {"friendly_name": "Patio Door Door", "device_class": "door"}},
+        ]
+
+    async def history(self, entity_id, hours=24):
+        self.asked = entity_id
+        return [[]]
+
+
+def test_the_routine_reads_the_live_patio_sensor_not_its_dead_twin():
+    import asyncio as _asyncio
+
+    from app import main as app_main, slow_cache
+
+    slow_cache.clear()
+    fake = _PatioClient()
+    report = _asyncio.run(app_main.routine_report_now(fake, await_states(fake)))
+    assert fake.asked == "binary_sensor.living_room_patio_door_door"
+    assert report["label"] == "Patio Door" and report["routines"] == []
+    slow_cache.clear()
+
+
+def await_states(fake):
+    import asyncio as _asyncio
+
+    return _asyncio.run(fake.states())

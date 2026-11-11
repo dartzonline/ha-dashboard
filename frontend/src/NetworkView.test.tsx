@@ -26,6 +26,7 @@ const network = {
   devices: { average: 31, min: 30, max: 32, now: 32, tracked: 40 },
 }
 
+const dropoutsBody = { days: 7, watched: 0, devices: [] }
 const clientsBody = {
   hours: 24,
   onlineCount: 1,
@@ -46,7 +47,7 @@ function renderView(entities: HAEntity[] = [entity('binary_sensor.cbr750_gateway
 
 describe('NetworkView', () => {
   it('titles the page from the WAN sensor and exposes the range tabs as a tablist', async () => {
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => ok(String(input).includes('clients') ? clientsBody : network)))
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => ok(String(input).includes('dropouts') ? dropoutsBody : String(input).includes('clients') ? clientsBody : network)))
     renderView()
     expect(screen.getByRole('heading', { name: 'Internet online' })).toBeTruthy()
     const tabs = screen.getAllByRole('tab')
@@ -62,6 +63,7 @@ describe('NetworkView', () => {
   it('offers a retry when the device list fails, and refetches on tap', async () => {
     let clientsCalls = 0
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes('dropouts')) return ok(dropoutsBody)
       if (!String(input).includes('clients')) return ok(network)
       clientsCalls += 1
       return clientsCalls === 1
@@ -76,7 +78,7 @@ describe('NetworkView', () => {
   })
 
   it('needs two taps to restart the router', async () => {
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => ok(String(input).includes('clients') ? clientsBody : network)))
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => ok(String(input).includes('dropouts') ? dropoutsBody : String(input).includes('clients') ? clientsBody : network)))
     const onService = renderView([
       entity('binary_sensor.cbr750_gateway_wan_status', 'on'),
       entity('button.cbr750_restart', 'unknown'),

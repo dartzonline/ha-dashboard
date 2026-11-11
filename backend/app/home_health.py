@@ -286,6 +286,45 @@ def _backup_items(states: Iterable[dict[str, Any]], now: float) -> list[dict[str
     }]
 
 
+def backup_status(states: Iterable[dict[str, Any]], now: float | None = None) -> dict[str, Any] | None:
+    """Automatic backups at a glance: the last good one, the last try, and what happened."""
+    moment = now if now is not None else _now()
+    by_id = {str(entity.get("entity_id", "")): entity for entity in states}
+    last_ok = by_id.get("sensor.backup_last_successful_automatic_backup")
+    last_try = by_id.get("sensor.backup_last_attempted_automatic_backup")
+    event = by_id.get("event.backup_automatic_backup")
+    if last_ok is None and last_try is None and event is None:
+        return None
+
+    def when(entity: dict[str, Any] | None) -> float | None:
+        return _parse_time((entity or {}).get("state")) if entity and entity.get("state") not in DEAD_STATES else None
+
+    succeeded, attempted = when(last_ok), when(last_try)
+    upcoming = when(by_id.get("sensor.backup_next_scheduled_automatic_backup"))
+    days = (moment - succeeded) / 86400 if succeeded is not None else None
+    last_result = str(((event or {}).get("attributes") or {}).get("event_type") or "") or None
+    failing = attempted is not None and (succeeded is None or attempted > succeeded) and last_result == "failed"
+    severity = "ok"
+    if succeeded is None or (days is not None and days >= 7):
+        severity = "critical"
+    elif days is not None and days >= 3:
+        severity = "warning"
+
+    def iso(value: float | None) -> str | None:
+        return datetime.fromtimestamp(value, timezone.utc).isoformat() if value is not None else None
+
+    return {
+        "severity": severity,
+        "lastSuccess": iso(succeeded),
+        "daysSinceSuccess": round(days, 1) if days is not None else None,
+        "lastAttempt": iso(attempted),
+        "lastResult": last_result,
+        "failing": failing,
+        "nextScheduled": iso(upcoming),
+        "state": (by_id.get("sensor.backup_backup_manager_state") or {}).get("state"),
+    }
+
+
 # Consumables expose "life remaining" as a percentage; the words vary by brand.
 CONSUMABLE_HINTS = ("filter", "brush", "consumable", "cartridge")
 
@@ -419,4 +458,5 @@ def health_summary(states: Iterable[dict[str, Any]], now: float | None = None) -
         "items": items,
         "counts": counts,
         "registry": registry_summary(states),
+        "backup": backup_status(states, now),
     }

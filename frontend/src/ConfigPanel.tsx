@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, BellRing, Blend, Check, Lightbulb, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wrench, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, BellRing, Blend, Check, Lightbulb, ListPlus, Monitor, Moon, PackagePlus, Palette, Pencil, Plus, Radio, RotateCcw, Square, Trash2, Wifi, Wrench, X } from 'lucide-react'
 import type { DashboardSection, HAEntity, LightAutoOffSettings, TileConfig, TileKind } from './types'
 import type { TileProposal } from './entityClassifier'
 import { friendlyName } from './entityNames'
 import { icons } from './icons'
 import { RemindersSettings } from './RemindersSettings'
+import { WifiSettings } from './WifiSettings'
 import { tabListKeyHandler } from './tablist'
 import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
@@ -17,8 +18,8 @@ import './ConfigPanel.css'
 const tileKinds: TileKind[] = ['sensor', 'toggle', 'lock', 'thermostat', 'vacuum']
 const iconNames = Object.keys(icons).sort()
 
-type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode' | 'auto-off' | 'reminders'
-const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode', 'auto-off', 'reminders']
+export type ConfigTab = 'theme' | 'tiles' | 'discovery' | 'night-mode' | 'auto-off' | 'reminders' | 'wifi'
+const configTabs: readonly ConfigTab[] = ['theme', 'tiles', 'discovery', 'night-mode', 'auto-off', 'reminders', 'wifi']
 
 /** Mirrors the server's bounds: a minute at least, a day at most. */
 const AUTO_OFF_MIN_MINUTES = 1
@@ -44,6 +45,8 @@ interface ConfigPanelProps {
   onSave: (sections: DashboardSection[], lights: string[]) => Promise<void>
   onReset: () => Promise<{ sections: DashboardSection[]; nightModeIndoorLights: string[]; lightAutoOff: LightAutoOffSettings }>
   onClose: () => void
+  /** The tab to open on; Theme when not given. */
+  initialTab?: ConfigTab
   /**
    * False until the saved layout has actually loaded. Until then the draft here is the factory
    * layout, and saving it would silently overwrite whatever the household had configured.
@@ -62,10 +65,10 @@ function proposalFromEntity(entity: HAEntity): TileProposal {
   return { entityId: entity.entity_id, sectionId: 'home', label: friendlyName(entity), kind: 'sensor', icon: 'circle-dot' }
 }
 
-export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAutoOff, onSaveLightAutoOff, onSave, onReset, onClose, ready, loadError }: ConfigPanelProps) {
+export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAutoOff, onSaveLightAutoOff, onSave, onReset, onClose, initialTab, ready, loadError }: ConfigPanelProps) {
   const ref = useDialog<HTMLElement>({ onClose, idleMs: CONFIG_IDLE_MS })
   const editableSections = sections.filter((section) => editableSectionIds.has(section.id))
-  const [tab, setTab] = useState<ConfigTab>('theme')
+  const [tab, setTab] = useState<ConfigTab>(initialTab ?? 'theme')
   const [theme, setTheme] = useState(readTheme)
   const [themeMessage, setThemeMessage] = useState('')
   const [activeSectionId, setActiveSectionId] = useState(editableSections[0]?.id ?? '')
@@ -317,6 +320,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
               {id === 'night-mode' && <><Moon size={16} aria-hidden="true" /> Night Mode lights</>}
               {id === 'auto-off' && <><Lightbulb size={16} aria-hidden="true" /> Light auto-off</>}
               {id === 'reminders' && <><BellRing size={16} aria-hidden="true" /> Reminders</>}
+              {id === 'wifi' && <><Wifi size={16} aria-hidden="true" /> Wi-Fi</>}
             </button>
           ))}
         </div>
@@ -596,11 +600,12 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
         )}
 
         {tab === 'reminders' && <RemindersSettings />}
+        {tab === 'wifi' && <WifiSettings entities={entities} />}
 
-        {tab !== 'theme' && tab !== 'reminders' && message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
+        {tab !== 'theme' && tab !== 'reminders' && tab !== 'wifi' && message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
         {pending && <div className="detail-progress" role="status">Saving</div>}
 
-        {tab !== 'theme' && tab !== 'reminders' && <div className="config-footer">
+        {tab !== 'theme' && tab !== 'reminders' && tab !== 'wifi' && <div className="config-footer">
           <button
             type="button"
             className={`detail-action ${resetConfirm.armed ? 'is-armed' : ''}`.trim()}

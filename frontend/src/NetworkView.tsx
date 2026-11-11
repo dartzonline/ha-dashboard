@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { cachedJson, isAbortError } from './cachedFetch'
 import { ConnectivityPanel, ThroughputPanel } from './NetworkDetail'
+import { DropoutsPanel, type DropoutDevice } from './HouseCards'
 import {
   DEVICES_COLOR, DOWNLOAD_COLOR, NETWORK_CACHE_TTL_MS, UPLOAD_COLOR, clientsPath, duration, mbps, networkPath, toChartRows,
 } from './networkData'
@@ -148,6 +149,9 @@ const RANGES = [
   { label: '7d', hours: 168 },
 ]
 
+const DROPOUTS_PATH = 'insights/dropouts?days=7'
+const DROPOUTS_TTL_MS = 30 * 60_000
+
 export function NetworkView({ entities, onService, onExpand }: NetworkViewProps) {
   const [hours, setHours] = useState(24)
   const [payload, setPayload] = useState<NetworkPayload | null>(null)
@@ -161,7 +165,24 @@ export function NetworkView({ entities, onService, onExpand }: NetworkViewProps)
   const [restarting, setRestarting] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  const [dropouts, setDropouts] = useState<{ days: number; devices: DropoutDevice[] } | null>(null)
+  const [dropoutsFailed, setDropoutsFailed] = useState(false)
   const restartConfirm = useTwoTapConfirm()
+
+  // A week of history for a few hundred devices: slow to build, so it is fetched on its own, cached
+  // for half an hour, and the rest of the page never waits for it.
+  useEffect(() => {
+    const abort = new AbortController()
+    cachedJson<{ days: number; devices: DropoutDevice[] }>(DROPOUTS_PATH, DROPOUTS_PATH, DROPOUTS_TTL_MS, { signal: abort.signal })
+      .then((data) => {
+        // An extra panel must never take the page down: anything but a device list counts as a failure.
+        if (!Array.isArray(data?.devices)) throw new Error('Unexpected dropouts response')
+        setDropouts(data)
+        setDropoutsFailed(false)
+      })
+      .catch((error: unknown) => { if (!isAbortError(error)) setDropoutsFailed(true) })
+    return () => abort.abort()
+  }, [])
 
   // State is only set from the async callbacks: the page keeps showing the previous window's data
   // while the next one loads, instead of flashing empty on every range tap.
@@ -483,6 +504,8 @@ export function NetworkView({ entities, onService, onExpand }: NetworkViewProps)
           </p>
         </div>
       </div>
+
+      <DropoutsPanel devices={dropouts?.devices ?? null} days={dropouts?.days ?? 7} loading={!dropouts && !dropoutsFailed} failed={dropoutsFailed} />
 
       <div
         className="network-view-chart glass glass-card"

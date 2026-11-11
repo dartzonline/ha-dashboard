@@ -1,0 +1,17 @@
+.wifi-sheet { width: min(420px, 100%); }
+.wifi-body { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 6px; }
+/* A QR code needs its own white ground and quiet zone whatever the theme, or phones will not read it. */
+.wifi-qr { width: min(300px, 62vw, 46svh); aspect-ratio: 1; border-radius: 12px; background: #fff; box-shadow: 0 0 0 6px #fff; }
+.wifi-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; width: 100%; margin: 6px 0 0; }
+.wifi-details dt { color: var(--muted); font-size: .74rem; align-self: center; }
+.wifi-details dd { margin: 0; color: var(--text); font-size: 1.05rem; font-weight: 700; overflow-wrap: anywhere; }
+.wifi-details dd.is-password { font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace); letter-spacing: .04em; color: var(--accent-strong); }
+.wifi-hint, .wifi-note { margin: 0; color: var(--muted); font-size: .8rem; text-align: center; }
+.wifi-note { padding: 28px 0; }
+.wifi-empty { display: grid; justify-items: center; gap: 12px; padding: 24px 0; color: var(--text); font-size: .9rem; }
+.wifi-footer { position: relative; display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.wifi-countdown { flex: 1; color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.wifi-footer .detail-action { min-height: var(--tap); padding: 0 20px; }
+.wifi-bar { position: absolute; left: 0; top: -1px; height: 2px; width: 100%; background: var(--accent); transform-origin: left; animation-name: wifi-drain; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes wifi-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .wifi-bar { animation: none; } }
