@@ -467,7 +467,7 @@ class TestHealthSummary:
             *healthy_backup(),
         ]
         summary = home_health.health_summary(states, now=BASE)
-        assert set(summary) == {"items", "counts", "registry"}
+        assert set(summary) == {"items", "counts", "registry", "backup"}
         assert summary["items"] == []
         assert summary["counts"] == {"critical": 0, "warning": 0, "info": 0}
         assert summary["registry"]["total"] == 3

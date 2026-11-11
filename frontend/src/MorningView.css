@@ -22,7 +22,9 @@
 .morning-quiet { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 2px; color: var(--muted); font-size: .85rem; }
 .morning-quiet svg { color: var(--good); }
 
-.morning-house { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: start; }
+/* Cards of different heights flow into columns, so there are no gaps under the short ones. */
+.morning-house { display: block; column-width: 340px; column-gap: 12px; }
+.morning-house > * { break-inside: avoid; margin-bottom: 12px; }
 .morning-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--r-lg); }
 .morning-card h3 { margin: 0; }
 .morning-journal { display: grid; margin: 0; padding: 0; list-style: none; }

@@ -19,6 +19,7 @@ export interface NotificationSettings {
   houseWatch: boolean
   bins: boolean
   weekly: boolean
+  routines?: boolean
   quietStart: string
   quietEnd: string
 }
@@ -196,6 +197,7 @@ export function RemindersSettings() {
         <label className="config-light-check"><input type="checkbox" checked={notify.bins} onChange={(event) => setNotify({ ...notify, bins: event.target.checked })} /><span>Bin night</span></label>
         <label className="config-light-check"><input type="checkbox" checked={notify.forecast} onChange={(event) => setNotify({ ...notify, forecast: event.target.checked })} /><span>Weather warnings</span></label>
         <label className="config-light-check"><input type="checkbox" checked={notify.houseWatch} onChange={(event) => setNotify({ ...notify, houseWatch: event.target.checked })} /><span>Critical house alerts</span></label>
+        <label className="config-light-check"><input type="checkbox" checked={notify.routines !== false} onChange={(event) => setNotify({ ...notify, routines: event.target.checked })} /><span>Missed routines (patio door)</span></label>
         <label className="config-light-check"><input type="checkbox" checked={notify.weekly} onChange={(event) => setNotify({ ...notify, weekly: event.target.checked })} /><span>Weekly report (Sunday 7 pm)</span></label>
       </div>
       <div className="reminders-grid">

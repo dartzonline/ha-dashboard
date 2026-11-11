@@ -3,6 +3,8 @@ import { AlertTriangle, CheckCircle2, HeartPulse, Trash2 } from 'lucide-react'
 import { cachedJson, isAbortError } from './cachedFetch'
 import { CATEGORY_ICON, CATEGORY_LABEL } from './houseWatchLabels'
 import { LeftOnAction } from './LeftOnAction'
+import { BackupCard } from './HouseCards'
+import type { BackupStatus } from './useMorningBrief'
 import type { TileConfig } from './types'
 import { PageFrame } from './ui/PageFrame'
 import type { Tone } from './ui/PageFrame'
@@ -32,6 +34,7 @@ interface HealthPayload {
   registry: Registry
   /** What "Turn off what's left on" would switch off right now. */
   leftOn?: string[]
+  backup?: BackupStatus | null
 }
 
 interface HealthViewProps {
@@ -99,6 +102,8 @@ export function HealthView({ onExpand }: HealthViewProps) {
       {!payload && !failed && <LoadingState label="Checking home health" />}
 
       {payload && <LeftOnAction count={payload.leftOn?.length ?? 0} onDone={retry} />}
+
+      {payload?.backup && <BackupCard backup={payload.backup} always />}
 
       {payload && payload.items.length > 0 && (
         <ul className="health-list glass">

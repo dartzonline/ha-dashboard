@@ -33,6 +33,8 @@ WEEKLY_WEEKDAY = 6  # Sunday
 WEEKLY_HOUR = 19
 RUN_NOTICE_AFTER_S = 5 * 60.0
 SALT_NOTICE_DAYS = 10.0
+# A late routine is worth one nudge, not a chase: only within two hours of its usual time.
+ROUTINE_NUDGE_WINDOW_MIN = 120
 _CLOCK = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
@@ -43,6 +45,7 @@ class NotifySettings:
     house_watch: bool = True
     bins: bool = True
     weekly: bool = True
+    routines: bool = True
     quiet_start: clock_time = clock_time(22, 0)
     quiet_end: clock_time = clock_time(7, 0)
 
@@ -65,6 +68,7 @@ def settings_from_overrides(overrides: dict[str, Any]) -> NotifySettings:
         house_watch=flag("houseWatch", default.house_watch),
         bins=flag("bins", default.bins),
         weekly=flag("weekly", default.weekly),
+        routines=flag("routines", default.routines),
         quiet_start=_clock(raw.get("quietStart"), default.quiet_start),
         quiet_end=_clock(raw.get("quietEnd"), default.quiet_end),
     )
@@ -77,6 +81,7 @@ def settings_as_dict(settings: NotifySettings) -> dict[str, Any]:
         "houseWatch": settings.house_watch,
         "bins": settings.bins,
         "weekly": settings.weekly,
+        "routines": settings.routines,
         "quietStart": settings.quiet_start.strftime("%H:%M"),
         "quietEnd": settings.quiet_end.strftime("%H:%M"),
     }
@@ -113,6 +118,7 @@ class Sources:
     location: Callable[[list[dict[str, Any]]], tuple[float, float] | None] = field(default=lambda states: None)
     get_run_status: Callable[[], Awaitable[dict[str, Any]]] | None = None
     get_salt_forecast: Callable[[], dict[str, Any]] | None = None
+    get_routines: Callable[[], Awaitable[dict[str, Any] | None]] | None = None
 
 
 class Notifier:
@@ -188,11 +194,28 @@ class Notifier:
                     f"The softener reaches 20% in about {salt['daysToLow']:.0f} days.", tag="home-panel-salt",
                 ))
 
+        if settings.routines and self.sources.get_routines is not None:
+            try:
+                report = await self.sources.get_routines()
+            except Exception as error:  # noqa: BLE001 - no history this minute; nothing is lost by waiting
+                logger.debug("Notifier skipped the routines: %s", error)
+                report = None
+            now_minute = local.hour * 60 + local.minute
+            for routine in (report or {}).get("routines", []):
+                late_by = now_minute - routine["minute"]
+                if routine["status"] == "late" and 0 <= late_by <= ROUTINE_NUDGE_WINDOW_MIN:
+                    messages.append(Message(
+                        f"routine:{local.date().isoformat()}:{routine['minute']}",
+                        f"{report['label']}: usual {routine['time']} trip hasn't happened",
+                        f"It usually opens around {routine['time']} (seen {routine['daysSeen']} of the last {routine['daysObserved']} days). Nothing yet today.",
+                        tag="home-panel-routine",
+                    ))
+
         if settings.weekly and not quiet and local.weekday() == WEEKLY_WEEKDAY and local.hour >= WEEKLY_HOUR and self.sources.watcher is not None:
             report = weekly.weekly_report(self.sources.watcher.report_journal(), self.sources.watcher.actions, moment)
             messages.append(Message(f"weekly:{local.date().isoformat()}", "Your week at home", weekly.summary_text(report), tag="home-panel-weekly"))
 
-        return [message for message in messages if message.key not in self.sent and (message.critical or not quiet or message.key.startswith("bins:"))]
+        return [message for message in messages if message.key not in self.sent and (message.critical or not quiet or message.key.startswith(("bins:", "routine:")))]
 
     async def send(self, message: Message, targets: tuple[str, ...]) -> bool:
         delivered = False

@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .atomic import write_text_atomic
 
@@ -45,6 +45,7 @@ class NotificationsPayload(BaseModel):
     houseWatch: bool = True
     bins: bool = True
     weekly: bool = True
+    routines: bool = True
     quietStart: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     quietEnd: str = Field(default="07:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
@@ -73,6 +74,24 @@ class MorningRunPayload(BaseModel):
         return sorted(set(value))
 
 
+class GuestWifiPayload(BaseModel):
+    """The network the Share Wi-Fi button shows as a QR code."""
+
+    ssid: str = Field(min_length=1, max_length=32)
+    security: Literal["WPA", "WEP", "nopass"] = "WPA"
+    # None keeps the stored password on an edit; the settings screen never gets it back to show.
+    password: str | None = Field(default=None, max_length=63)
+    hidden: bool = False
+
+    @model_validator(mode="after")
+    def _password_fits_the_security(self) -> "GuestWifiPayload":
+        if self.security == "WPA" and self.password is not None and len(self.password) < 8:
+            raise ValueError("A WPA password is at least 8 characters")
+        if self.security == "WEP" and self.password is not None and len(self.password) < 5:
+            raise ValueError("A WEP password is at least 5 characters")
+        return self
+
+
 class DashboardConfigPayload(BaseModel):
     sections: list[DashboardSection] | None = None
     # Night Mode only ever calls `light.turn_off` on these, so anything that is not a `light.`
@@ -94,6 +113,7 @@ class DashboardConfigPayload(BaseModel):
     lightAutoOffExcludedIds: list[str] | None = None
     binSchedule: BinSchedulePayload | None = None
     morningRun: MorningRunPayload | None = None
+    guestWifi: GuestWifiPayload | None = None
     notifications: NotificationsPayload | None = None
 
     @field_validator("nightModeIndoorLights")

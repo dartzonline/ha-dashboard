@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import bins, connectivity, garden, home_health, house_watch, local_time, maintenance, morning_run, notifier, salt_watch, weather_advice, weekly
+from . import air_quality, bins, connectivity, flaky, garage_health, garden, home_health, house_watch, local_time, maintenance, morning_run, notifier, routines, salt_watch, slow_cache, weather_advice, weekly
 from .storage import data_file
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
@@ -154,6 +154,7 @@ phone_notifier = notifier.Notifier(notifier.Sources(
     location=lambda states: home_location(states),
     get_run_status=lambda: run_status_now(),
     get_salt_forecast=lambda: salt_log.forecast(),
+    get_routines=lambda: routine_report_now(),
 ))
 
 
@@ -415,6 +416,19 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
         "binSchedule": bins.schedule_as_dict(bins.schedule_from_overrides(overrides)),
         "notifications": notifier.settings_as_dict(notifier.settings_from_overrides(overrides)),
         "morningRun": morning_run.settings_as_dict(morning_run.settings_from_overrides(overrides)),
+        # Never the password: this response is cached by browsers and read by every screen.
+        "guestWifi": guest_wifi_summary(overrides.get("guestWifi")),
+    }
+
+
+def guest_wifi_summary(stored: Any) -> dict[str, Any] | None:
+    if not isinstance(stored, dict) or not stored.get("ssid"):
+        return None
+    return {
+        "ssid": stored["ssid"],
+        "security": stored.get("security", "WPA"),
+        "hidden": bool(stored.get("hidden")),
+        "hasPassword": bool(stored.get("password")),
     }
 
 
@@ -425,9 +439,36 @@ async def get_dashboard_config() -> dict[str, Any]:
 
 @app.put("/api/config")
 async def put_dashboard_config(payload: DashboardConfigPayload) -> dict[str, Any]:
+    if payload.guestWifi is not None:
+        wifi = payload.guestWifi
+        if wifi.security == "nopass":
+            wifi.password = ""
+        elif wifi.password is None:
+            # An edit that leaves the password box empty keeps the one already stored.
+            stored = (load_overrides().get("guestWifi") or {}).get("password")
+            if not stored:
+                raise HTTPException(422, "Enter the Wi-Fi password")
+            wifi.password = stored
     saved = save_overrides(payload)
     house_watch.apply_settings(house_watch.settings_from_overrides(saved))
     return config_response(saved)
+
+
+@app.get("/api/wifi")
+async def guest_wifi() -> JSONResponse:
+    """The Wi-Fi details for the Share Wi-Fi sheet. Fetched only when the sheet opens and never
+    cached; the panel is LAN-only by design, the same as every other control on it."""
+    stored = load_overrides().get("guestWifi")
+    headers = {"Cache-Control": "no-store"}
+    if not isinstance(stored, dict) or not stored.get("ssid"):
+        return JSONResponse({"configured": False}, headers=headers)
+    return JSONResponse({
+        "configured": True,
+        "ssid": stored["ssid"],
+        "password": stored.get("password") or "",
+        "security": stored.get("security", "WPA"),
+        "hidden": bool(stored.get("hidden")),
+    }, headers=headers)
 
 
 @app.delete("/api/config")
@@ -1024,6 +1065,7 @@ async def morning_brief(
         except (httpx.HTTPError, ValueError) as error:
             forecast_error = f"Forecast unavailable: {error}"
 
+    air_snap = air_quality.snapshot(all_states)
     return {
         "today": summary,
         "advice": advice,
@@ -1038,7 +1080,45 @@ async def morning_brief(
         "bins": await bins_status_now(client),
         "replaceNow": maintenance.replace_now(all_states, salt_log.forecast()),
         "run": await run_status_now(all_states),
+        "routine": await _safe(routine_report_now(client, all_states)),
+        "air": [item.as_dict() for item in air_quality.air_advice(air_snap)],
+        "airSnapshot": air_snap,
+        "backup": home_health.backup_status(all_states),
     }
+
+
+ROUTINE_TTL_S = 30 * 60.0
+
+
+def _history_points(series: list[list[dict[str, Any]]]) -> list[tuple[float, str]]:
+    return [point for row in (series[0] if series else []) if (point := connectivity.parse_point(row))]
+
+
+async def routine_report_now(client: HomeAssistantClient | None = None, states: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
+    """The patio-door routine and how today is going, learned from two weeks of the door's history."""
+    ha = client or ha_client
+    states = states if states is not None else await ha.states()
+    candidates = [
+        entity for entity in states
+        if str(entity.get("entity_id", "")).startswith("binary_sensor.")
+        and (entity.get("attributes") or {}).get("device_class") in ("door", "opening")
+        and "patio" in f"{entity.get('entity_id', '')} {(entity.get('attributes') or {}).get('friendly_name', '')}".lower()
+    ]
+    # A re-paired sensor leaves a dead twin behind; read the one that is actually reporting.
+    live = [entity for entity in candidates if entity.get("state") not in ("unavailable", "unknown")]
+    door = max(live, key=lambda entity: str(entity.get("last_changed") or ""), default=None)
+    if door is None:
+        return None
+    door_id = str(door["entity_id"])
+
+    async def load() -> list[tuple[float, str]]:
+        return _history_points(await ha.history(door_id, routines.WINDOW_DAYS * 24))
+
+    points = await slow_cache.cached(f"routine:{door_id}", ROUTINE_TTL_S, load)
+    zone = await local_time.home_zone(ha.config)
+    report = routines.routine_report(points, zone, time.time())
+    label = routines.clean_label((door.get("attributes") or {}).get("friendly_name") or door_id)
+    return {"entityId": door_id, "label": label, **report}
 
 
 async def bins_status_now(client: HomeAssistantClient) -> dict[str, Any]:
@@ -1161,6 +1241,53 @@ async def test_notification(request: TestNotificationRequest) -> dict[str, Any]:
     return {"status": "sent", "targets": list(targets)}
 
 
+async def _safe(awaitable: Any) -> Any:
+    """Optional extras (history reads) must never take down the page they decorate."""
+    try:
+        return await awaitable
+    except (httpx.HTTPError, ValueError, KeyError):
+        return None
+
+
+async def garage_health_now(client: HomeAssistantClient, cover_id: str, states: list[dict[str, Any]]) -> dict[str, Any]:
+    async def load() -> dict[str, Any]:
+        rows = await client.history(cover_id, 14 * 24)
+        health = garage_health.opener_health(rows[0] if rows else [], time.time())
+        tracker = next((entity for entity in states if str(entity.get("entity_id", "")).startswith("device_tracker.ratgdov")), None)
+        health["wifiDropouts"] = None
+        if tracker is not None:
+            series = await client.history(str(tracker["entity_id"]), 7 * 24)
+            health["wifiDropouts"] = len(flaky.dropout_times(series[0] if series else [], True))
+        return health
+
+    return await slow_cache.cached(f"garage:{cover_id}", ROUTINE_TTL_S, load)
+
+
+@app.get("/api/insights/dropouts", dependencies=[Depends(require_configuration)])
+async def device_dropouts(days: int = 7, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Devices that keep dropping off the network or going unavailable, over the last week."""
+    window = max(1, min(days, 14))
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    ids = [str(entity["entity_id"]) for entity in states if flaky.watched(entity)]
+
+    async def load() -> list[dict[str, Any]]:
+        series: list[list[dict[str, Any]]] = []
+        # Home Assistant refuses very long request lines, so a few hundred entity ids go in batches.
+        for start in range(0, len(ids), 40):
+            series += await client.history_many(ids[start:start + 40], window * 24)
+        zone = await local_time.home_zone(client.config)
+        return flaky.flaky_devices(series, {str(entity["entity_id"]): entity for entity in states}, zone, time.time(), window)
+
+    try:
+        devices = await slow_cache.cached(f"dropouts:{window}", ROUTINE_TTL_S, load)
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return {"days": window, "watched": len(ids), "devices": devices[:12]}
+
+
 @app.get("/api/insights/maintenance", dependencies=[Depends(require_configuration)])
 async def maintenance_insights(
     client: HomeAssistantClient = Depends(get_client),
@@ -1171,8 +1298,11 @@ async def maintenance_insights(
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
     forecast = salt_log.forecast()
+    summary = maintenance.maintenance_summary(all_states)
+    if summary.get("garage"):
+        summary["garage"]["health"] = await _safe(garage_health_now(client, summary["garage"]["entityId"], all_states))
     return {
-        **maintenance.maintenance_summary(all_states),
+        **summary,
         "saltForecast": forecast,
         "replaceNow": maintenance.replace_now(all_states, forecast),
     }

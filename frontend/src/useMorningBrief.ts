@@ -58,6 +58,41 @@ export interface MorningBrief {
   weekly?: WeeklyReport
   replaceNow?: import('./ReplaceNow').ReplaceItem[]
   run?: MorningRunStatus
+  routine?: RoutineReport | null
+  air?: Advice[]
+  airSnapshot?: AirSnapshot | null
+  backup?: BackupStatus | null
+}
+
+export interface BackupStatus {
+  severity: 'ok' | 'warning' | 'critical'
+  lastSuccess: string | null
+  daysSinceSuccess: number | null
+  lastAttempt: string | null
+  lastResult: string | null
+  failing: boolean
+  nextScheduled: string | null
+  state: string | null
+}
+
+export interface RoutineSlot {
+  minute: number
+  time: string
+  daysSeen: number
+  daysObserved: number
+  typicalMinutes: number
+  status: 'done' | 'late' | 'expected' | 'upcoming'
+  at?: string
+  minutes?: number
+}
+
+export interface RoutineReport { entityId: string; label: string; routines: RoutineSlot[] }
+
+export interface AirSnapshot {
+  outdoorAqi: number | null
+  outdoorBand: string | null
+  indoorPm25: number | null
+  purifier: { on: boolean; percentage: number | null; name: string } | null
 }
 
 export interface MorningRunStatus {

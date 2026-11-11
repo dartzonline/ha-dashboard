@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, Trash2, ChartNoAxesCombined, ChevronDown, CloudSun, Gift,
+  AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, QrCode, Trash2, ChartNoAxesCombined, ChevronDown, CloudSun, Gift,
   History, Info, KeyRound, Lightbulb, Lock, LockOpen, Menu, MonitorSmartphone, Moon, PanelLeftClose, Pause, Play,
   RotateCw, Send, Shield, SkipBack, SkipForward, Square, SunMedium, Thermometer, Volume2, Wifi, WifiOff, Wind,
   Search, Wrench, X,
@@ -23,6 +23,8 @@ import { nextRotationSection } from './morningRotation'
 import { headsUp, preferredUnits, useMorningBrief, type Advice } from './useMorningBrief'
 import { useReminders } from './useReminders'
 import { MorningRunCard, useMorningRun } from './MorningRunCard'
+import { WifiSheet } from './WifiSheet'
+import type { ConfigTab } from './ConfigPanel'
 import { repaintTheme } from './theme'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
@@ -783,6 +785,8 @@ function App() {
   const [sidebarTouchedAt, setSidebarTouchedAt] = useState(0)
   const [securityOpen, setSecurityOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
+  const [configTab, setConfigTab] = useState<ConfigTab | undefined>(undefined)
+  const [wifiOpen, setWifiOpen] = useState(false)
   const [eventLogOpen, setEventLogOpen] = useState(false)
   const [connectionOpen, setConnectionOpen] = useState(false)
   const [countdown, setCountdown] = useState<{ key: string; seconds: number } | null>(null)
@@ -847,7 +851,7 @@ function App() {
   const visibleTiles = section.tiles
     .filter((tile) => !(activeSection === 'climate' && tile.entityId === 'climate.mainfoor_thermostat'))
     .filter((tile) => `${tile.label} ${tile.entityId}`.toLowerCase().includes(searchQuery.trim().toLowerCase()))
-  const sheetOpen = Boolean(expandedTile) || configOpen || securityOpen || eventLogOpen || connectionOpen
+  const sheetOpen = Boolean(expandedTile) || configOpen || securityOpen || eventLogOpen || connectionOpen || wifiOpen
 
   // Scenes is a page of buttons to press, not something to watch go by, so the unattended rotation
   // skips it. It stays in the sidebar and in swipe order — this only affects the automatic cycle.
@@ -863,6 +867,7 @@ function App() {
     setSecurityOpen(false)
     setEventLogOpen(false)
     setConnectionOpen(false)
+    setWifiOpen(false)
   }, [])
   // The tablet's Back button closes whatever sheet is open instead of leaving the dashboard.
   useBackToClose(sheetOpen, closeAllSheets)
@@ -1160,7 +1165,7 @@ function App() {
         <button
           type="button"
           className="settings-button"
-          onClick={() => { stopRotation(); setSidebarOpen(false); setConfigOpen(true) }}
+          onClick={() => { stopRotation(); setSidebarOpen(false); setConfigTab(undefined); setConfigOpen(true) }}
           title="Theme, dashboard tiles, and Night Mode lights"
         >
           <Wrench size={20} aria-hidden="true" /><span>Settings</span>
@@ -1220,6 +1225,7 @@ function App() {
                 open={connectionOpen}
                 onOpenChange={(open) => { if (open) stopRotation(); setConnectionOpen(open) }}
               />
+              <button type="button" className="topbar-chip" onClick={() => { stopRotation(); setWifiOpen(true) }} title="Share Wi-Fi" aria-label="Share Wi-Fi"><QrCode size={18} aria-hidden="true" /></button>
               <button type="button" className="topbar-chip" onClick={() => { stopRotation(); setEventLogOpen(true) }} title="View activity log" aria-label="View activity log"><History size={18} aria-hidden="true" /></button>
               <button
                 type="button"
@@ -1402,11 +1408,13 @@ function App() {
           onSave={saveDashboardConfig}
           onReset={resetDashboardConfig}
           onClose={() => setConfigOpen(false)}
+          initialTab={configTab}
           ready={configReady}
           loadError={configError}
         />
       )}
       {eventLogOpen && <EventLog events={events} onClose={() => setEventLogOpen(false)} />}
+      {wifiOpen && <WifiSheet onClose={() => setWifiOpen(false)} onOpenSettings={() => { setWifiOpen(false); setConfigTab('wifi'); setConfigOpen(true) }} />}
     </div>
   )
 }

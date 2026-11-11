@@ -191,6 +191,17 @@ describe('dashboard shell', () => {
     expect(fixtures.callService).not.toHaveBeenCalled()
   })
 
+  it('opens the Wi-Fi QR sheet from the top bar and closes it when the outside is tapped', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ configured: true, ssid: 'HomeNet', password: 'correct horse', security: 'WPA', hidden: false }))))
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Share Wi-Fi' }))
+    expect(await screen.findByRole('img', { name: 'QR code to join HomeNet' })).toBeTruthy()
+    expect(screen.getByText('correct horse')).toBeTruthy()
+    fireEvent.click(container.querySelector('.detail-backdrop') as HTMLElement)
+    expect(screen.queryByRole('dialog', { name: 'Join the Wi-Fi' })).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
   it('saves theme choices offline without enabling layout saves or calling devices', () => {
     fixtures.ready = false
     render(<App />)

@@ -1,0 +1,9 @@
+.wifi-settings { display: grid; gap: 14px; }
+.wifi-field { display: grid; gap: 6px; font-size: .76rem; color: var(--muted); }
+.wifi-field input, .wifi-field select { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--canvas); color: var(--text); font: inherit; font-size: .9rem; color-scheme: dark; }
+.wifi-password { display: flex; gap: 8px; }
+.wifi-password input { flex: 1; min-width: 0; }
+.wifi-password .glass-pill { min-width: var(--tap); display: grid; place-items: center; }
+.wifi-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: .78rem; color: var(--muted); }
+.wifi-suggestions .glass-pill { min-height: 36px; padding: 0 14px; color: var(--text); font-weight: 650; }
+.wifi-saved { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: .76rem; }

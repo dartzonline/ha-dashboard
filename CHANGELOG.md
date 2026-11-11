@@ -3,6 +3,39 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.24.0 - 2026-11-11: Share Wi-Fi, routines, dropouts, backups, opener health and air
+
+**Share Wi-Fi.** A new button in the top bar shows your Wi-Fi as a QR code with the network name
+and password, for guests to scan with a phone camera. It closes itself after 45 seconds (a
+countdown shows how long is left) or the moment you tap outside it. Set the network up once in
+Settings > Wi-Fi: it offers the network your own devices are already on, supports WPA, WEP and
+open networks, and handles hidden ones. The password is kept on the add-on and is only sent to
+the screen when the button is pressed; it is never part of the ordinary settings response. The QR
+code is drawn by a small encoder built into the dashboard, and every code was checked by decoding
+it with a real barcode reader.
+
+**Routines from a door.** The patio door's history shows regular visits, such as a morning, an
+afternoon and a late-evening trip. The dashboard learns those times, shows on the Morning page
+whether each has happened today, and sends a phone nudge when one is 30 minutes late (once, and
+only within two hours of its usual time). Turn the nudges off with *Missed routines* in
+Settings > Reminders.
+
+**Keeps dropping off.** The Network page lists the devices that disconnect most over the past
+week, with their IP and MAC address so they can be found: Wi-Fi clients that leave and rejoin, and
+gear that goes unavailable, with the hour it usually happens. Home Assistant restarts are ignored.
+
+**Backups at a glance.** The Health and Morning pages show the last good automatic backup, the
+last attempt and its result, and the next one scheduled, and say plainly when every attempt since
+the last good one has failed.
+
+**Garage opener health.** The Maintenance page now measures how long the door really takes to open
+and close (not the opener's typed-in setting), compares this week with last, counts trips and
+mid-close reversals, and counts the opener's Wi-Fi drops. It flags a door that slows by 15% or more.
+
+**Air quality advice.** The Morning page compares the air outside with the air inside and the
+purifier: shut the windows and run the purifier on high when it's smoky outside, open them when the
+air is good and the day is mild, and what to do with the purifier when indoor PM2.5 climbs.
+
 ## 1.23.0 - 2026-11-11: Morning run, a working energy page, salt you can trust
 
 **Fixed: every multi-day chart showed one day, or nothing.** Home Assistant's history endpoint

@@ -45,7 +45,18 @@ interface SaltForecast {
   refilledTo: number | null
 }
 
+interface TravelHealth { seconds: number; samples: number; previous: number | null; change: number | null; slowing: boolean }
+
+interface OpenerHealth {
+  opening: TravelHealth | null
+  closing: TravelHealth | null
+  reversals: number
+  trips: number
+  wifiDropouts: number | null
+}
+
 interface Garage {
+  health?: OpenerHealth | null
   entityId: string
   state: string
   obstructed: boolean
@@ -424,11 +435,28 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
                 <dt>Limit switches</dt>
                 <dd>{payload.garage.openLimit === 'on' ? 'At open' : payload.garage.closeLimit === 'on' ? 'At closed' : 'Mid travel'}</dd>
               </dl>
+              {payload.garage.health && (
+                <dl className="maint-rows">
+                  {([['opening', 'Measured opening'], ['closing', 'Measured closing']] as const).map(([key, label]) => {
+                    const travel = payload.garage!.health![key]
+                    return travel && <div className="maint-row-pair" key={key}>
+                      <dt>{label}</dt>
+                      <dd className={travel.slowing ? 'is-bad' : ''}>
+                        {travel.seconds}s{travel.previous !== null ? ` (was ${travel.previous}s)` : ''}{travel.slowing ? ' · slowing' : ''}
+                      </dd>
+                    </div>
+                  })}
+                  <dt>Trips this week</dt>
+                  <dd>{payload.garage.health.trips}{payload.garage.health.reversals > 0 ? ` · ${payload.garage.health.reversals} reversed` : ''}</dd>
+                  {payload.garage.health.wifiDropouts !== null && <><dt>Opener Wi-Fi drops</dt>
+                    <dd className={payload.garage.health.wifiDropouts >= 10 ? 'is-bad' : ''}>{payload.garage.health.wifiDropouts} this week</dd></>}
+                </dl>
+              )}
               <p className="maint-note">
-                {/* Nothing in Home Assistant watches this number for change, but a door
-                    that slowly takes longer to travel has a spring or roller going. */}
-                Travel time is the wear signal — if these seconds creep up over months, the springs or
-                rollers are on their way out.
+                {/* The opener's own travel-time setting is a number somebody typed in; the measured
+                    figures above are the time between the door starting and finishing. */}
+                Measured travel is the wear signal: if it creeps up from week to week the springs or
+                rollers are on their way out, and a door that keeps reversing has a sensor or something in its path.
               </p>
               {payload.garage.durationEntities.length > 0 && (
                 <button

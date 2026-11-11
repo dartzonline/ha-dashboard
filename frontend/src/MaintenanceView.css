@@ -138,3 +138,4 @@
 /* Armed for the confirming second tap: warn tone, so it reads as a different button, not a stuck one. */
 .maint-update-install.is-armed { color: var(--warn-ink); background: var(--warn); border-color: var(--warn); }
 .maint-update-warning { flex: 1 1 100%; color: var(--warn); font-size: .78rem; font-weight: 600; }
+.maint-row-pair { display: contents; }
