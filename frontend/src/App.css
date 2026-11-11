@@ -78,6 +78,7 @@ main.is-tall-view { max-width: none; overflow: hidden; }
 
 .shell-identity { margin: 0 0 5px; color: var(--accent); font: 600 .65rem var(--mono); text-transform: uppercase; }
 .date { margin: 6px 0 0; color: var(--muted); font-size: .7rem; font-weight: 500; letter-spacing: 0; }
+.holiday-countdown { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding-left: 8px; border-left: 1px solid var(--border); color: var(--accent-strong); font-weight: 700; }
 h1 { margin: 0; font: 700 1.65rem/1.15 var(--display-font, var(--mono)); letter-spacing: 0; text-transform: var(--heading-case, uppercase); overflow-wrap: anywhere; }
 
 /* A real <button>, not styled text: it opens World time, the same way the flight banner opens

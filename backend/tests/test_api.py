@@ -243,3 +243,39 @@ def test_version_is_read_from_config_yaml(tmp_path) -> None:
     assert main.addon_version(config) == "9.8.7"
     assert main.addon_version(tmp_path / "missing.yaml") == "0.0.0"
     assert app.version not in ("", "0.0.0", "1.2.0")
+
+
+class _LeftOnClient:
+    calls: list[tuple[str, str, object]] = []
+
+    async def states(self) -> list[dict[str, object]]:
+        from datetime import datetime, timedelta, timezone
+
+        long_ago = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        return [
+            {"entity_id": "light.kitchen", "state": "on", "last_changed": long_ago, "attributes": {}},
+            {"entity_id": "light.hall", "state": "on", "last_changed": long_ago, "attributes": {}},
+            {"entity_id": "lock.front_door", "state": "unlocked", "last_changed": long_ago, "attributes": {}},
+        ]
+
+    async def call_service(self, domain: str, service: str, data: dict[str, object]) -> list[dict[str, object]]:
+        _LeftOnClient.calls.append((domain, service, data["entity_id"]))
+        return []
+
+
+class TestTurnOffLeftOn:
+    def test_requires_confirmation(self):
+        assert client.post("/api/actions/turn-off-left-on", json={}).status_code == 400
+
+    def test_switches_off_lights_but_leaves_the_lock_alone(self):
+        _LeftOnClient.calls = []
+        app.dependency_overrides[get_client] = _LeftOnClient
+        try:
+            response = client.post("/api/actions/turn-off-left-on", json={"confirm": True})
+        finally:
+            app.dependency_overrides[get_client] = FakeClient
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "completed"
+        assert sorted(body["turnedOff"]) == ["light.hall", "light.kitchen"]
+        assert _LeftOnClient.calls == [("light", "turn_off", body["turnedOff"])]

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, ChartNoAxesCombined, ChevronDown, CloudSun,
+  AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, ChartNoAxesCombined, ChevronDown, CloudSun, Gift,
   History, Info, KeyRound, Lightbulb, Lock, LockOpen, Menu, MonitorSmartphone, Moon, PanelLeftClose, Pause, Play,
   RotateCw, Send, Shield, SkipBack, SkipForward, Square, SunMedium, Thermometer, Volume2, Wifi, WifiOff, Wind,
   Search, Wrench, X,
@@ -17,6 +17,8 @@ import { insightsSlides, rotationInterval } from './insightsSlides'
 import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
 import { SeasonalEffects } from './SeasonalEffects'
+import { christmasCountdown, seasonalWeather } from './seasons'
+import { repaintTheme } from './theme'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
 import { PhotoBackdrop } from './PhotoBackdrop'
@@ -755,6 +757,9 @@ function App() {
   const [requestedSection, setActiveSection] = useState(() => startLocation.section ?? 'home')
   const photoIds = usePhotoLibrary()
   const [now, setNow] = useState(() => new Date())
+  const today = now.toDateString()
+  // Crossing midnight into October, November or December switches the seasonal palette on its own.
+  useEffect(() => { repaintTheme() }, [today])
   const [expandedTile, setExpandedTile] = useState<TileConfig | null>(null)
   const [alerts, setAlerts] = useState<StateAlert[]>([])
   // A press of the rotation button is a deliberate "hold here" and survives a reload; a touch on
@@ -793,6 +798,7 @@ function App() {
   }, [addEvent])
   const { entities, health, loading, error, callService, runNightMode, connection, lastMessageAt, authFailed } = useHomeAssistant(handleStateChange)
   const autoDimClass = useAutoDim(entities)
+  const weatherForEffects = useMemo(() => seasonalWeather(entities), [entities])
 
   const {
     sections: dashboardSections,
@@ -1063,6 +1069,7 @@ function App() {
   }
 
   const clockLabel = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const christmasNote = christmasCountdown(now)
   const thermostat = entities.get('climate.mainfoor_thermostat')
   const minutesSinceData = lastMessageAt === null ? null : Math.max(0, Math.floor((now.getTime() - lastMessageAt) / 60_000))
   const showConfigHint = health !== null && health.home_assistant.configured === false
@@ -1077,7 +1084,7 @@ function App() {
 
   return (
     <div className={`command-center ${autoDimClass}`.trim()}>
-      <SeasonalEffects />
+      <SeasonalEffects weather={weatherForEffects} quiet={sheetOpen} dimmed={autoDimClass !== ''} />
       <div className="alert-stack" aria-live="polite" aria-atomic="false" data-swipe-ignore data-dialog-background>
         {alerts.map((alert) => (
           <button type="button" key={alert.id} className={`state-alert glass-strong ${alert.tone}`} onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))}>
@@ -1140,7 +1147,7 @@ function App() {
             >
               {sidebarOpen ? <PanelLeftClose size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
             </button>
-            <div><p className="shell-identity">Home / Control</p><h1>{section.label}</h1><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p></div>
+            <div><p className="shell-identity">Home / Control</p><h1>{section.label}</h1><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}{christmasNote && <span className="holiday-countdown"><Gift size={12} aria-hidden="true" />{christmasNote}</span>}</p></div>
           </div>
           <TrackedAircraftBadge entities={entities} onOpenFlights={openFlightsSlide} />
           <div className="clock-block">

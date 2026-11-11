@@ -80,3 +80,9 @@
   .health-list small { display: none; }
 }
 
+
+.health-left-on { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; border-radius: var(--r-md); }
+.health-left-on p { flex: 1 1 260px; margin: 0; color: var(--text); font-size: .82rem; line-height: 1.4; }
+.health-left-on p.is-error { color: var(--danger); }
+.health-left-on-actions { display: flex; gap: 8px; }
+.health-left-on-go { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }

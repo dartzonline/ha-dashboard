@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import {
-  AlertTriangle, BatteryLow, CheckCircle2, DoorOpen, HardDriveDownload,
-  HeartPulse, Lightbulb, RefreshCw, ShieldAlert, Trash2, Wrench,
+  AlertTriangle, BatteryLow, CheckCircle2, DoorOpen, Droplets, Flame, HardDriveDownload,
+  HeartPulse, Lightbulb, Lock, LogOut, Power, RefreshCw, Refrigerator, ShieldAlert, Trash2, Warehouse, Wrench, Zap,
 } from 'lucide-react'
+import { apiUrl, responseError } from './api'
 import { cachedJson, isAbortError } from './cachedFetch'
 import type { TileConfig } from './types'
 import { PageFrame } from './ui/PageFrame'
@@ -31,6 +32,8 @@ interface HealthPayload {
   items: AttentionItem[]
   counts: { critical: number; warning: number; info: number }
   registry: Registry
+  /** What "Turn off what's left on" would switch off right now. */
+  leftOn?: string[]
 }
 
 interface HealthViewProps {
@@ -43,6 +46,13 @@ const CATEGORY_ICON: Record<string, typeof AlertTriangle> = {
   battery: BatteryLow,
   consumable: Wrench,
   light: Lightbulb,
+  heater: Flame,
+  water: Droplets,
+  garage: Warehouse,
+  lock: Lock,
+  fridge: Refrigerator,
+  away: LogOut,
+  energy: Zap,
   problem: AlertTriangle,
   safety: ShieldAlert,
   opening: DoorOpen,
@@ -55,6 +65,13 @@ const CATEGORY_LABEL: Record<string, string> = {
   battery: 'Battery',
   consumable: 'Consumable',
   light: 'Light left on',
+  heater: 'Space heater',
+  water: 'Watering',
+  garage: 'Garage',
+  lock: 'Unlocked',
+  fridge: 'Fridge',
+  away: 'Away',
+  energy: 'Wasting heat',
   problem: 'Problem',
   safety: 'Safety',
   opening: 'Left open',
@@ -65,6 +82,50 @@ const CATEGORY_LABEL: Record<string, string> = {
 const HEALTH_PATH = 'insights/health'
 /** This is state that changes on the order of hours, and the endpoint reads every entity in the house. */
 const HEALTH_TTL_MS = 300_000
+
+type LeftOnState = { phase: 'idle' | 'confirm' | 'working' } | { phase: 'done'; message: string } | { phase: 'error'; message: string }
+
+/**
+ * One tap to switch off every light, speaker, sprinkler and heater left running. The backend works
+ * the list out again when asked, so it only ever touches what is still on at that moment.
+ */
+function LeftOnAction({ count, onDone }: { count: number; onDone: () => void }) {
+  const [state, setState] = useState<LeftOnState>({ phase: 'idle' })
+  async function run() {
+    setState({ phase: 'working' })
+    try {
+      const response = await fetch(apiUrl('actions/turn-off-left-on'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true }),
+      })
+      if (!response.ok) throw await responseError(response, 'Could not switch things off')
+      const result = await response.json() as { turnedOff: string[]; failures: { detail: string }[] }
+      const done = `Switched off ${result.turnedOff.length} thing${result.turnedOff.length === 1 ? '' : 's'}.`
+      setState(result.failures.length
+        ? { phase: 'error', message: `${done} ${result.failures.length} could not be reached.` }
+        : { phase: 'done', message: done })
+      onDone()
+    } catch (error) {
+      setState({ phase: 'error', message: error instanceof Error ? error.message : 'Could not switch things off' })
+    }
+  }
+  if (count === 0 && state.phase !== 'done' && state.phase !== 'error') return null
+  return (
+    <div className="health-left-on glass" role="group" aria-label="Things left on">
+      {state.phase === 'confirm' ? <>
+        <p>Switch off {count} light{count === 1 ? '' : 's'}, speaker{count === 1 ? '' : 's'}, sprinkler{count === 1 ? '' : 's'} or heater{count === 1 ? '' : 's'} left on? Doors, locks and garages are not touched.</p>
+        <div className="health-left-on-actions">
+          <button type="button" className="detail-action health-left-on-go" onClick={run}><Power size={16} aria-hidden="true" />Turn off</button>
+          <button type="button" className="detail-action" onClick={() => setState({ phase: 'idle' })}>Cancel</button>
+        </div>
+      </> : state.phase === 'working' ? <p role="status">Switching off…</p> : <>
+        {(state.phase === 'done' || state.phase === 'error') && <p role="status" className={state.phase === 'error' ? 'is-error' : undefined}>{state.message}</p>}
+        {count > 0 && <button type="button" className="detail-action health-left-on-go" onClick={() => setState({ phase: 'confirm' })}>
+          <Power size={16} aria-hidden="true" />Turn off {count} thing{count === 1 ? '' : 's'} left on
+        </button>}
+      </>}
+    </div>
+  )
+}
 
 function attentionTitle(count: number) {
   if (count === 0) return 'Nothing needs attention'
@@ -121,6 +182,8 @@ export function HealthView({ onExpand }: HealthViewProps) {
       )}
 
       {!payload && !failed && <LoadingState label="Checking home health" />}
+
+      {payload && <LeftOnAction count={payload.leftOn?.length ?? 0} onDone={retry} />}
 
       {payload && payload.items.length > 0 && (
         <ul className="health-list glass">

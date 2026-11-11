@@ -121,6 +121,13 @@
 .theme-palette-option:has(input:checked) .theme-selected { visibility: visible; }
 .theme-save-status { min-height: 2.8em; margin: 10px 0 0; color: var(--muted); font-size: .75rem; }
 .theme-effects-toggle { margin-bottom: 18px; }
+.config-theme .theme-effects-toggle:has(+ .theme-season-note) { margin-bottom: 6px; }
+.theme-season-note { margin: 0 0 18px; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+.theme-intensity-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--canvas); }
+.theme-intensity-option { position: relative; display: grid; place-items: center; min-height: var(--tap); border-radius: var(--r-sm); color: var(--muted); font-size: .78rem; font-weight: 700; cursor: pointer; }
+.theme-intensity-option input { position: absolute; opacity: 0; pointer-events: none; }
+.theme-intensity-option:has(input:checked) { color: var(--accent-strong); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.theme-intensity-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .theme-credits { display: inline-flex; align-items: center; min-height: var(--tap); color: var(--accent-strong); font-size: .72rem; }
 
 @media (max-width: 760px) {

@@ -19,6 +19,17 @@ take action, and only after a much longer delay than the warning:
 | Open while HVAC | 10m    | --        | --                        |
 | Away, light on  | 30m    | --        | --                        |
 | Away, media on  | 30m    | --        | --                        |
+| Space heater    | 3h     | 6h        | --                        |
+| Away, heater on | --     | 30m       | --                        |
+| Frost watering  | --     | at once   | shut off at once          |
+
+Frost watering is irrigation running while it is 2°C or colder outside: the water
+freezes on paths and in the pipes, so it is shut off on the next check rather than
+after the usual hour. The temperature comes from an outdoor sensor, or failing that
+the weather entity; with neither, the rule stays quiet.
+
+Space heaters are only warned about. Switching one off is safe, but it may be
+keeping a room warm on purpose; the Health page offers a one-tap switch-off instead.
 
 Garages and locks are never acted on. Closing a garage door that nobody can
 see, or throwing a deadbolt on a door that may be ajar, is the kind of thing
@@ -65,9 +76,17 @@ GARAGE_CRITICAL_AFTER_S = 2 * HOUR
 LOCK_WARN_AFTER_S = 30 * MINUTE
 HVAC_OPEN_WARN_AFTER_S = 10 * MINUTE
 AWAY_WARN_AFTER_S = 30 * MINUTE
+HEATER_WARN_AFTER_S = 3 * HOUR
+HEATER_CRITICAL_AFTER_S = 6 * HOUR
+FROST_LIMIT_C = 2.0
 
 # Matched case-insensitively against the entity id *and* the friendly name.
-EXEMPT_LIGHT_TERMS: tuple[str, ...] = ("landscape",)
+# Christmas lights are meant to run all evening, so they are never switched off for being left on.
+EXEMPT_LIGHT_TERMS: tuple[str, ...] = ("landscape", "christmas", "xmas")
+HEATER_TERMS: tuple[str, ...] = ("heater",)
+# A water heater is meant to stay on.
+NOT_HEATER_TERMS: tuple[str, ...] = ("water",)
+OUTDOOR_TERMS: tuple[str, ...] = ("outdoor", "outside", "open_weather")
 IRRIGATION_TERMS: tuple[str, ...] = ("irrigation", "sprinkler", "drip")
 FRIDGE_TERMS: tuple[str, ...] = ("fridge", "freezer", "refrigerator")
 GARAGE_TERMS: tuple[str, ...] = ("garage", "garrage")
@@ -214,6 +233,8 @@ class Context:
     # "heating" or "cooling" if any thermostat is actively running, else None.
     hvac_action: str | None
     settings: WatchSettings
+    # Outdoor temperature in °C, when the house reports one.
+    outdoor_temp_c: float | None = None
 
 
 def build_context(states: list[dict[str, Any]], now: float, settings: WatchSettings | None = None) -> Context:
@@ -234,7 +255,40 @@ def build_context(states: list[dict[str, Any]], now: float, settings: WatchSetti
         if action in ("heating", "cooling"):
             hvac_action = action
             break
-    return Context(now=now, away_since=away_since, hvac_action=hvac_action, settings=settings or _settings)
+    return Context(
+        now=now, away_since=away_since, hvac_action=hvac_action, settings=settings or _settings,
+        outdoor_temp_c=outdoor_temperature_c(states),
+    )
+
+
+def _celsius(value: Any, unit: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return (number - 32) * 5 / 9 if unit in ("°F", "F") else number
+
+
+def outdoor_temperature_c(states: list[dict[str, Any]]) -> float | None:
+    """An outdoor temperature sensor if there is one, otherwise the weather entity's reading."""
+    for entity in states:
+        if (
+            _domain(entity) == "sensor"
+            and _device_class(entity) == "temperature"
+            and entity.get("state") not in DEAD_STATES
+            and _mentions(entity, OUTDOOR_TERMS)
+        ):
+            reading = _celsius(entity.get("state"), (entity.get("attributes") or {}).get("unit_of_measurement"))
+            if reading is not None:
+                return reading
+    weather = [entity for entity in states if _domain(entity) == "weather"]
+    weather.sort(key=lambda entity: entity.get("entity_id") != "weather.forecast_home")
+    for entity in weather:
+        attributes = entity.get("attributes") or {}
+        reading = _celsius(attributes.get("temperature"), attributes.get("temperature_unit"))
+        if reading is not None:
+            return reading
+    return None
 
 
 # --- rules ----------------------------------------------------------------
@@ -285,16 +339,59 @@ def _light_left_on(entity: dict[str, Any], since: float, ctx: Context) -> Findin
     )
 
 
-def _irrigation_running(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+def _irrigation_shutoff(entity: dict[str, Any]) -> tuple[str, str] | None:
+    """The service that stops this irrigation zone, if it is one and it is running."""
     domain = _domain(entity)
     running = (domain == "valve" and entity.get("state") == "open") or (domain == "switch" and entity.get("state") == "on")
     if not running or not _mentions(entity, IRRIGATION_TERMS):
+        return None
+    return ("valve", "close_valve") if domain == "valve" else ("switch", "turn_off")
+
+
+def _irrigation_in_frost(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if ctx.outdoor_temp_c is None or ctx.outdoor_temp_c > FROST_LIMIT_C:
+        return None
+    action = _irrigation_shutoff(entity)
+    if action is None:
+        return None
+    return Finding(
+        rule="irrigation_frost", category="water", severity="critical",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"Running at {ctx.outdoor_temp_c:.0f}°C outside — shutting off before it freezes",
+        action=action, action_at=since,
+    )
+
+
+def _space_heater_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if _domain(entity) != "switch" or entity.get("state") != "on":
+        return None
+    if not _mentions(entity, HEATER_TERMS) or _mentions(entity, NOT_HEATER_TERMS):
+        return None
+    on_for = ctx.now - since
+    if ctx.away_since is not None and ctx.now - max(since, ctx.away_since) >= AWAY_WARN_AFTER_S:
+        return Finding(
+            rule="space_heater_on", category="heater", severity="critical",
+            entity_id=str(entity["entity_id"]), name=_name(entity), seconds=on_for,
+            detail=f"On while everyone is away ({duration_label(ctx.now - max(since, ctx.away_since))})",
+        )
+    if on_for < HEATER_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="space_heater_on", category="heater",
+        severity="critical" if on_for >= HEATER_CRITICAL_AFTER_S else "warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=on_for,
+        detail=f"On for {duration_label(on_for)}",
+    )
+
+
+def _irrigation_running(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    action = _irrigation_shutoff(entity)
+    if action is None:
         return None
     on_for = ctx.now - since
     if on_for < IRRIGATION_WARN_AFTER_S:
         return None
     overdue = on_for >= IRRIGATION_AUTO_OFF_AFTER_S
-    action = ("valve", "close_valve") if domain == "valve" else ("switch", "turn_off")
     return Finding(
         rule="irrigation_running", category="water", severity="warning",
         entity_id=str(entity["entity_id"]), name=_name(entity), seconds=on_for,
@@ -401,7 +498,9 @@ def _away_and_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
 
 RULES: tuple[Rule, ...] = (
     _light_left_on,
+    _irrigation_in_frost,
     _irrigation_running,
+    _space_heater_on,
     _fridge_door_open,
     _garage_open,
     _lock_unlocked,
@@ -465,6 +564,31 @@ def attention_items(states: Iterable[dict[str, Any]], now: float | None = None) 
     ]
 
 
+# Findings a person may switch off in one tap from the Health page: things left running that are
+# always safe to stop. Garages, locks, doors and the fridge need someone to go and look.
+SWITCH_OFF_RULES = {"light_left_on", "away_and_on", "irrigation_running", "irrigation_frost", "space_heater_on"}
+_OFF_SERVICE = {
+    "light": ("light", "turn_off"),
+    "media_player": ("media_player", "turn_off"),
+    "switch": ("switch", "turn_off"),
+    "valve": ("valve", "close_valve"),
+}
+
+
+def switch_off_targets(
+    states: Iterable[dict[str, Any]], now: float | None = None, settings: WatchSettings | None = None
+) -> list[tuple[str, str, str]]:
+    """(domain, service, entity_id) for everything currently left on that is safe to switch off."""
+    targets: list[tuple[str, str, str]] = []
+    for item in findings(states, now, settings):
+        if item.rule not in SWITCH_OFF_RULES:
+            continue
+        service = item.action or _OFF_SERVICE.get(item.entity_id.split(".", 1)[0])
+        if service is not None:
+            targets.append((service[0], service[1], item.entity_id))
+    return targets
+
+
 def thresholds() -> dict[str, float]:
     """The limits in force right now, including the household's own light switch-off time."""
     return {
@@ -485,6 +609,9 @@ THRESHOLDS = {
     "lockWarnAfterSeconds": LOCK_WARN_AFTER_S,
     "hvacOpenWarnAfterSeconds": HVAC_OPEN_WARN_AFTER_S,
     "awayWarnAfterSeconds": AWAY_WARN_AFTER_S,
+    "heaterWarnAfterSeconds": HEATER_WARN_AFTER_S,
+    "heaterCriticalAfterSeconds": HEATER_CRITICAL_AFTER_S,
+    "frostLimitCelsius": FROST_LIMIT_C,
 }
 
 

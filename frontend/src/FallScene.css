@@ -1,0 +1,73 @@
+.fall-scene { position: absolute; inset: 0; }
+.fall-sky { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 115%, rgba(232, 134, 42, .12), transparent 55%), radial-gradient(circle at 84% 12%, rgba(255, 200, 120, .08), transparent 30%); }
+.fall-moon { position: absolute; top: 4%; right: 26%; width: 90px; aspect-ratio: 1; border-radius: 50%; opacity: .2;
+  background: radial-gradient(circle at 38% 36%, #ffe2b0, #f2a057 62%, #c96f2b);
+  box-shadow: 0 0 60px 18px rgba(242, 160, 87, .35); animation: moon-breathe 12s ease-in-out infinite alternate; }
+@keyframes moon-breathe { from { opacity: .14; } to { opacity: .24; } }
+
+/* ---- Leaves: three depths; the outer box falls and sways, the inner one tumbles in 3-D ---- */
+.leaf { position: absolute; top: -50px; left: var(--leaf-left); width: var(--leaf-size); animation: leaf-fall var(--leaf-duration) var(--leaf-delay) linear infinite; }
+.leaf-far { opacity: .45; filter: blur(1px) saturate(.8); }
+.leaf-mid { opacity: .75; }
+.leaf-near { opacity: .9; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .35)); }
+.leaf-spin { display: block; animation: leaf-tumble var(--leaf-spin) linear infinite; }
+.leaf-art { display: block; width: 100%; overflow: visible; }
+@keyframes leaf-fall {
+  0% { transform: translate3d(0, -50px, 0); }
+  20% { transform: translate3d(calc(var(--leaf-sway) + var(--wind-x, 0px) * .2), 20dvh, 0); }
+  40% { transform: translate3d(calc(var(--leaf-sway) * -.6 + var(--wind-x, 0px) * .4), 40dvh, 0); }
+  60% { transform: translate3d(calc(var(--leaf-sway) * .8 + var(--wind-x, 0px) * .6), 60dvh, 0); }
+  80% { transform: translate3d(calc(var(--leaf-sway) * -.4 + var(--wind-x, 0px) * .8), 80dvh, 0); }
+  100% { transform: translate3d(var(--wind-x, 0px), calc(100dvh + 50px), 0); }
+}
+@keyframes leaf-tumble {
+  from { transform: rotate3d(1, var(--leaf-tilt), .3, 0deg); }
+  to { transform: rotate3d(1, var(--leaf-tilt), .3, 360deg); }
+}
+
+/* ---- A gust now and then sweeps a handful of leaves across the screen ---- */
+.fall-gust { position: absolute; inset: 0; }
+.wind-left > .fall-gust { transform: scaleX(-1); }
+.gust-leaf { position: absolute; left: 0; opacity: 0; animation: leaf-gust 31s linear infinite both; }
+@keyframes leaf-gust {
+  0%, 86% { opacity: 0; transform: translate3d(-12vw, 0, 0) rotate(0deg); }
+  87% { opacity: .9; }
+  93% { transform: translate3d(50vw, var(--gust-lift), 0) rotate(380deg); }
+  99% { opacity: .9; }
+  100% { opacity: 0; transform: translate3d(112vw, calc(var(--gust-lift) * -1), 0) rotate(760deg); }
+}
+.is-stormy .gust-leaf { animation-duration: 15s; }
+
+/* ---- Geese heading south ---- */
+.fall-geese { position: absolute; top: 14%; left: 0; width: min(260px, 36vw); opacity: 0; filter: drop-shadow(0 0 3px rgba(0, 0, 0, .6)); animation: geese-fly 70s 10s linear infinite; }
+.geese-art { display: block; width: 100%; overflow: visible; }
+.goose { transform-box: fill-box; transform-origin: center; animation: goose-flap .9s ease-in-out infinite alternate; }
+@keyframes goose-flap { from { transform: scaleY(1); } to { transform: scaleY(-.5); } }
+@keyframes geese-fly {
+  0% { opacity: 0; transform: translate3d(-30vw, 30px, 0); }
+  2% { opacity: .75; }
+  34% { opacity: .75; transform: translate3d(110vw, -30px, 0); }
+  35%, 100% { opacity: 0; transform: translate3d(120vw, -30px, 0); }
+}
+
+/* ---- Leaves piled along the bottom edge ---- */
+.fall-pile { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; opacity: .8;
+  background:
+    radial-gradient(ellipse 180px 34px at 10% 100%, rgba(168, 64, 28, .7) 0 60%, transparent 63%),
+    radial-gradient(ellipse 240px 40px at 36% 100%, rgba(201, 111, 43, .6) 0 60%, transparent 63%),
+    radial-gradient(ellipse 200px 30px at 62% 100%, rgba(143, 59, 27, .7) 0 60%, transparent 63%),
+    radial-gradient(ellipse 230px 42px at 88% 100%, rgba(184, 134, 42, .6) 0 60%, transparent 63%);
+  mask-image: linear-gradient(0deg, #000 40%, transparent); }
+.fall-pile > span { position: absolute; display: block; }
+.is-stormy > .fall-pile { height: 74px; }
+
+/* ---- The visitor in the middle ---- */
+.fall-visitor { width: min(220px, 40vw); aspect-ratio: 1; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .55)); }
+.fall-art { width: 100%; height: 100%; overflow: visible; }
+.owl-eyes { transform-box: fill-box; transform-origin: center; animation: owl-blink 4.5s ease-in-out infinite; }
+@keyframes owl-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+.pie-steam { animation: cocoa-steam 3s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .leaf, .leaf-spin, .gust-leaf, .fall-geese, .fall-visitor, .fall-moon { animation: none; }
+}
