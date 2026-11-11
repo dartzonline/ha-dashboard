@@ -44,6 +44,14 @@
 .morning-pager button { min-height: var(--tap); min-width: 88px; padding: 0 18px; color: var(--muted); font-size: .78rem; font-weight: 650; }
 .morning-pager button.is-active { color: var(--accent-ink); border-color: var(--accent); background-color: var(--accent); background-image: none; }
 
+/* ---- The week ---- */
+.morning-week-headline { margin: 0; color: var(--text); font-size: 1.05rem; font-weight: 700; }
+.morning-week-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.morning-week-stat { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--r-md); }
+.morning-week-stat strong { color: var(--text); font-size: 1.8rem; line-height: 1; }
+.morning-week-stat span { color: var(--text); font-size: .82rem; font-weight: 650; }
+.morning-week-stat small { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; color: var(--muted); font-size: .72rem; }
+
 /* ---- Forecast heads-up on the Home page ---- */
 .forecast-heads-up { display: flex; flex-wrap: wrap; gap: 8px; }
 .forecast-heads-up button { display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 6px 14px; border-radius: var(--r-pill); border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--glass-bg)); color: var(--text); font-size: .8rem; font-weight: 650; text-align: left; }

@@ -1,0 +1,6 @@
+.reminders-settings fieldset { margin: 0 0 20px; padding: 0; min-width: 0; border: 0; }
+.reminders-settings legend { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: .85rem; font-weight: 700; }
+.reminders-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 10px 0; }
+.reminders-grid label { display: grid; gap: 6px; font-size: .76rem; color: var(--muted); }
+.reminders-grid select, .reminders-grid input { min-height: var(--tap); padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--canvas); color: var(--text); font: inherit; font-size: .85rem; color-scheme: dark; }
+.reminders-targets, .reminders-toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 12px; margin-bottom: 8px; }

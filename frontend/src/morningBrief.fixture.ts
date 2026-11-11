@@ -22,6 +22,18 @@ export function morningBrief(overrides: Partial<MorningBrief> = {}): MorningBrie
     ],
     recentActions: [{ entityId: 'light.porch', name: 'Porch light', service: 'light.turn_off', at: iso(13, 1, 5) }],
     leftOn: [],
+    garden: [
+      { id: 'garden-skip:sensor.maple', window: 'today', when: 'today', severity: 'info', kind: 'garden', title: 'Skip watering Lawn maple', detail: 'The soil is at 14%, but 0.4 in of rain is due tonight.' },
+    ],
+    weekly: {
+      headline: 'A calmer week: 3 things noticed, down from 4.',
+      stats: [
+        { key: 'noticed', label: 'Things noticed', value: 3, previous: 4 },
+        { key: 'lights', label: 'Lights left on', value: 2, previous: 2, detail: '7 h in all' },
+      ],
+      top: [{ name: 'Den lamp', count: 2 }],
+      days: 7,
+    },
     ...overrides,
   }
 }

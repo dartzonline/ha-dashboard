@@ -475,3 +475,25 @@ class TestJournal:
             assert done["name"] == "cover.garage_door"
 
         run(scenario())
+
+
+class TestJournalPersistence:
+    def test_finished_entries_and_actions_survive_a_restart(self, tmp_path):
+        store = tmp_path / "journal.json"
+        states = [row("light.kitchen", "on", changed_ago=5 * HOUR)]
+
+        async def get_states():
+            return states
+
+        async def call_service(domain, service, data):
+            states.clear()
+
+        async def scenario():
+            watcher = house_watch.HouseWatch(get_states=get_states, call_service=call_service, store_path=store)
+            await watcher.check_once(BASE)
+            await watcher.check_once(BASE + 60)
+            reloaded = house_watch.HouseWatch(get_states=get_states, call_service=call_service, store_path=store)
+            assert [entry["rule"] for entry in reloaded.journal] == ["light_left_on"]
+            assert reloaded.actions[0]["service"] == "light.turn_off"
+
+        run(scenario())

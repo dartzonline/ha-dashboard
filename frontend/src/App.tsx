@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
-  AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, ChartNoAxesCombined, ChevronDown, CloudSun, Gift,
+  AlertTriangle, ArrowDown, ArrowUp, Battery, BellRing, Bot, Trash2, ChartNoAxesCombined, ChevronDown, CloudSun, Gift,
   History, Info, KeyRound, Lightbulb, Lock, LockOpen, Menu, MonitorSmartphone, Moon, PanelLeftClose, Pause, Play,
   RotateCw, Send, Shield, SkipBack, SkipForward, Square, SunMedium, Thermometer, Volume2, Wifi, WifiOff, Wind,
   Search, Wrench, X,
@@ -21,6 +21,7 @@ import { christmasCountdown, seasonalWeather } from './seasons'
 import { MorningView, MORNING_SLIDES } from './MorningView'
 import { nextRotationSection } from './morningRotation'
 import { headsUp, preferredUnits, useMorningBrief, type Advice } from './useMorningBrief'
+import { useReminders } from './useReminders'
 import { repaintTheme } from './theme'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
@@ -807,6 +808,21 @@ function App() {
   const weatherForEffects = useMemo(() => seasonalWeather(entities), [entities])
   const morning = useMorningBrief(preferredUnits(entities), health?.home_assistant.configured !== false)
   const forecastHeadsUp = headsUp(morning.brief)
+  const reminders = useReminders(health?.home_assistant.configured !== false)
+  const binReminder = reminders.bins?.phase ? reminders.bins : null
+  const [binMessage, setBinMessage] = useState<string | null>(null)
+  // Each new reminder slot (every half hour by default) also pops a toast, so a glance at the
+  // panel from across the room catches it even when the banner has scrolled out of view.
+  const binSlotKey = binReminder?.phase === 'evening' ? `${binReminder.pickupDate}:${binReminder.slot}` : null
+  useEffect(() => {
+    if (!binSlotKey || !binReminder?.title) return
+    const alert: StateAlert = { id: Date.now(), title: binReminder.title, message: binReminder.message ?? '', tone: 'info' }
+    setAlerts((current) => [...current, alert].slice(-3))
+    const timer = window.setTimeout(() => setAlerts((current) => current.filter((item) => item.id !== alert.id)), 15_000)
+    return () => window.clearTimeout(timer)
+    // The title and message belong to the slot; only a new slot should pop a new toast.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [binSlotKey])
 
   const {
     sections: dashboardSections,
@@ -1210,8 +1226,17 @@ function App() {
           </div>
         </header>
 
-        {(authFailed || connection === 'stale' || connection === 'reconnecting' || showConfigHint || showError) && (
+        {(authFailed || connection === 'stale' || connection === 'reconnecting' || showConfigHint || showError || binReminder) && (
           <div className="shell-banners">
+            {binReminder && (
+              <div className="status-banner glass-strong tone-warn bin-banner" role="status">
+                <Trash2 size={20} aria-hidden="true" />
+                <span><strong>{binReminder.title}</strong> {binMessage ?? binReminder.message}</span>
+                <button type="button" className="detail-action primary" onClick={() => {
+                  reminders.markBinsOut(binReminder.pickupDate).catch((markError: unknown) => setBinMessage(markError instanceof Error ? markError.message : 'Could not save'))
+                }}>Bins are out</button>
+              </div>
+            )}
             {authFailed && (
               <div className="status-banner glass-strong tone-danger" role="alert">
                 <KeyRound size={20} aria-hidden="true" />

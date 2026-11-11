@@ -11,6 +11,7 @@ const fixtures = vi.hoisted(() => ({
   ready: true,
   entities: new Map(),
   morning: { brief: null as unknown, failed: false, reload: () => {} },
+  reminders: { bins: null as unknown, markBinsOut: vi.fn() },
   sections: [
     { id: 'morning', label: 'Morning', tiles: [] },
     { id: 'home', label: 'Home', tiles: [
@@ -31,10 +32,11 @@ vi.mock('./photoLibrary', () => ({ usePhotoLibrary: () => [] }))
 vi.mock('./PhotoBackdrop', () => ({ PhotoBackdrop: () => null }))
 vi.mock('./TrackedAircraftBadge', () => ({ TrackedAircraftBadge: () => null }))
 vi.mock('./ConnectionStatus', () => ({ ConnectionStatus: () => null }))
+vi.mock('./useReminders', () => ({ useReminders: () => fixtures.reminders }))
 vi.mock('./useMorningBrief', async (original) => ({ ...(await original<typeof import('./useMorningBrief')>()), useMorningBrief: () => fixtures.morning }))
 
 // Mid-June, outside every season, so a chosen palette shows as chosen unless a test moves the date.
-beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 5, 15, 12)); window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true; fixtures.morning = { brief: null, failed: false, reload: () => {} } })
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 5, 15, 12)); window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true; fixtures.morning = { brief: null, failed: false, reload: () => {} }; fixtures.reminders = { bins: null, markBinsOut: vi.fn(async () => {}) } })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('dashboard shell', () => {
@@ -170,6 +172,22 @@ describe('dashboard shell', () => {
     fireEvent.click(within(headsUp).getByRole('button', { name: 'Heavy snow tomorrow: 4 in' }))
     expect(screen.getByRole('tab', { name: 'Ahead', selected: true })).toBeTruthy()
     expect(screen.getByText('Tomorrow')).toBeTruthy()
+    expect(fixtures.callService).not.toHaveBeenCalled()
+  })
+
+  it('reminds about bin night on every page and stops when the bins are out', () => {
+    fixtures.reminders.bins = {
+      enabled: true, pickupDate: '2026-06-18', pickupLabel: 'Tomorrow', kinds: ['trash'], done: false, phase: 'evening', slot: 2,
+      title: 'Trash out tonight', message: 'Trash pickup is tomorrow morning. Take the trash bins to the curb.',
+    }
+    render(<App />)
+    // The banner stays up; the toast is the half-hourly nudge.
+    const banner = document.querySelector('.bin-banner') as HTMLElement
+    expect(within(banner).getByText('Trash out tonight')).toBeTruthy()
+    expect(within(banner).getByText(/Take the trash bins to the curb/)).toBeTruthy()
+    expect(document.querySelector('.alert-stack')?.textContent).toContain('Trash out tonight')
+    fireEvent.click(within(banner).getByRole('button', { name: 'Bins are out' }))
+    expect(fixtures.reminders.markBinsOut).toHaveBeenCalledWith('2026-06-18')
     expect(fixtures.callService).not.toHaveBeenCalled()
   })
 

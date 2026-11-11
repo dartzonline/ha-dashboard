@@ -40,6 +40,21 @@ describe('MorningView', () => {
   })
 })
 
+describe('MorningView garden and week', () => {
+  it('adds watering advice to today', () => {
+    render(<MorningView brief={morningBrief()} failed={false} now={NOW} slide={0} onSelectSlide={vi.fn()} onRetry={vi.fn()} />)
+    expect(screen.getByText('Skip watering Lawn maple')).toBeTruthy()
+  })
+
+  it('shows the week against the one before', () => {
+    render(<MorningView brief={morningBrief()} failed={false} now={NOW} slide={3} onSelectSlide={vi.fn()} onRetry={vi.fn()} />)
+    expect(screen.getByText('A calmer week: 3 things noticed, down from 4.')).toBeTruthy()
+    expect(screen.getByText(/1 fewer than last week/)).toBeTruthy()
+    expect(screen.getByText(/Same as last week · 7 h in all/)).toBeTruthy()
+    expect(screen.getByText('2 times this week')).toBeTruthy()
+  })
+})
+
 describe('morning helpers', () => {
   it('greets by the hour', () => {
     expect(greeting(new Date(2026, 0, 1, 8))).toBe('Good morning')

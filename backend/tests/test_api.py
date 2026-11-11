@@ -7,6 +7,9 @@ class FakeClient:
     async def health(self) -> bool:
         return True
 
+    async def config(self) -> dict[str, object]:
+        return {"time_zone": "America/New_York", "unit_system": {"temperature": "°F"}}
+
     async def states(self) -> list[dict[str, str]]:
         return [{"entity_id": "light.kitchen", "state": "on"}]
 
@@ -281,7 +284,7 @@ class TestTurnOffLeftOn:
         assert _LeftOnClient.calls == [("light", "turn_off", body["turnedOff"])]
 
 
-class _MorningClient:
+class _MorningClient(FakeClient):
     async def states(self) -> list[dict[str, object]]:
         return [{"entity_id": "zone.home", "state": "0", "attributes": {"latitude": 40.0, "longitude": -75.0}}]
 
@@ -312,3 +315,48 @@ class TestMorningBrief:
         body = client.get("/api/insights/morning").json()
         assert body["forecastError"] == "Home Assistant has no home location"
         assert body["advice"] == []
+
+
+class TestRemindersAndNotifications:
+    def test_bin_schedule_and_notification_settings_round_trip(self, isolated_config):
+        defaults = client.get("/api/config").json()
+        assert defaults["binSchedule"]["trashWeekday"] == 3
+        assert defaults["binSchedule"]["recyclingAnchorDate"] == "2026-11-19"
+        assert defaults["notifications"]["targets"] == []
+        saved = client.put("/api/config", json={
+            "binSchedule": {"trashWeekday": 3, "recycling": "biweekly", "recyclingAnchorDate": "2026-11-19",
+                            "remindStart": "16:00", "remindEnd": "22:00", "intervalMinutes": 30},
+            "notifications": {"targets": ["notify.mobile_app_pixel"], "weekly": False},
+        }).json()
+        assert saved["notifications"]["targets"] == ["notify.mobile_app_pixel"]
+        assert saved["notifications"]["weekly"] is False
+
+    @pytest.mark.parametrize("body", [
+        {"binSchedule": {"trashWeekday": 7}}, {"binSchedule": {"remindStart": "4pm"}},
+        {"binSchedule": {"intervalMinutes": 5}}, {"notifications": {"targets": ["light.kitchen"]}},
+    ])
+    def test_bad_reminder_settings_are_rejected(self, isolated_config, body):
+        assert client.put("/api/config", json=body).status_code == 422
+
+    def test_bins_done_is_stored(self, tmp_path, monkeypatch):
+        from app import bins
+
+        monkeypatch.setattr(bins, "_state_path", lambda: tmp_path / "bins.json")
+        body = client.post("/api/reminders/bins/done", json={"pickupDate": "2026-11-12"}).json()
+        assert bins.load_done_for().isoformat() == "2026-11-12"
+        assert "pickupDate" in body["bins"]
+
+    def test_notification_targets_list_phones_first(self):
+        class _Services(FakeClient):
+            async def services(self):
+                return [{"domain": "notify", "services": {"persistent_notification": {}, "family": {}, "mobile_app_pixel": {}}},
+                        {"domain": "light", "services": {"turn_on": {}}}]
+
+        app.dependency_overrides[get_client] = _Services
+        try:
+            assert client.get("/api/notifications/targets").json() == {"targets": ["notify.mobile_app_pixel", "notify.family"]}
+        finally:
+            app.dependency_overrides[get_client] = FakeClient
+
+    def test_test_notification_needs_a_target(self, isolated_config):
+        assert client.post("/api/notifications/test", json={"targets": []}).status_code == 400
