@@ -22,6 +22,21 @@ take action, and only after a much longer delay than the warning:
 | Space heater    | 3h     | 6h        | --                        |
 | Away, heater on | --     | 30m       | --                        |
 | Frost watering  | --     | at once   | shut off at once          |
+| Open after dark | 30m    | --        | --                        |
+| Garage at night | --     | 15m       | --                        |
+| Unlocked, night | --     | 30m       | --                        |
+| Window in rain  | 5m     | --        | --                        |
+| Open, all away  | 15m    | --        | --                        |
+| Outdoor light, daytime | 1h | --     | --                        |
+| Oven / stove    | 1h     | 3h        | --                        |
+| Fridge too warm | > 8°C  | freezer > -8°C | --                   |
+| Heating empty house | 2h | --        | --                        |
+| Laundry waiting | 20m    | --        | --                        |
+| Bath fan        | 1h     | --        | --                        |
+
+"After dark" and "daytime" come from `sun.sun`; "raining" from the weather entity. Without
+them those rules stay quiet. Outdoor lights in daylight and bath fans are offered by the
+Health page's one-tap switch-off, never switched off on their own.
 
 Frost watering is irrigation running while it is 2°C or colder outside: the water
 freezes on paths and in the pipes, so it is shut off on the next check rather than
@@ -87,6 +102,32 @@ HEATER_TERMS: tuple[str, ...] = ("heater",)
 # A water heater is meant to stay on.
 NOT_HEATER_TERMS: tuple[str, ...] = ("water",)
 OUTDOOR_TERMS: tuple[str, ...] = ("outdoor", "outside", "open_weather")
+OUTDOOR_LIGHT_TERMS: tuple[str, ...] = (
+    "porch", "patio", "outdoor", "outside", "driveway", "garden", "landscape", "deck", "yard", "flood", "exterior",
+)
+OVEN_TERMS: tuple[str, ...] = ("oven", "stove", "cooktop", "hob")
+OVEN_ON_STATES = {"on", "heating", "preheating", "preheat", "cooking", "bake", "baking", "broil", "roasting"}
+LAUNDRY_TERMS: tuple[str, ...] = ("washer", "dryer", "dishwasher", "washing_machine", "washing machine")
+LAUNDRY_DONE_STATES = {"complete", "completed", "finished", "finish", "end", "done", "cycle_finished"}
+BATH_FAN_TERMS: tuple[str, ...] = ("bath", "exhaust")
+RAIN_CONDITIONS = {"rainy", "pouring", "lightning-rainy", "snowy-rainy", "hail"}
+
+NIGHT_OPEN_WARN_AFTER_S = 30 * MINUTE
+NIGHT_GARAGE_CRITICAL_AFTER_S = 15 * MINUTE
+NIGHT_LOCK_CRITICAL_AFTER_S = 30 * MINUTE
+RAIN_WINDOW_WARN_AFTER_S = 5 * MINUTE
+AWAY_OPEN_WARN_AFTER_S = 15 * MINUTE
+DAYLIGHT_LIGHT_WARN_AFTER_S = 1 * HOUR
+OVEN_WARN_AFTER_S = 1 * HOUR
+OVEN_CRITICAL_AFTER_S = 3 * HOUR
+FRIDGE_WARM_C = 8.0
+FREEZER_WARM_C = -8.0
+EMPTY_HOUSE_HVAC_AFTER_S = 2 * HOUR
+LAUNDRY_WAITING_AFTER_S = 20 * MINUTE
+LAUNDRY_FORGET_AFTER_S = 12 * HOUR
+BATH_FAN_WARN_AFTER_S = 1 * HOUR
+JOURNAL_KEEP_S = 48 * HOUR
+JOURNAL_MAX = 300
 IRRIGATION_TERMS: tuple[str, ...] = ("irrigation", "sprinkler", "drip")
 FRIDGE_TERMS: tuple[str, ...] = ("fridge", "freezer", "refrigerator")
 GARAGE_TERMS: tuple[str, ...] = ("garage", "garrage")
@@ -235,6 +276,10 @@ class Context:
     settings: WatchSettings
     # Outdoor temperature in °C, when the house reports one.
     outdoor_temp_c: float | None = None
+    # When the sun last set (if it is down now) or rose (if it is up), from `sun.sun`.
+    dark_since: float | None = None
+    light_since: float | None = None
+    raining: bool = False
 
 
 def build_context(states: list[dict[str, Any]], now: float, settings: WatchSettings | None = None) -> Context:
@@ -255,9 +300,21 @@ def build_context(states: list[dict[str, Any]], now: float, settings: WatchSetti
         if action in ("heating", "cooling"):
             hvac_action = action
             break
+    dark_since: float | None = None
+    light_since: float | None = None
+    sun = next((entity for entity in states if entity.get("entity_id") == "sun.sun"), None)
+    if sun is not None:
+        changed = _parse_time(sun.get("last_changed"))
+        if changed is not None:
+            if sun.get("state") == "below_horizon":
+                dark_since = changed
+            elif sun.get("state") == "above_horizon":
+                light_since = changed
+    raining = any(_domain(entity) == "weather" and entity.get("state") in RAIN_CONDITIONS for entity in states)
     return Context(
         now=now, away_since=away_since, hvac_action=hvac_action, settings=settings or _settings,
         outdoor_temp_c=outdoor_temperature_c(states),
+        dark_since=dark_since, light_since=light_since, raining=raining,
     )
 
 
@@ -430,6 +487,18 @@ def _garage_open(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
     if not _is_garage(entity):
         return None
     open_for = ctx.now - since
+    if ctx.dark_since is not None and ctx.now - max(since, ctx.dark_since) >= NIGHT_GARAGE_CRITICAL_AFTER_S:
+        return Finding(
+            rule="garage_open", category="garage", severity="critical",
+            entity_id=str(entity["entity_id"]), name=_name(entity), seconds=open_for,
+            detail=f"Open after dark ({duration_label(open_for)})",
+        )
+    if ctx.away_since is not None and ctx.now - max(since, ctx.away_since) >= AWAY_OPEN_WARN_AFTER_S:
+        return Finding(
+            rule="garage_open", category="garage", severity="critical",
+            entity_id=str(entity["entity_id"]), name=_name(entity), seconds=open_for,
+            detail=f"Open while everyone is away ({duration_label(open_for)})",
+        )
     if open_for < GARAGE_WARN_AFTER_S:
         return None
     return Finding(
@@ -444,6 +513,12 @@ def _lock_unlocked(entity: dict[str, Any], since: float, ctx: Context) -> Findin
     if _domain(entity) != "lock" or entity.get("state") != "unlocked":
         return None
     unlocked_for = ctx.now - since
+    if ctx.dark_since is not None and ctx.now - max(since, ctx.dark_since) >= NIGHT_LOCK_CRITICAL_AFTER_S:
+        return Finding(
+            rule="lock_unlocked", category="lock", severity="critical",
+            entity_id=str(entity["entity_id"]), name=_name(entity), seconds=unlocked_for,
+            detail=f"Unlocked after dark ({duration_label(unlocked_for)})",
+        )
     if unlocked_for < LOCK_WARN_AFTER_S:
         return None
     return Finding(
@@ -496,11 +571,163 @@ def _away_and_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
     )
 
 
+def _is_opening(entity: dict[str, Any]) -> bool:
+    """A door or window sensor reading open, other than the fridge and the garage."""
+    return (
+        _domain(entity) == "binary_sensor"
+        and entity.get("state") == "on"
+        and _device_class(entity) in OPENING_CLASSES
+        and not _mentions(entity, FRIDGE_TERMS + GARAGE_TERMS)
+    )
+
+
+def _open_after_dark(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if ctx.dark_since is None or not _is_opening(entity):
+        return None
+    dark_for = ctx.now - max(since, ctx.dark_since)
+    if dark_for < NIGHT_OPEN_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="open_after_dark", category="night", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"Open after dark ({duration_label(ctx.now - since)})",
+    )
+
+
+def _window_open_in_rain(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if not ctx.raining or not _is_opening(entity) or _device_class(entity) != "window":
+        return None
+    open_for = ctx.now - since
+    if open_for < RAIN_WINDOW_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="window_in_rain", category="rain", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=open_for,
+        detail="Open while it is raining",
+    )
+
+
+def _open_while_away(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if ctx.away_since is None or not _is_opening(entity):
+        return None
+    away_for = ctx.now - max(since, ctx.away_since)
+    if away_for < AWAY_OPEN_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="open_while_away", category="away", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"Open while everyone is away ({duration_label(away_for)})",
+    )
+
+
+def _outdoor_light_in_daylight(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if ctx.light_since is None or _domain(entity) != "light" or entity.get("state") != "on":
+        return None
+    if not _mentions(entity, OUTDOOR_LIGHT_TERMS) or is_group(entity):
+        return None
+    if entity.get("entity_id") in ctx.settings.light_excluded_ids:
+        return None
+    lit_for = ctx.now - max(since, ctx.light_since)
+    if lit_for < DAYLIGHT_LIGHT_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="outdoor_light_day", category="light", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"On in daylight ({duration_label(lit_for)})",
+    )
+
+
+def _oven_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if _domain(entity) in ("light", "update", "button", "number", "select") or not _mentions(entity, OVEN_TERMS):
+        return None
+    if str(entity.get("state", "")).lower() not in OVEN_ON_STATES:
+        return None
+    on_for = ctx.now - since
+    if on_for < OVEN_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="oven_on", category="kitchen",
+        severity="critical" if on_for >= OVEN_CRITICAL_AFTER_S or ctx.away_since is not None else "warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=on_for,
+        detail=f"On for {duration_label(on_for)}" + (" while everyone is away" if ctx.away_since is not None else ""),
+    )
+
+
+def _fridge_too_warm(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if _domain(entity) != "sensor" or _device_class(entity) != "temperature" or not _mentions(entity, FRIDGE_TERMS):
+        return None
+    reading = _celsius(entity.get("state"), (entity.get("attributes") or {}).get("unit_of_measurement"))
+    if reading is None:
+        return None
+    freezer = _mentions(entity, ("freezer",))
+    limit = FREEZER_WARM_C if freezer else FRIDGE_WARM_C
+    if reading <= limit:
+        return None
+    return Finding(
+        rule="fridge_warm", category="fridge", severity="critical" if freezer else "warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"{'Freezer' if freezer else 'Fridge'} at {reading:.0f}°C — check the door and the food",
+    )
+
+
+def _hvac_empty_house(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if ctx.away_since is None or _domain(entity) != "climate":
+        return None
+    action = str((entity.get("attributes") or {}).get("hvac_action") or "")
+    if action not in ("heating", "cooling"):
+        return None
+    away_for = ctx.now - ctx.away_since
+    if away_for < EMPTY_HOUSE_HVAC_AFTER_S:
+        return None
+    return Finding(
+        rule="hvac_empty_house", category="energy", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=away_for,
+        detail=f"{'Heating' if action == 'heating' else 'Cooling'} an empty house for {duration_label(away_for)}",
+    )
+
+
+def _laundry_waiting(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if not _mentions(entity, LAUNDRY_TERMS) or str(entity.get("state", "")).lower() not in LAUNDRY_DONE_STATES:
+        return None
+    waiting = ctx.now - since
+    if waiting < LAUNDRY_WAITING_AFTER_S or waiting > LAUNDRY_FORGET_AFTER_S:
+        return None
+    return Finding(
+        rule="laundry_waiting", category="laundry", severity="info",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=waiting,
+        detail=f"Finished {duration_label(waiting)} ago — waiting to be emptied",
+    )
+
+
+def _bath_fan_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    if _domain(entity) not in ("fan", "switch") or entity.get("state") != "on" or not _mentions(entity, BATH_FAN_TERMS):
+        return None
+    if _domain(entity) == "switch" and not _mentions(entity, ("fan",)):
+        return None
+    on_for = ctx.now - since
+    if on_for < BATH_FAN_WARN_AFTER_S:
+        return None
+    return Finding(
+        rule="bath_fan_on", category="fan", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=on_for,
+        detail=f"On for {duration_label(on_for)}",
+    )
+
+
 RULES: tuple[Rule, ...] = (
     _light_left_on,
     _irrigation_in_frost,
     _irrigation_running,
     _space_heater_on,
+    _open_after_dark,
+    _window_open_in_rain,
+    _open_while_away,
+    _outdoor_light_in_daylight,
+    _oven_on,
+    _fridge_too_warm,
+    _hvac_empty_house,
+    _laundry_waiting,
+    _bath_fan_on,
     _fridge_door_open,
     _garage_open,
     _lock_unlocked,
@@ -566,12 +793,16 @@ def attention_items(states: Iterable[dict[str, Any]], now: float | None = None) 
 
 # Findings a person may switch off in one tap from the Health page: things left running that are
 # always safe to stop. Garages, locks, doors and the fridge need someone to go and look.
-SWITCH_OFF_RULES = {"light_left_on", "away_and_on", "irrigation_running", "irrigation_frost", "space_heater_on"}
+SWITCH_OFF_RULES = {
+    "light_left_on", "away_and_on", "irrigation_running", "irrigation_frost", "space_heater_on",
+    "outdoor_light_day", "bath_fan_on",
+}
 _OFF_SERVICE = {
     "light": ("light", "turn_off"),
     "media_player": ("media_player", "turn_off"),
     "switch": ("switch", "turn_off"),
     "valve": ("valve", "close_valve"),
+    "fan": ("fan", "turn_off"),
 }
 
 
@@ -631,13 +862,64 @@ class HouseWatch:
         self._failed_at: dict[str, float] = {}
         # Most recent automatic actions, newest first, for the status endpoint.
         self.recent: list[dict[str, Any]] = []
+        # Findings seen while they lasted: when they started, ended, and how long they ran. This is
+        # what the morning brief reads to say "the garage was open 40 min after dark last night".
+        self.journal: list[dict[str, Any]] = []
+        self._open: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def _record(self, current: list[Finding], moment: float) -> None:
+        seen: set[tuple[str, str]] = set()
+        for item in current:
+            key = (item.rule, item.entity_id)
+            seen.add(key)
+            entry = self._open.get(key)
+            if entry is None:
+                self._open[key] = {
+                    "rule": item.rule, "category": item.category, "severity": item.severity,
+                    "entityId": item.entity_id, "name": item.name, "detail": item.detail,
+                    "startedAt": moment - item.seconds,
+                }
+            else:
+                entry["detail"] = item.detail
+                if SEVERITY_RANK[item.severity] < SEVERITY_RANK[entry["severity"]]:
+                    entry["severity"] = item.severity
+        for key in [key for key in self._open if key not in seen]:
+            entry = self._open.pop(key)
+            self.journal.append({**entry, "endedAt": moment})
+        cutoff = moment - JOURNAL_KEEP_S
+        self.journal = [entry for entry in self.journal if entry["endedAt"] >= cutoff][-JOURNAL_MAX:]
+
+    def journal_entries(self, now: float | None = None) -> list[dict[str, Any]]:
+        """Finished and still-running findings, newest first, with ISO times and durations."""
+        moment = now if now is not None else time.time()
+        rows = [*self.journal, *({**entry, "endedAt": None} for entry in self._open.values())]
+        result = []
+        for entry in rows:
+            ended = entry["endedAt"]
+            result.append({
+                **{key: value for key, value in entry.items() if key not in ("startedAt", "endedAt")},
+                "startedAt": _iso(entry["startedAt"]),
+                "endedAt": _iso(ended) if ended is not None else None,
+                "seconds": round((ended if ended is not None else moment) - entry["startedAt"]),
+                "ongoing": ended is None,
+            })
+        result.sort(key=lambda entry: entry["startedAt"], reverse=True)
+        return result
 
     async def check_once(self, now: float | None = None) -> list[str]:
-        """One pass: carry out every due action. Returns the entity ids acted on."""
+        """One pass: note what is going on and carry out every due action. Returns the entity ids acted on."""
         moment = now if now is not None else time.time()
         states = await self._get_states()
+        current = findings(states, moment)
+        self._record(current, moment)
+        due = [
+            (item.action[0], item.action[1], item.entity_id)
+            for item in current
+            if item.action is not None and item.action_at is not None and item.action_at <= moment
+        ]
         acted: list[str] = []
-        for domain, service, entity_id in due_actions(states, moment):
+        names = {item.entity_id: item.name for item in current}
+        for domain, service, entity_id in due:
             failed = self._failed_at.get(entity_id)
             if failed is not None and moment - failed < RETRY_AFTER_S:
                 continue
@@ -649,7 +931,7 @@ class HouseWatch:
                 continue
             self._failed_at.pop(entity_id, None)
             acted.append(entity_id)
-            self.recent.insert(0, {"entityId": entity_id, "service": f"{domain}.{service}", "at": _iso(moment)})
+            self.recent.insert(0, {"entityId": entity_id, "name": names.get(entity_id, entity_id), "service": f"{domain}.{service}", "at": _iso(moment)})
             logger.info("House watch ran %s.%s on %s", domain, service, entity_id)
         del self.recent[20:]
         return acted

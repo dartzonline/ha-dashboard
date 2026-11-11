@@ -10,7 +10,9 @@ const fixtures = vi.hoisted(() => ({
   save: vi.fn(),
   ready: true,
   entities: new Map(),
+  morning: { brief: null as unknown, failed: false, reload: () => {} },
   sections: [
+    { id: 'morning', label: 'Morning', tiles: [] },
     { id: 'home', label: 'Home', tiles: [
       { entityId: 'light.kitchen', label: 'Kitchen', kind: 'toggle', icon: 'light' },
       { entityId: 'light.hall', label: 'Hall', kind: 'toggle', icon: 'light' },
@@ -29,9 +31,10 @@ vi.mock('./photoLibrary', () => ({ usePhotoLibrary: () => [] }))
 vi.mock('./PhotoBackdrop', () => ({ PhotoBackdrop: () => null }))
 vi.mock('./TrackedAircraftBadge', () => ({ TrackedAircraftBadge: () => null }))
 vi.mock('./ConnectionStatus', () => ({ ConnectionStatus: () => null }))
+vi.mock('./useMorningBrief', async (original) => ({ ...(await original<typeof import('./useMorningBrief')>()), useMorningBrief: () => fixtures.morning }))
 
 // Mid-June, outside every season, so a chosen palette shows as chosen unless a test moves the date.
-beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 5, 15, 12)); window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true })
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 5, 15, 12)); window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true; fixtures.morning = { brief: null, failed: false, reload: () => {} } })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('dashboard shell', () => {
@@ -154,6 +157,20 @@ describe('dashboard shell', () => {
     vi.setSystemTime(new Date(2026, 10, 20, 12))
     render(<App />)
     expect(screen.queryByText(/sleeps to Christmas/)).toBeNull()
+  })
+
+  it('raises forecast warnings on Home and opens the morning brief from them', async () => {
+    const { morningBrief } = await import('./morningBrief.fixture')
+    fixtures.morning = { brief: morningBrief(), failed: false, reload: () => {} }
+    render(<App />)
+    const headsUp = screen.getByRole('status', { name: 'Forecast heads-up' })
+    expect(within(headsUp).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Windy today: gusts to 40 mph around 3 pm', 'Heavy snow tomorrow: 4 in',
+    ])
+    fireEvent.click(within(headsUp).getByRole('button', { name: 'Heavy snow tomorrow: 4 in' }))
+    expect(screen.getByRole('tab', { name: 'Ahead', selected: true })).toBeTruthy()
+    expect(screen.getByText('Tomorrow')).toBeTruthy()
+    expect(fixtures.callService).not.toHaveBeenCalled()
   })
 
   it('saves theme choices offline without enabling layout saves or calling devices', () => {

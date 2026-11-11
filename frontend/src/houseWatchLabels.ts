@@ -1,0 +1,54 @@
+import type { LucideIcon } from 'lucide-react'
+import {
+  AlertTriangle, BatteryLow, CloudRain, CookingPot, DoorOpen, Droplets, Fan, Flame, HardDriveDownload, Lightbulb, Lock,
+  LogOut, Moon, RefreshCw, Refrigerator, ShieldAlert, Warehouse, WashingMachine, Wrench, Zap,
+} from 'lucide-react'
+
+/** One glyph per category so the list scans without reading every line. */
+export const CATEGORY_ICON: Record<string, LucideIcon> = {
+  backup: HardDriveDownload,
+  battery: BatteryLow,
+  consumable: Wrench,
+  light: Lightbulb,
+  heater: Flame,
+  water: Droplets,
+  garage: Warehouse,
+  lock: Lock,
+  fridge: Refrigerator,
+  away: LogOut,
+  energy: Zap,
+  night: Moon,
+  rain: CloudRain,
+  kitchen: CookingPot,
+  laundry: WashingMachine,
+  fan: Fan,
+  problem: AlertTriangle,
+  safety: ShieldAlert,
+  opening: DoorOpen,
+  stale: RefreshCw,
+  update: RefreshCw,
+}
+
+export const CATEGORY_LABEL: Record<string, string> = {
+  backup: 'Backup',
+  battery: 'Battery',
+  consumable: 'Consumable',
+  light: 'Light left on',
+  heater: 'Space heater',
+  water: 'Watering',
+  garage: 'Garage',
+  lock: 'Unlocked',
+  fridge: 'Fridge',
+  away: 'Away',
+  energy: 'Wasting energy',
+  night: 'After dark',
+  rain: 'Rain',
+  kitchen: 'Kitchen',
+  laundry: 'Laundry',
+  fan: 'Fan',
+  problem: 'Problem',
+  safety: 'Safety',
+  opening: 'Left open',
+  stale: 'Stale sensor',
+  update: 'Update',
+}

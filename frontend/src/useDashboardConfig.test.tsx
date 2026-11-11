@@ -93,4 +93,16 @@ describe('useDashboardConfig', () => {
     expect(result.current.ready).toBe(true)
     expect(result.current.error).toBeNull()
   })
+
+  it('adds pages from a newer release to a layout saved before they existed', async () => {
+    const saved = { ...CONFIG, sections: [{ id: 'home', label: 'Home', tiles: [] }, { id: 'health', label: 'Health', tiles: [] }] }
+    mockConfig(() => Promise.reject(new Error('unused')), () => Promise.resolve({ ok: true, json: () => Promise.resolve(saved) } as Response))
+    const { result } = renderHook(() => useDashboardConfig())
+    await waitFor(() => expect(result.current.ready).toBe(true))
+    const ids = result.current.sections.map((section) => section.id)
+    expect(ids[0]).toBe('morning')
+    expect(ids).toContain('home')
+    expect(ids).toContain('weather')
+    expect(new Set(ids).size).toBe(ids.length)
+  })
 })

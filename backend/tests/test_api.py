@@ -279,3 +279,36 @@ class TestTurnOffLeftOn:
         assert body["status"] == "completed"
         assert sorted(body["turnedOff"]) == ["light.hall", "light.kitchen"]
         assert _LeftOnClient.calls == [("light", "turn_off", body["turnedOff"])]
+
+
+class _MorningClient:
+    async def states(self) -> list[dict[str, object]]:
+        return [{"entity_id": "zone.home", "state": "0", "attributes": {"latitude": 40.0, "longitude": -75.0}}]
+
+
+class TestMorningBrief:
+    def test_combines_forecast_and_house(self, monkeypatch):
+        from app import weather_advice
+        from tests.test_weather_advice import NOW, forecast
+
+        async def fake_fetch(_client, latitude, longitude):
+            assert (latitude, longitude) == (40.0, -75.0)
+            return forecast(lambda day, hour: {"gust": 70.0} if day == 1 and hour == 14 else None)
+
+        monkeypatch.setattr(weather_advice, "fetch_forecast", fake_fetch)
+        monkeypatch.setattr(weather_advice.time, "time", lambda: NOW)
+        app.dependency_overrides[get_client] = _MorningClient
+        try:
+            body = client.get("/api/insights/morning?units=metric").json()
+        finally:
+            app.dependency_overrides[get_client] = FakeClient
+        assert body["forecastError"] is None
+        assert body["today"]["date"] == "2026-11-10"
+        assert [item["id"] for item in body["advice"]] == ["wind:tomorrow"]
+        assert body["days"][0]["label"] == "Tomorrow"
+        assert body["findings"] == [] and body["leftOn"] == []
+
+    def test_without_a_location_still_answers(self):
+        body = client.get("/api/insights/morning").json()
+        assert body["forecastError"] == "Home Assistant has no home location"
+        assert body["advice"] == []

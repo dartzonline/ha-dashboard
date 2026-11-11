@@ -44,6 +44,6 @@ describe('seasonalWeather', () => {
   })
 
   it('treats a missing weather entity as calm', () => {
-    expect(seasonalWeather(new Map())).toEqual({ tempC: null, windKmh: 0, windX: 0, snowing: false, raining: false })
+    expect(seasonalWeather(new Map())).toEqual({ tempC: null, windKmh: 0, windX: 0, snowing: false, raining: false, condition: null })
   })
 })

@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import connectivity, home_health, house_watch, maintenance
+from . import connectivity, home_health, house_watch, maintenance, weather_advice
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
 from .entity_registry import RegistrySnapshot
@@ -918,6 +918,59 @@ async def house_watch_insights(
         "excludedLightIds": sorted(house_watch.current_settings().light_excluded_ids),
         "findings": [item.as_dict() for item in house_watch.findings(all_states)],
         "recentActions": house_watcher.recent,
+    }
+
+
+def home_location(states: list[dict[str, Any]]) -> tuple[float, float] | None:
+    """The house's coordinates: `zone.home`, or failing that the weather entity's."""
+    candidates = [entity for entity in states if entity.get("entity_id") == "zone.home"]
+    candidates += [entity for entity in states if str(entity.get("entity_id", "")).startswith("weather.")]
+    for entity in candidates:
+        attributes = entity.get("attributes") or {}
+        latitude, longitude = attributes.get("latitude"), attributes.get("longitude")
+        if isinstance(latitude, (int, float)) and isinstance(longitude, (int, float)):
+            return float(latitude), float(longitude)
+    return None
+
+
+@app.get("/api/insights/morning", dependencies=[Depends(require_configuration)])
+async def morning_brief(
+    units: str = "imperial",
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """The morning brief: today's weather and what to do about it, the days ahead, and what house
+    watch saw overnight. The forecast is optional -- without it the house half still answers."""
+    imperial = units.lower() != "metric"
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+
+    summary: dict[str, Any] | None = None
+    advice: list[dict[str, Any]] = []
+    days: list[dict[str, Any]] = []
+    forecast_error: str | None = None
+    location = home_location(all_states)
+    if location is None:
+        forecast_error = "Home Assistant has no home location"
+    else:
+        try:
+            forecast = await weather_advice.fetch_forecast(get_http_client(), *location)
+            summary = weather_advice.today_summary(forecast, imperial)
+            advice = [item.as_dict() for item in weather_advice.build_advice(forecast, imperial)]
+            days = weather_advice.week_ahead(forecast, imperial)
+        except (httpx.HTTPError, ValueError) as error:
+            forecast_error = f"Forecast unavailable: {error}"
+
+    return {
+        "today": summary,
+        "advice": advice,
+        "days": days,
+        "forecastError": forecast_error,
+        "findings": [item.as_dict() for item in house_watch.findings(all_states)],
+        "journal": house_watcher.journal_entries(),
+        "recentActions": house_watcher.recent,
+        "leftOn": [entity_id for _, _, entity_id in house_watch.switch_off_targets(all_states)],
     }
 
 

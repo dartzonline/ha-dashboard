@@ -367,3 +367,111 @@ class TestSwitchOffTargets:
             row("media_player.living_room", "playing", changed_ago=HOUR),
         ]
         assert house_watch.switch_off_targets(states, BASE) == [("media_player", "turn_off", "media_player.living_room")]
+
+
+def sun(state: str, changed_ago: float) -> dict:
+    return row("sun.sun", state, changed_ago=changed_ago)
+
+
+class TestNightAndWeather:
+    def test_window_open_after_dark_warns_thirty_minutes_after_sunset(self):
+        states = [sun("below_horizon", HOUR), row("binary_sensor.bedroom_window", "on", changed_ago=5 * HOUR, device_class="window")]
+        [finding] = house_watch.findings(states, BASE)
+        assert (finding.rule, finding.category) == ("open_after_dark", "night")
+        early = [sun("below_horizon", 10 * MINUTE), row("binary_sensor.bedroom_window", "on", changed_ago=5 * HOUR, device_class="window")]
+        assert house_watch.findings(early, BASE) == []
+
+    def test_garage_open_after_dark_is_critical_after_fifteen_minutes(self):
+        states = [sun("below_horizon", HOUR), row("cover.garage_door", "open", changed_ago=20 * MINUTE)]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.severity == "critical"
+        assert "after dark" in finding.detail
+
+    def test_lock_unlocked_at_night_is_critical(self):
+        states = [sun("below_horizon", 2 * HOUR), row("lock.back_door", "unlocked", changed_ago=40 * MINUTE)]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.severity == "critical"
+
+    def test_window_open_while_raining(self):
+        states = [
+            row("weather.forecast_home", "rainy"),
+            row("binary_sensor.office_window", "on", changed_ago=10 * MINUTE, device_class="window"),
+        ]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.rule == "window_in_rain"
+
+    def test_door_open_while_everyone_is_away(self):
+        states = [
+            row("person.alex", "not_home", changed_ago=HOUR),
+            row("binary_sensor.back_door", "on", changed_ago=3 * HOUR, device_class="door"),
+        ]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.rule == "open_while_away"
+
+
+class TestDaytimeAndAppliances:
+    def test_porch_light_on_in_daylight_can_be_switched_off(self):
+        # On since before sunrise, but not yet long enough for the ordinary "left on" rule.
+        states = [sun("above_horizon", 80 * MINUTE), row("light.porch", "on", changed_ago=100 * MINUTE)]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.rule == "outdoor_light_day"
+        assert house_watch.switch_off_targets(states, BASE) == [("light", "turn_off", "light.porch")]
+        # Offered for one-tap switch-off, never switched off on its own.
+        assert house_watch.due_actions(states, BASE) == []
+
+    def test_oven_on_too_long(self):
+        [warning] = house_watch.findings([row("sensor.oven_status", "baking", changed_ago=70 * MINUTE)], BASE)
+        assert (warning.rule, warning.severity) == ("oven_on", "warning")
+        [critical] = house_watch.findings([row("switch.stove", "on", changed_ago=4 * HOUR)], BASE)
+        assert critical.severity == "critical"
+
+    def test_freezer_too_warm_is_critical_and_fridge_warm_is_a_warning(self):
+        [freezer] = house_watch.findings([row("sensor.garage_freezer_temperature", "21", device_class="temperature", unit_of_measurement="°F")], BASE)
+        assert freezer.severity == "critical"
+        [fridge] = house_watch.findings([row("sensor.fridge_temperature", "10", device_class="temperature", unit_of_measurement="°C")], BASE)
+        assert fridge.severity == "warning"
+        assert house_watch.findings([row("sensor.fridge_temperature", "3", device_class="temperature", unit_of_measurement="°C")], BASE) == []
+
+    def test_heating_an_empty_house(self):
+        states = [
+            row("person.alex", "not_home", changed_ago=3 * HOUR),
+            row("climate.main", "heat", hvac_action="heating"),
+        ]
+        assert any(item.rule == "hvac_empty_house" for item in house_watch.findings(states, BASE))
+
+    def test_laundry_waiting_then_forgotten(self):
+        [finding] = house_watch.findings([row("sensor.washer_status", "complete", changed_ago=45 * MINUTE)], BASE)
+        assert finding.severity == "info"
+        assert house_watch.findings([row("sensor.washer_status", "complete", changed_ago=13 * HOUR)], BASE) == []
+
+    def test_bath_fan_left_running(self):
+        states = [row("fan.main_bath_exhaust", "on", changed_ago=2 * HOUR)]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.rule == "bath_fan_on"
+        assert house_watch.switch_off_targets(states, BASE) == [("fan", "turn_off", "fan.main_bath_exhaust")]
+
+
+class TestJournal:
+    def test_records_how_long_something_lasted(self):
+        door = row("cover.garage_door", "open", changed_ago=40 * MINUTE)
+        states = [door]
+
+        async def get_states():
+            return states
+
+        async def call_service(domain, service, data):
+            return None
+
+        async def scenario():
+            watcher = house_watch.HouseWatch(get_states=get_states, call_service=call_service)
+            await watcher.check_once(BASE)
+            [ongoing] = watcher.journal_entries(BASE)
+            assert ongoing["ongoing"] is True and ongoing["rule"] == "garage_open"
+            states.clear()
+            await watcher.check_once(BASE + 20 * MINUTE)
+            [done] = watcher.journal_entries(BASE + 20 * MINUTE)
+            assert done["ongoing"] is False
+            assert done["seconds"] == 60 * MINUTE
+            assert done["name"] == "cover.garage_door"
+
+        run(scenario())

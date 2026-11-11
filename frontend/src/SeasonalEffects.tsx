@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { Cat, Flame, Ghost, Skull } from 'lucide-react'
 import { FallScene } from './FallScene'
 import { HolidayScene } from './HolidayScene'
+import { WeatherScene } from './WeatherScene'
 import { BurstLayer, useBursts, type Motion } from './seasonalPlay'
 import type { SeasonalWeather } from './seasons'
 import './SeasonalEffects.css'
@@ -50,6 +51,7 @@ export function SeasonalEffects({ weather, quiet = false, dimmed = false }: { we
   const shown = visit.lantern ? 'jack-o-lantern' : apparition
   const effectsClass = ['seasonal-effects', quiet ? 'is-quiet' : '', dimmed ? 'is-dimmed' : '', hidden ? 'is-paused' : ''].filter(Boolean).join(' ')
   return <div className={effectsClass} aria-hidden="true">
+    <div className="weather-layer"><WeatherScene weather={weather} /></div>
     <div className="seasonal-layer seasonal-holidays"><HolidayScene weather={weather} /></div>
     <div className="seasonal-layer seasonal-fall"><FallScene weather={weather} /></div>
     <div className="seasonal-layer seasonal-halloween">

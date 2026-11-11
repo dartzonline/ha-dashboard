@@ -366,7 +366,12 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
               <input type="checkbox" checked={theme.effects !== false} onChange={(event) => updateTheme({ ...theme, effects: event.target.checked })} />
               <span>Seasonal effects</span>
             </label>}
-            {seasonalShown && theme.effects !== false && <fieldset>
+            <label className="config-light-check theme-effects-toggle">
+              <input type="checkbox" checked={theme.weatherEffects !== false} onChange={(event) => updateTheme({ ...theme, weatherEffects: event.target.checked })} />
+              <span>Weather effects</span>
+            </label>
+            <p className="theme-season-note">Rain, fog, lightning, snow, gusts, sunshine and starry nights follow the live forecast, all year.</p>
+            {((seasonalShown && theme.effects !== false) || theme.weatherEffects !== false) && <fieldset>
               <legend>Effect intensity</legend>
               <div className="theme-intensity-options">
                 {effectIntensities.map((level) => (

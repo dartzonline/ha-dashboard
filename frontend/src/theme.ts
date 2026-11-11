@@ -21,7 +21,7 @@ export type EffectIntensity = typeof effectIntensities[number]
  * `autoSeason` and `effects` default to on when absent, so older saved preferences pick them up.
  * With `autoSeason` on, `palette` is the one shown outside the seasons.
  */
-export interface ThemePreference { style: ThemeStyle; palette: ThemePalette; effects?: boolean; autoSeason?: boolean; intensity?: EffectIntensity }
+export interface ThemePreference { style: ThemeStyle; palette: ThemePalette; effects?: boolean; autoSeason?: boolean; weatherEffects?: boolean; intensity?: EffectIntensity }
 export const defaultTheme: ThemePreference = { style: 'hybrid', palette: 'phosphor' }
 let sessionTheme = { ...defaultTheme }
 let storageWriteFailed = false
@@ -36,6 +36,7 @@ export function readTheme(): ThemePreference {
         palette: typeof value.palette === 'string' && Object.hasOwn(themePalettes, value.palette) ? value.palette as ThemePalette : defaultTheme.palette,
         ...('effects' in value && typeof value.effects === 'boolean' ? { effects: value.effects } : {}),
         ...('autoSeason' in value && typeof value.autoSeason === 'boolean' ? { autoSeason: value.autoSeason } : {}),
+        ...('weatherEffects' in value && typeof value.weatherEffects === 'boolean' ? { weatherEffects: value.weatherEffects } : {}),
         ...('intensity' in value && effectIntensities.includes(value.intensity as EffectIntensity) ? { intensity: value.intensity as EffectIntensity } : {}),
       }
     }
@@ -67,6 +68,7 @@ function paint(theme: ThemePreference) {
   root.dataset.themePalette = paletteId
   root.dataset.themeEffects = theme.effects === false ? 'off' : 'on'
   root.dataset.themeIntensity = theme.intensity ?? 'medium'
+  root.dataset.themeWeather = theme.weatherEffects === false ? 'off' : 'on'
   const tokens = {
     canvas: palette.canvas, 'canvas-2': palette.canvas2,
     surface: palette.panel, 'surface-solid': palette.panel, 'surface-raised': palette.raised,
