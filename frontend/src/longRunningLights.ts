@@ -8,7 +8,7 @@ import type { HAEntity, LightAutoOffSettings } from './types'
  * EXEMPT_LIGHT_TERMS and the household's auto-off settings.
  */
 const WARN_AFTER_MS = 2 * 60 * 60 * 1000
-const EXEMPT_LIGHT_TERMS = ['landscape']
+const EXEMPT_LIGHT_TERMS = ['landscape', 'christmas', 'xmas']
 
 function isExemptLight(entity: HAEntity): boolean {
   const searchable = `${entity.entity_id} ${friendlyName(entity)}`.toLowerCase()

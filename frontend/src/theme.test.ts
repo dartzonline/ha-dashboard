@@ -1,8 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { applyTheme, defaultTheme, readTheme, saveTheme, THEME_STORAGE_KEY, themePalettes, themeStyles } from './theme'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { applyTheme, defaultTheme, effectivePalette, readTheme, repaintTheme, saveTheme, THEME_STORAGE_KEY, themePalettes, themeStyles } from './theme'
+
+afterEach(() => { vi.useRealTimers() })
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  // Mid-June, outside every season, so palettes apply as chosen.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(2026, 5, 15, 12))
   localStorage.clear()
   applyTheme(defaultTheme)
 })
@@ -64,5 +69,33 @@ describe('theme preferences', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
     expect(readTheme()).toEqual({ style: 'modern', palette: 'arctic' })
     expect(document.documentElement.dataset.themePalette).toBe('arctic')
+  })
+
+  it('follows the seasons by default and lets the household turn that off', () => {
+    vi.setSystemTime(new Date(2026, 10, 10, 12))
+    expect(effectivePalette({ style: 'hybrid', palette: 'arctic' })).toBe('fall')
+    saveTheme({ style: 'hybrid', palette: 'arctic' })
+    expect(document.documentElement.dataset.themePalette).toBe('fall')
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe(themePalettes.fall.accent)
+    saveTheme({ style: 'hybrid', palette: 'arctic', autoSeason: false })
+    expect(document.documentElement.dataset.themePalette).toBe('arctic')
+    expect(readTheme().autoSeason).toBe(false)
+  })
+
+  it('crosses into the next season on repaint without a reload', () => {
+    vi.setSystemTime(new Date(2026, 10, 30, 23, 59))
+    applyTheme({ style: 'hybrid', palette: 'phosphor' })
+    expect(document.documentElement.dataset.themePalette).toBe('fall')
+    vi.setSystemTime(new Date(2026, 11, 1, 0, 1))
+    repaintTheme()
+    expect(document.documentElement.dataset.themePalette).toBe('holidays')
+  })
+
+  it('persists effect intensity and ignores unknown values', () => {
+    saveTheme({ style: 'hybrid', palette: 'holidays', intensity: 'blizzard' })
+    expect(readTheme().intensity).toBe('blizzard')
+    expect(document.documentElement.dataset.themeIntensity).toBe('blizzard')
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify({ style: 'hybrid', palette: 'holidays', intensity: 'hurricane' }))
+    expect(readTheme().intensity).toBeUndefined()
   })
 })

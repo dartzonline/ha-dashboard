@@ -3,6 +3,40 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.20.0 - 2026-11-10: Fall, seasons that change on their own, and a livelier Christmas
+
+**A new Fall theme for November.** Leaves tumble down in three depths, drift with the real wind
+and pile up along the bottom of the screen. A gust sweeps a handful across now and then, geese
+fly south past a soft harvest moon, and a turkey, owl, acorn, mushroom, apple or pie visits the
+middle of the screen.
+
+**Themes change with the seasons.** Settings > Theme > *Change with the seasons* (on by default)
+shows Halloween in October, Fall in November and Holidays from December 1 to January 6, then
+your chosen palette the rest of the year. A tablet left running switches at midnight on its own.
+Turn it off to pick any palette all year.
+
+**More Christmas.** Seven new visitors: Santa waving, a reindeer, a penguin, a nutcracker, a snow
+globe, hot cocoa and a stocking. Gifts parachute down from Santa's sleigh, the northern lights
+shimmer in now and then, and snow settles on the top edge of the dashboard's panels. From
+December 1 the header counts the sleeps to Christmas.
+
+**Effects that feel alive.**
+- Tap a visitor to pop it in a burst of snow, leaves or sparks. Tap the sleigh to drop a present.
+- Each character moves its own way: sliding, hopping, swinging, dropping in or floating.
+- Snow falls in three depths. It thickens when your forecast says it is snowing and slants with
+  the wind. Frost creeps into the corners when it is below freezing.
+- Choose Light, Medium or Blizzard intensity in Settings > Theme.
+- Effects fade back while a dialog is open, thin out at night and pause while the screen is off.
+
+**House watch looks after more.**
+- Christmas lights are never switched off for being left on.
+- Watering is shut off at once when it is 2°C or colder outside.
+- Space heaters are flagged after 3 hours (critical at 6), or after 30 minutes when everyone is
+  away. They are only warned about, never switched off automatically.
+- The Health page has a *Turn off what's left on* button. After a confirmation, it switches off
+  every light, speaker, sprinkler and heater left running. Doors, locks and garages are never
+  touched.
+
 ## 1.19.0 - 2026-11-02: A snowy Holidays theme
 
 **The Holidays palette now moves like Halloween does.** Snow falls in layers, from fine drifting

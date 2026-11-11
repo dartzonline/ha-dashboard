@@ -280,3 +280,90 @@ class TestHouseWatchLoop:
             assert acted == ["light.kitchen"]
 
         run(scenario())
+
+
+class TestChristmasLights:
+    def test_christmas_lights_are_never_flagged_or_switched_off(self):
+        states = [
+            row("light.christmas_tree", "on", changed_ago=9 * HOUR),
+            row("light.porch_string", "on", changed_ago=9 * HOUR, name="Porch Xmas lights"),
+        ]
+        assert house_watch.findings(states, BASE) == []
+        assert house_watch.due_actions(states, BASE) == []
+
+
+class TestFrostWatering:
+    def test_shuts_irrigation_off_at_once_when_freezing(self):
+        states = [
+            row("sensor.outdoor_temperature", "1.0", device_class="temperature", unit_of_measurement="°C"),
+            row("valve.drip_zone_1", "open", changed_ago=3 * MINUTE),
+        ]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.rule == "irrigation_frost"
+        assert finding.severity == "critical"
+        assert house_watch.due_actions(states, BASE) == [("valve", "close_valve", "valve.drip_zone_1")]
+
+    def test_reads_the_weather_entity_in_fahrenheit_without_a_sensor(self):
+        states = [
+            row("weather.forecast_home", "sunny", temperature=30, temperature_unit="°F"),
+            row("switch.sprinkler_front", "on", changed_ago=MINUTE),
+        ]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.rule == "irrigation_frost"
+        assert "-1°C" in finding.detail
+
+    def test_mild_weather_leaves_short_watering_alone(self):
+        states = [
+            row("weather.forecast_home", "sunny", temperature=12, temperature_unit="°C"),
+            row("valve.drip_zone_1", "open", changed_ago=10 * MINUTE),
+        ]
+        assert house_watch.findings(states, BASE) == []
+
+    def test_no_temperature_means_no_frost_rule(self):
+        states = [row("valve.drip_zone_1", "open", changed_ago=10 * MINUTE)]
+        assert house_watch.findings(states, BASE) == []
+
+
+class TestSpaceHeater:
+    def test_warns_at_three_hours_and_escalates_at_six(self):
+        [warning] = house_watch.findings([row("switch.office_space_heater", "on", changed_ago=3.5 * HOUR)], BASE)
+        assert (warning.rule, warning.severity) == ("space_heater_on", "warning")
+        [critical] = house_watch.findings([row("switch.office_space_heater", "on", changed_ago=7 * HOUR)], BASE)
+        assert critical.severity == "critical"
+
+    def test_never_acted_on_automatically(self):
+        states = [row("switch.office_space_heater", "on", changed_ago=10 * HOUR)]
+        assert house_watch.due_actions(states, BASE) == []
+
+    def test_heater_on_while_everyone_is_away_is_critical_after_thirty_minutes(self):
+        states = [
+            row("person.alex", "not_home", changed_ago=2 * HOUR),
+            row("switch.bedroom_heater", "on", changed_ago=45 * MINUTE),
+        ]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.severity == "critical"
+        assert "away" in finding.detail
+
+    def test_water_heater_is_not_a_space_heater(self):
+        states = [row("switch.water_heater", "on", changed_ago=10 * HOUR)]
+        assert house_watch.findings(states, BASE) == []
+
+
+class TestSwitchOffTargets:
+    def test_includes_things_left_running_but_never_doors_locks_or_garages(self):
+        states = [
+            row("light.kitchen", "on", changed_ago=3 * HOUR),
+            row("switch.office_space_heater", "on", changed_ago=4 * HOUR),
+            row("cover.garage_door", "open", changed_ago=3 * HOUR),
+            row("lock.front_door", "unlocked", changed_ago=3 * HOUR),
+            row("binary_sensor.fridge_door", "on", changed_ago=10 * MINUTE, device_class="door"),
+        ]
+        targets = house_watch.switch_off_targets(states, BASE)
+        assert sorted(targets) == [("light", "turn_off", "light.kitchen"), ("switch", "turn_off", "switch.office_space_heater")]
+
+    def test_media_left_playing_while_away_is_turned_off(self):
+        states = [
+            row("person.alex", "not_home", changed_ago=2 * HOUR),
+            row("media_player.living_room", "playing", changed_ago=HOUR),
+        ]
+        assert house_watch.switch_off_targets(states, BASE) == [("media_player", "turn_off", "media_player.living_room")]

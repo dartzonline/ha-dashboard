@@ -655,6 +655,37 @@ async def night_mode(
     }
 
 
+class LeftOnRequest(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/api/actions/turn-off-left-on", dependencies=[Depends(require_configuration)])
+async def turn_off_left_on(
+    request: LeftOnRequest,
+    client: HomeAssistantClient = Depends(get_client),
+) -> dict[str, Any]:
+    """Switches off every light, speaker, sprinkler and space heater house watch says was left on.
+
+    The list is worked out again here rather than taken from the page, so a stale panel can only
+    ever switch off what is still left on now.
+    """
+    if not request.confirm:
+        raise HTTPException(400, "Turning things off requires explicit confirmation")
+    try:
+        all_states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for domain, service, entity_id in house_watch.switch_off_targets(all_states):
+        grouped.setdefault((domain, service), []).append(entity_id)
+    turned_off: list[str] = []
+    failures: list[dict[str, str]] = []
+    for (domain, service), entity_ids in grouped.items():
+        await run_group(client, domain, service, entity_ids, turned_off, failures)
+    return {"status": "partial" if failures else "completed", "turnedOff": turned_off, "failures": failures}
+
+
 def _parse_history_point(row: dict[str, Any]) -> tuple[float, str] | None:
     stamp = row.get("last_changed") or row.get("last_updated")
     if not isinstance(stamp, str):
@@ -866,7 +897,10 @@ async def home_health_insights(
         all_states = await client.states()
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
-    return home_health.health_summary(all_states)
+    summary = home_health.health_summary(all_states)
+    # What the "Turn off what's left on" button would switch off right now.
+    summary["leftOn"] = [entity_id for _, _, entity_id in house_watch.switch_off_targets(all_states)]
+    return summary
 
 
 @app.get("/api/insights/watch", dependencies=[Depends(require_configuration)])

@@ -1,20 +1,44 @@
+.holiday-scene { position: absolute; inset: 0; }
 .holiday-sky { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 120%, rgba(255, 255, 255, .1), transparent 55%), radial-gradient(circle at 85% 10%, rgba(255, 236, 190, .1), transparent 28%); }
 
+/* ---- Snow: three depths, pushed sideways by the real wind (--wind-x) ---- */
 .snowflake { position: absolute; top: -20px; left: var(--flake-left); width: var(--flake-size); height: var(--flake-size); border-radius: 50%; background: #fff; opacity: var(--flake-opacity); box-shadow: 0 0 6px rgba(255, 255, 255, .6); animation: holiday-snow var(--flake-duration) var(--flake-delay) linear infinite; }
-.snowflake:nth-child(5n) { filter: blur(1.2px); }
+.flake-far { filter: blur(1px); }
+.flake-near { filter: blur(.5px); box-shadow: 0 0 10px rgba(255, 255, 255, .7); }
 .snowflake-big { position: absolute; top: -50px; left: var(--flake-left); color: #dff1ff; opacity: .5; animation: holiday-snow-big var(--flake-duration) var(--flake-delay) linear infinite; }
 @keyframes holiday-snow {
   0% { transform: translate3d(0, -20px, 0); }
-  25% { transform: translate3d(calc(var(--flake-sway) * .5), 25dvh, 0); }
-  50% { transform: translate3d(var(--flake-sway), 50dvh, 0); }
-  75% { transform: translate3d(calc(var(--flake-sway) * .4), 75dvh, 0); }
-  100% { transform: translate3d(0, calc(100dvh + 20px), 0); }
+  25% { transform: translate3d(calc(var(--flake-sway) * .5 + var(--wind-x, 0px) * .25), 25dvh, 0); }
+  50% { transform: translate3d(calc(var(--flake-sway) + var(--wind-x, 0px) * .5), 50dvh, 0); }
+  75% { transform: translate3d(calc(var(--flake-sway) * .4 + var(--wind-x, 0px) * .75), 75dvh, 0); }
+  100% { transform: translate3d(var(--wind-x, 0px), calc(100dvh + 20px), 0); }
 }
 @keyframes holiday-snow-big {
   from { transform: translate3d(0, -50px, 0) rotate(0deg); }
-  to { transform: translate3d(var(--flake-sway), calc(100dvh + 60px), 0) rotate(360deg); }
+  to { transform: translate3d(calc(var(--flake-sway) + var(--wind-x, 0px)), calc(100dvh + 60px), 0) rotate(360deg); }
 }
 
+/* ---- Northern lights: drift in for a while, then fade away ---- */
+.holiday-aurora { position: absolute; top: 0; left: -10%; right: -10%; height: 38%; opacity: 0; mix-blend-mode: screen; filter: blur(18px); animation: aurora-show 64s 4s ease-in-out infinite; }
+.holiday-aurora span { position: absolute; top: 10%; height: 55%; width: 60%; border-radius: 50%; animation: aurora-sway 18s ease-in-out infinite alternate; }
+.holiday-aurora span:nth-child(1) { left: 0; background: linear-gradient(100deg, transparent, rgba(80, 230, 160, .55), transparent); }
+.holiday-aurora span:nth-child(2) { left: 25%; top: 4%; background: linear-gradient(80deg, transparent, rgba(90, 200, 230, .45), transparent); animation-delay: -6s; }
+.holiday-aurora span:nth-child(3) { left: 50%; top: 14%; background: linear-gradient(110deg, transparent, rgba(170, 120, 240, .4), transparent); animation-delay: -12s; }
+@keyframes aurora-show { 0%, 20% { opacity: 0; } 35%, 60% { opacity: .55; } 75%, 100% { opacity: 0; } }
+@keyframes aurora-sway { from { transform: translateX(-6%) skewX(-12deg) scaleY(.9); } to { transform: translateX(8%) skewX(10deg) scaleY(1.15); } }
+
+/* ---- Frost creeping into the corners when it is below freezing outside ---- */
+.season-frost { position: absolute; inset: 0; display: none; pointer-events: none;
+  background:
+    radial-gradient(circle at 0 0, rgba(190, 225, 255, .24), rgba(190, 225, 255, .07) 9%, transparent 15%),
+    radial-gradient(circle at 100% 0, rgba(190, 225, 255, .2), rgba(190, 225, 255, .05) 8%, transparent 13%),
+    radial-gradient(circle at 0 100%, rgba(190, 225, 255, .2), rgba(190, 225, 255, .05) 8%, transparent 13%),
+    radial-gradient(circle at 100% 100%, rgba(190, 225, 255, .24), rgba(190, 225, 255, .07) 9%, transparent 15%);
+}
+.is-freezing > .season-frost { display: block; animation: frost-in 6s ease-out both; }
+@keyframes frost-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- Snow drifts and string lights ---- */
 .holiday-drift { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; opacity: .55;
   background:
     radial-gradient(ellipse 160px 38px at 8% 100%, #f6fbff 0 62%, transparent 64%),
@@ -23,6 +47,7 @@
     radial-gradient(ellipse 240px 48px at 76% 100%, #eef6fc 0 62%, transparent 64%),
     radial-gradient(ellipse 170px 36px at 96% 100%, #f6fbff 0 62%, transparent 64%);
   mask-image: linear-gradient(0deg, #000 30%, transparent); }
+.is-stormy > .holiday-drift { height: 76px; opacity: .7; }
 
 .holiday-lights { position: absolute; top: 0; left: 0; right: 0; height: 46px; }
 .holiday-lights svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
@@ -31,17 +56,37 @@
 .holiday-bulb::before { content: ''; position: absolute; left: 50%; bottom: 100%; width: 5px; height: 4px; margin-left: -2.5px; border-radius: 1px; background: #33463c; }
 @keyframes bulb-twinkle { from { opacity: .35; } to { opacity: 1; } }
 
-.holiday-sleigh { position: absolute; top: 16%; left: 0; width: min(340px, 44vw); opacity: 0; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .5)); animation: sleigh-fly 80s 6s linear infinite; }
+/* ---- Santa's sleigh, the gifts it drops, and the ones a tap shakes loose ---- */
+.holiday-sleigh { position: absolute; top: 16%; left: 0; width: min(340px, 44vw); opacity: 0; visibility: hidden; pointer-events: auto; cursor: pointer; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .5)); animation: sleigh-fly 80s 6s linear infinite; }
 .holiday-sleigh::after { content: ''; position: absolute; right: 96%; top: 56%; width: 160px; height: 3px; background: linear-gradient(90deg, transparent, rgba(255, 224, 150, .8)); filter: blur(1px); }
 .holiday-sleigh-art { display: block; width: 100%; }
 .rudolph-nose { filter: drop-shadow(0 0 5px #ff3b3b); animation: bulb-twinkle 1s ease-in-out infinite alternate; }
 @keyframes sleigh-fly {
-  0% { opacity: 0; transform: translate3d(-20vw, 40px, 0) rotate(5deg); }
+  0% { opacity: 0; visibility: visible; transform: translate3d(-20vw, 40px, 0) rotate(5deg); }
   2% { opacity: .92; }
   10% { transform: translate3d(25vw, -10px, 0) rotate(-2deg); }
   20% { transform: translate3d(55vw, 24px, 0) rotate(3deg); }
   30% { opacity: .92; transform: translate3d(90vw, -20px, 0) rotate(-3deg); }
-  32%, 100% { opacity: 0; transform: translate3d(115vw, 20px, 0) rotate(2deg); }
+  31.9% { visibility: visible; }
+  32%, 100% { opacity: 0; visibility: hidden; transform: translate3d(115vw, 20px, 0) rotate(2deg); }
+}
+.present-art { display: block; width: 100%; overflow: visible; }
+.sleigh-gift { position: absolute; top: calc(16% + 60px); width: 30px; opacity: 0; animation: gift-parachute 80s linear infinite both; }
+@keyframes gift-parachute {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg); }
+  .4% { opacity: .95; }
+  4% { transform: translate3d(18px, 24dvh, 0) rotate(8deg); }
+  8% { transform: translate3d(-14px, 48dvh, 0) rotate(-7deg); }
+  12% { opacity: .95; transform: translate3d(10px, 70dvh, 0) rotate(5deg); }
+  13.5%, 100% { opacity: 0; transform: translate3d(0, 74dvh, 0) rotate(0deg); }
+}
+.dropped-gift { position: absolute; width: 34px; margin-left: -17px; pointer-events: none; animation: gift-tap-drop 7s ease-in forwards; }
+@keyframes gift-tap-drop {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(.6); }
+  6% { opacity: 1; transform: translate3d(0, 10px, 0) scale(1); }
+  40% { transform: translate3d(22px, 30dvh, 0) rotate(8deg); }
+  80% { opacity: 1; transform: translate3d(-12px, 62dvh, 0) rotate(-6deg); }
+  100% { opacity: 0; transform: translate3d(0, 80dvh, 0) rotate(0deg); }
 }
 
 .holiday-star { position: absolute; top: 12%; left: 62%; width: 150px; height: 2px; opacity: 0; background: linear-gradient(90deg, transparent, #fff); transform: rotate(28deg); animation: holiday-shoot 37s 14s ease-in infinite; }
@@ -51,7 +96,8 @@
   100% { opacity: 0; transform: translate3d(-34vw, 22vw, 0) rotate(28deg); }
 }
 
-.holiday-visitor { position: absolute; width: min(220px, 40vw); aspect-ratio: 1; opacity: 0; transform: translate(-50%, -50%); animation: apparition-visit 28s -12s ease-in-out infinite; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .55)); }
+/* ---- The visitor in the middle ---- */
+.holiday-visitor { width: min(220px, 40vw); aspect-ratio: 1; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .55)); }
 .holiday-art { width: 100%; height: 100%; overflow: visible; }
 .holiday-icon { width: 100%; height: 100%; color: #ff6b6b; filter: drop-shadow(0 0 12px rgba(255, 214, 120, .5)); }
 .holiday-visitor[data-visitor='gift'] .holiday-icon { color: #5ddc8c; }
@@ -61,7 +107,23 @@
 .tree-bulb-b { animation-delay: -.5s; }
 .tree-bulb-c { animation-delay: -.9s; }
 .tree-star { filter: drop-shadow(0 0 6px #ffd34d); animation: bulb-twinkle 2s ease-in-out infinite alternate; }
+.santa-wave { transform-box: view-box; transform-origin: 68px 72px; animation: santa-wave 1.1s ease-in-out infinite alternate; }
+@keyframes santa-wave { from { transform: rotate(-14deg); } to { transform: rotate(16deg); } }
+.globe-snow { animation: globe-snow 3.2s linear infinite; }
+@keyframes globe-snow { from { transform: translateY(-12px); } to { transform: translateY(14px); } }
+.cocoa-steam { animation: cocoa-steam 3s ease-in-out infinite; }
+@keyframes cocoa-steam { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: .9; } 100% { opacity: 0; transform: translateY(-10px); } }
+
+/* ---- Snow settling on the top edge of the dashboard's panels ---- */
+:root[data-theme-palette='holidays']:not([data-theme-effects='off']) .glass:not(.glass-pill):not(button)::before {
+  content: ''; position: absolute; z-index: 1; top: -7px; left: 10px; right: 10px; height: 13px; pointer-events: none;
+  background: linear-gradient(#ffffff, #dce9f4);
+  opacity: .82;
+  mask: radial-gradient(ellipse 13px 9px at 50% 100%, #000 96%, transparent) 0 0 / 22px 100% repeat-x, linear-gradient(#000, #000) 0 100% / 100% 6px no-repeat;
+  -webkit-mask: radial-gradient(ellipse 13px 9px at 50% 100%, #000 96%, transparent) 0 0 / 22px 100% repeat-x, linear-gradient(#000, #000) 0 100% / 100% 6px no-repeat;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .25));
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .snowflake, .snowflake-big, .holiday-sleigh, .holiday-star, .holiday-visitor, .holiday-bulb { animation: none; }
+  .snowflake, .snowflake-big, .holiday-sleigh, .holiday-star, .holiday-visitor, .holiday-bulb, .holiday-aurora, .sleigh-gift { animation: none; }
 }

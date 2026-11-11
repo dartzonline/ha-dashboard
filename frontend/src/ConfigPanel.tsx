@@ -9,7 +9,8 @@ import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
 import { useDialog } from './ui/useDialog'
 import { useTwoTapConfirm } from './ui/useTwoTapConfirm'
-import { defaultTheme, readTheme, saveTheme, themePalettes, type ThemePalette, type ThemePreference } from './theme'
+import { defaultTheme, effectIntensities, effectivePalette, readTheme, saveTheme, themePalettes, type ThemePalette, type ThemePreference } from './theme'
+import { seasonForDate } from './seasons'
 import './ConfigPanel.css'
 
 const tileKinds: TileKind[] = ['sensor', 'toggle', 'lock', 'thermostat', 'vacuum']
@@ -96,6 +97,8 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
     && parsedMinutes >= AUTO_OFF_MIN_MINUTES && parsedMinutes <= AUTO_OFF_MAX_MINUTES
   const excludableLights = lightEntities.filter((entity) => !draftExcluded.includes(entity.entity_id))
 
+  const activeSeason = theme.autoSeason === false ? null : seasonForDate(new Date())
+  const seasonalShown = ['halloween', 'fall', 'holidays'].includes(effectivePalette(theme)) || ['halloween', 'fall', 'holidays'].includes(theme.palette)
   function updateTheme(next: ThemePreference) {
     setTheme(next)
     setThemeMessage(saveTheme(next) ? 'Saved on this device.' : 'Applied for this session. Browser storage is unavailable.')
@@ -330,8 +333,19 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
                 ))}
               </div>
             </fieldset>
+            <label className="config-light-check theme-effects-toggle">
+              <input type="checkbox" checked={theme.autoSeason !== false} onChange={(event) => updateTheme({ ...theme, autoSeason: event.target.checked })} />
+              <span>Change with the seasons</span>
+            </label>
+            <p className="theme-season-note">
+              {theme.autoSeason === false
+                ? 'Off: the palette below shows all year.'
+                : activeSeason
+                  ? `Showing ${themePalettes[activeSeason].label} for now. Halloween in October, Fall in November, Holidays Dec 1 – Jan 6.`
+                  : 'Halloween in October, Fall in November, Holidays Dec 1 – Jan 6; the palette below the rest of the year.'}
+            </p>
             <fieldset>
-              <legend>Color palette</legend>
+              <legend>{theme.autoSeason === false ? 'Color palette' : 'Color palette outside the seasons'}</legend>
               <div className="theme-palette-options">
                 {(Object.keys(themePalettes) as ThemePalette[]).map((id) => {
                   const palette = themePalettes[id]
@@ -348,10 +362,21 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
                 })}
               </div>
             </fieldset>
-            {(theme.palette === 'holidays' || theme.palette === 'halloween') && <label className="config-light-check theme-effects-toggle">
+            {seasonalShown && <label className="config-light-check theme-effects-toggle">
               <input type="checkbox" checked={theme.effects !== false} onChange={(event) => updateTheme({ ...theme, effects: event.target.checked })} />
               <span>Seasonal effects</span>
             </label>}
+            {seasonalShown && theme.effects !== false && <fieldset>
+              <legend>Effect intensity</legend>
+              <div className="theme-intensity-options">
+                {effectIntensities.map((level) => (
+                  <label className="theme-intensity-option" key={level}>
+                    <input type="radio" name="theme-intensity" value={level} checked={(theme.intensity ?? 'medium') === level} onChange={() => updateTheme({ ...theme, intensity: level })} />
+                    <span>{level === 'light' ? 'Light' : level === 'medium' ? 'Medium' : 'Blizzard'}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>}
             <div className="config-footer">
               <button type="button" className="detail-action" onClick={() => updateTheme({ ...defaultTheme })}>
                 <RotateCcw size={16} aria-hidden="true" /><span>Reset theme</span>

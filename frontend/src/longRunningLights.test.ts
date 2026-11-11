@@ -22,6 +22,15 @@ describe('longRunningLights', () => {
     expect(found.map((item) => item.entity.entity_id)).toEqual(['light.kitchen'])
   })
 
+  it('never flags Christmas lights, which are meant to run all evening', () => {
+    const found = longRunningLights(
+      [light('light.christmas_tree', 600), light('light.porch', 600, { friendly_name: 'Porch Xmas string' })],
+      NOW,
+      defaults,
+    )
+    expect(found).toEqual([])
+  })
+
   it('lets the household remove the default exclusion', () => {
     const found = longRunningLights([light('light.my_rest_clock', 600)], NOW, { minutes: 240, excludedIds: [] })
     expect(found).toHaveLength(1)

@@ -1,9 +1,12 @@
+import { seasonForDate } from './seasons'
+
 export const THEME_STORAGE_KEY = 'home-panel.theme.v1'
 export const themeStyles = ['modern', 'retro', 'hybrid'] as const
 export type ThemeStyle = typeof themeStyles[number]
 
 export const themePalettes = {
   halloween: { label: 'Halloween', canvas: '#17121b', canvas2: '#241b2b', panel: '#291f30', raised: '#382b3f', strong: '#1e1624', text: '#f5ecdf', muted: '#d3c0d5', muted2: '#bca6c4', border: '#665070', edge: '#a38baa', accent: '#ffb36b', highlight: '#ffd4a3', ink: '#301c0d' },
+  fall: { label: 'Fall', canvas: '#1b1410', canvas2: '#271c15', panel: '#2d2119', raised: '#3a2a1f', strong: '#221812', text: '#f8ecdd', muted: '#e0c8b0', muted2: '#cbb096', border: '#6b5240', edge: '#ad8c70', accent: '#f2a057', highlight: '#ffd2a0', ink: '#2c1505' },
   holidays: { label: 'Holidays', canvas: '#101b18', canvas2: '#182b24', panel: '#1e3028', raised: '#2a3c32', strong: '#14251e', text: '#f4f1e7', muted: '#c6d3c9', muted2: '#a8beb0', border: '#4f6858', edge: '#8cab95', accent: '#f1b5b9', highlight: '#ffdadc', ink: '#30171c' },
   phosphor: { label: 'Phosphor', canvas: '#101413', canvas2: '#19201d', panel: '#1d2521', raised: '#2d3831', strong: '#151c18', text: '#edf2df', muted: '#b8c5b8', muted2: '#98aa9b', border: '#46554a', edge: '#81927f', accent: '#d0e779', highlight: '#e2efac', ink: '#17200d' },
   arctic: { label: 'Arctic', canvas: '#111719', canvas2: '#1a2327', panel: '#202b30', raised: '#303c42', strong: '#172024', text: '#e9f3f5', muted: '#bccdd1', muted2: '#a4b8bd', border: '#4a5e65', edge: '#829ca4', accent: '#7bd9e5', highlight: '#b5eef4', ink: '#102529' },
@@ -12,7 +15,13 @@ export const themePalettes = {
 } as const
 
 export type ThemePalette = keyof typeof themePalettes
-export interface ThemePreference { style: ThemeStyle; palette: ThemePalette; effects?: boolean }
+export const effectIntensities = ['light', 'medium', 'blizzard'] as const
+export type EffectIntensity = typeof effectIntensities[number]
+/**
+ * `autoSeason` and `effects` default to on when absent, so older saved preferences pick them up.
+ * With `autoSeason` on, `palette` is the one shown outside the seasons.
+ */
+export interface ThemePreference { style: ThemeStyle; palette: ThemePalette; effects?: boolean; autoSeason?: boolean; intensity?: EffectIntensity }
 export const defaultTheme: ThemePreference = { style: 'hybrid', palette: 'phosphor' }
 let sessionTheme = { ...defaultTheme }
 let storageWriteFailed = false
@@ -26,20 +35,38 @@ export function readTheme(): ThemePreference {
         style: themeStyles.includes(value.style as ThemeStyle) ? value.style as ThemeStyle : defaultTheme.style,
         palette: typeof value.palette === 'string' && Object.hasOwn(themePalettes, value.palette) ? value.palette as ThemePalette : defaultTheme.palette,
         ...('effects' in value && typeof value.effects === 'boolean' ? { effects: value.effects } : {}),
+        ...('autoSeason' in value && typeof value.autoSeason === 'boolean' ? { autoSeason: value.autoSeason } : {}),
+        ...('intensity' in value && effectIntensities.includes(value.intensity as EffectIntensity) ? { intensity: value.intensity as EffectIntensity } : {}),
       }
     }
   } catch { return { ...sessionTheme } }
   return { ...defaultTheme }
 }
 
+/** The palette on screen: the season's, when the theme follows the seasons and one is running. */
+export function effectivePalette(theme: ThemePreference, now: Date = new Date()): ThemePalette {
+  return (theme.autoSeason !== false && seasonForDate(now)) || theme.palette
+}
+
 export function applyTheme(theme: ThemePreference) {
   storageWriteFailed = false
   sessionTheme = { ...theme }
+  paint(theme)
+}
+
+/** Re-applies the current theme, so a wall tablet left running crosses into a new season on its own. */
+export function repaintTheme() {
+  paint(sessionTheme)
+}
+
+function paint(theme: ThemePreference) {
   const root = document.documentElement
-  const palette = themePalettes[theme.palette]
+  const paletteId = effectivePalette(theme)
+  const palette = themePalettes[paletteId]
   root.dataset.themeStyle = theme.style
-  root.dataset.themePalette = theme.palette
+  root.dataset.themePalette = paletteId
   root.dataset.themeEffects = theme.effects === false ? 'off' : 'on'
+  root.dataset.themeIntensity = theme.intensity ?? 'medium'
   const tokens = {
     canvas: palette.canvas, 'canvas-2': palette.canvas2,
     surface: palette.panel, 'surface-solid': palette.panel, 'surface-raised': palette.raised,

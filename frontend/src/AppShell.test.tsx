@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { fallVisitors } from './FallScene'
 import { holidayVisitors } from './HolidayScene'
 import { defaultTheme, readTheme, THEME_STORAGE_KEY } from './theme'
 
@@ -29,8 +30,9 @@ vi.mock('./PhotoBackdrop', () => ({ PhotoBackdrop: () => null }))
 vi.mock('./TrackedAircraftBadge', () => ({ TrackedAircraftBadge: () => null }))
 vi.mock('./ConnectionStatus', () => ({ ConnectionStatus: () => null }))
 
-beforeEach(() => { window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true })
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+// Mid-June, outside every season, so a chosen palette shows as chosen unless a test moves the date.
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 5, 15, 12)); window.history.replaceState(null, '', '/#/home'); window.sessionStorage.clear(); window.localStorage.clear(); fixtures.callService.mockClear(); fixtures.save.mockClear(); fixtures.ready = true })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('dashboard shell', () => {
   it('toggles seasonal decorations without changing the selected palette', () => {
@@ -99,6 +101,59 @@ describe('dashboard shell', () => {
     }
     expect(seen).toEqual([...holidayVisitors])
     expect(fixtures.callService).not.toHaveBeenCalled()
+  })
+
+  it('drops leaves, flies geese and rotates fall visitors that pop when tapped', () => {
+    const { container } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'All sections' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Fall' }))
+    expect(document.documentElement.dataset.themePalette).toBe('fall')
+    expect(container.querySelectorAll('.seasonal-fall .leaf').length).toBeGreaterThanOrEqual(26)
+    expect(container.querySelector('.seasonal-fall .fall-geese svg')).toBeTruthy()
+    expect(container.querySelectorAll('.seasonal-fall .fall-pile svg').length).toBeGreaterThan(0)
+    const visitor = container.querySelector('.fall-visitor') as HTMLElement
+    const seen = [visitor.dataset.visitor]
+    for (let step = 0; step < fallVisitors.length - 1; step += 1) {
+      fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
+      seen.push(visitor.dataset.visitor)
+    }
+    expect(seen).toEqual([...fallVisitors])
+    fireEvent.click(visitor)
+    expect(visitor.classList.contains('is-popped')).toBe(true)
+    expect(container.querySelector('.seasonal-fall .seasonal-burst.burst-leaf')).toBeTruthy()
+    fireEvent(visitor, new Event('webkitAnimationIteration', { bubbles: true }))
+    expect(visitor.classList.contains('is-popped')).toBe(false)
+    expect(fixtures.callService).not.toHaveBeenCalled()
+  })
+
+  it('ignores animation events from the art inside a visitor', () => {
+    const { container } = render(<App />)
+    const visitor = container.querySelector('.holiday-visitor') as HTMLElement
+    const before = visitor.dataset.visitor
+    const child = visitor.firstElementChild as Element
+    fireEvent(child, new Event('webkitAnimationIteration', { bubbles: true }))
+    expect(visitor.dataset.visitor).toBe(before)
+  })
+
+  it('counts down to Christmas from December and follows the season until turned off', () => {
+    vi.setSystemTime(new Date(2026, 11, 13, 12))
+    render(<App />)
+    expect(screen.getByText('12 sleeps to Christmas')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'All sections' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Arctic' }))
+    expect(document.documentElement.dataset.themePalette).toBe('holidays')
+    expect(screen.getByText(/Showing Holidays for now/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Change with the seasons' }))
+    expect(document.documentElement.dataset.themePalette).toBe('arctic')
+    expect(readTheme().autoSeason).toBe(false)
+  })
+
+  it('shows no Christmas countdown in November', () => {
+    vi.setSystemTime(new Date(2026, 10, 20, 12))
+    render(<App />)
+    expect(screen.queryByText(/sleeps to Christmas/)).toBeNull()
   })
 
   it('saves theme choices offline without enabling layout saves or calling devices', () => {
