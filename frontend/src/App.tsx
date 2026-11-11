@@ -18,6 +18,9 @@ import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
 import { SeasonalEffects } from './SeasonalEffects'
 import { christmasCountdown, seasonalWeather } from './seasons'
+import { MorningView, MORNING_SLIDES } from './MorningView'
+import { nextRotationSection } from './morningRotation'
+import { headsUp, preferredUnits, useMorningBrief, type Advice } from './useMorningBrief'
 import { repaintTheme } from './theme'
 import { EventLog } from './EventLog'
 import { useEventLog } from './useEventLog'
@@ -739,6 +742,7 @@ const SLIDE_COUNTS: Record<string, number> = {
   insights: insightsSlides.length,
   weather: WEATHER_SLIDE_COUNT,
   flights: flightsSlideCount,
+  morning: MORNING_SLIDES.length,
 }
 
 function initialSlide(location: ReturnType<typeof parseShellHash>, sectionId: string) {
@@ -770,6 +774,8 @@ function App() {
   const [insightsSlide, setInsightsSlide] = useState(() => initialSlide(startLocation, 'insights'))
   const [weatherSlide, setWeatherSlide] = useState(() => initialSlide(startLocation, 'weather'))
   const [flightsSlide, setFlightsSlide] = useState(() => initialSlide(startLocation, 'flights'))
+  const [morningSlide, setMorningSlide] = useState(() => initialSlide(startLocation, 'morning'))
+  const morningShownAt = useRef<number | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [deviceSearch, setDeviceSearch] = useState({ sectionId: '', query: '' })
   const [sidebarTouchedAt, setSidebarTouchedAt] = useState(0)
@@ -799,6 +805,8 @@ function App() {
   const { entities, health, loading, error, callService, runNightMode, connection, lastMessageAt, authFailed } = useHomeAssistant(handleStateChange)
   const autoDimClass = useAutoDim(entities)
   const weatherForEffects = useMemo(() => seasonalWeather(entities), [entities])
+  const morning = useMorningBrief(preferredUnits(entities), health?.home_assistant.configured !== false)
+  const forecastHeadsUp = headsUp(morning.brief)
 
   const {
     sections: dashboardSections,
@@ -853,7 +861,7 @@ function App() {
   }, [])
 
   // ---- URL state -------------------------------------------------------------------------------
-  const urlSlide = activeSection === 'insights' ? insightsSlide : activeSection === 'weather' ? weatherSlide : activeSection === 'flights' ? flightsSlide : 0
+  const urlSlide = activeSection === 'insights' ? insightsSlide : activeSection === 'weather' ? weatherSlide : activeSection === 'flights' ? flightsSlide : activeSection === 'morning' ? morningSlide : 0
   const hash = shellHash(activeSection, urlSlide)
   const hashRef = useRef(hash)
   // replaceState, never pushState: every rotation tick changes this, and Back must not have to
@@ -874,11 +882,14 @@ function App() {
   useEffect(() => {
     document.title = `${section.label} · Home Panel`
   }, [section.label])
+  useEffect(() => {
+    if (activeSection === 'morning') morningShownAt.current = Date.now()
+  }, [activeSection])
 
   // ---- Rotation --------------------------------------------------------------------------------
   const rotating = autoRotate && !sheetOpen && !sidebarOpen && !searchQuery
   const rotationDelay = activeSection === 'weather' || activeSection === 'flights' ? SLIDE_INTERVAL_MS : rotationInterval
-  const rotationKey = `${activeSection}:${insightsSlide}:${weatherSlide}:${flightsSlide}`
+  const rotationKey = `${activeSection}:${insightsSlide}:${weatherSlide}:${flightsSlide}:${morningSlide}`
   const secondsLeft = countdown?.key === rotationKey ? countdown.seconds : Math.round(rotationDelay / 1000)
 
   // Insights advances through its own panels first, so it holds for slides x interval before the next section.
@@ -905,21 +916,23 @@ function App() {
         setFlightsSlide(flightsSlide + 1)
         return
       }
-      if (rotationSections.length === 0) return
+      if (activeSection === 'morning' && morningSlide < MORNING_SLIDES.length - 1) {
+        setMorningSlide(morningSlide + 1)
+        return
+      }
+      const next = nextRotationSection(rotationSections.map((item) => item.id), activeSection, new Date(), morningShownAt.current)
+      if (next === null) return
       setInsightsSlide(0)
       setWeatherSlide(0)
       setFlightsSlide(0)
-      // A section that rotation skips is not in this list, so `findIndex` returns -1 and the +1
-      // lands on the first rotating section -- which is what should happen when the cycle resumes
-      // from a page it does not itself visit.
-      const currentIndex = rotationSections.findIndex((item) => item.id === activeSection)
-      setActiveSection(rotationSections[(currentIndex + 1) % rotationSections.length].id)
+      setMorningSlide(0)
+      setActiveSection(next)
     }, rotationDelay)
     return () => {
       window.clearTimeout(timer)
       window.clearInterval(tick)
     }
-  }, [rotating, rotationDelay, rotationKey, activeSection, insightsSlide, weatherSlide, flightsSlide, rotationSections])
+  }, [rotating, rotationDelay, rotationKey, activeSection, insightsSlide, weatherSlide, flightsSlide, morningSlide, rotationSections])
 
   useEffect(() => () => {
     alertTimers.current.forEach((timer) => window.clearTimeout(timer))
@@ -1005,7 +1018,18 @@ function App() {
       setInsightsSlide(0)
       setWeatherSlide(0)
       setFlightsSlide(0)
+      setMorningSlide(0)
     }
+  }
+
+  function selectMorningSlide(index: number) {
+    stopRotation()
+    setMorningSlide(index)
+  }
+
+  function openMorningFor(item: Advice) {
+    selectSection('morning')
+    setMorningSlide(item.window === 'today' || item.window === 'tonight' ? 0 : 2)
   }
 
   function selectInsightsSlide(index: number) {
@@ -1217,6 +1241,11 @@ function App() {
 
         {activeSection === 'home' && (
           <>
+            {forecastHeadsUp.length > 0 && <div className="forecast-heads-up" role="status" aria-label="Forecast heads-up">
+              {forecastHeadsUp.map((item) => <button type="button" key={item.id} className={`is-${item.severity}`} onClick={() => openMorningFor(item)}>
+                <AlertTriangle size={16} aria-hidden="true" />{item.title}
+              </button>)}
+            </div>}
             <section className="moments-strip" aria-label="Home moments">
               <button
                 type="button"
@@ -1263,6 +1292,8 @@ function App() {
           <WeatherView entities={entities} slide={weatherSlide} onSelectSlide={selectWeatherSlide} />
         ) : activeSection === 'flights' ? (
           lazyView('Preparing flights', <FlightsView entities={entities} slide={flightsSlide} onSelectSlide={selectFlightsSlide} />)
+        ) : activeSection === 'morning' ? (
+          <MorningView brief={morning.brief} failed={morning.failed} now={now} slide={morningSlide} onSelectSlide={selectMorningSlide} onRetry={morning.reload} />
         ) : activeSection === 'health' ? (
           lazyView('Checking home health', <HealthView onExpand={expandTile} />)
         ) : activeSection === 'maintenance' ? (

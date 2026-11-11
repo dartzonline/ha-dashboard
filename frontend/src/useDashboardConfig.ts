@@ -26,11 +26,18 @@ const FETCH_TIMEOUT_MS = 15_000
  * "World time"); tiles still come from the saved config.
  */
 function withCurrentLabels(saved: DashboardSection[]): DashboardSection[] {
-  return saved.map((section) => {
+  const merged = saved.map((section) => {
     if (editableSectionIds.has(section.id)) return section
     const current = defaultSections.find((item) => item.id === section.id)
     return current ? { ...section, label: current.label } : section
   })
+  // A page added in a later release is missing from a layout saved before it existed; put it where
+  // the defaults have it rather than leaving it unreachable.
+  defaultSections.forEach((section, index) => {
+    if (editableSectionIds.has(section.id) || merged.some((item) => item.id === section.id)) return
+    merged.splice(Math.min(index, merged.length), 0, section)
+  })
+  return merged
 }
 
 export function useDashboardConfig() {

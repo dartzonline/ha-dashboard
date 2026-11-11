@@ -1,0 +1,58 @@
+.morning-view { display: flex; flex-direction: column; gap: 14px; min-height: 100%; }
+.morning-panel { flex: 1; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.morning-view h3 { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; color: var(--muted); font-size: .8rem; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+
+.morning-sky { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px; padding: 18px 22px; border-radius: var(--r-lg); color: var(--accent-strong); }
+.morning-temps { display: flex; flex-direction: column; gap: 2px; color: var(--muted); font-size: .82rem; }
+.morning-temps strong { color: var(--text); font-size: 2.6rem; line-height: 1; font-weight: 750; }
+.morning-sun { display: grid; gap: 6px; justify-items: end; color: var(--text); font-size: .85rem; }
+.morning-sun span { display: inline-flex; align-items: center; gap: 6px; }
+.morning-sun small { color: var(--muted); font-size: .72rem; }
+
+.morning-advice { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.morning-advice li { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r-md); background: var(--surface-raised); }
+.morning-advice li > svg { flex-shrink: 0; margin-top: 2px; color: var(--accent-strong); }
+.morning-advice li.is-warning { border-left-color: var(--warn); }
+.morning-advice li.is-warning > svg { color: var(--warn); }
+.morning-advice li.is-critical { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface-raised)); }
+.morning-advice li.is-critical > svg { color: var(--danger); }
+.morning-advice strong { display: block; color: var(--text); font-size: .92rem; }
+.morning-advice p { margin: 4px 0 0; color: var(--muted); font-size: .8rem; line-height: 1.45; }
+
+.morning-quiet { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 2px; color: var(--muted); font-size: .85rem; }
+.morning-quiet svg { color: var(--good); }
+
+.morning-house { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: start; }
+.morning-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--r-lg); }
+.morning-card h3 { margin: 0; }
+.morning-journal { display: grid; margin: 0; padding: 0; list-style: none; }
+.morning-journal li { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; padding: 9px 0 9px 10px; border-left: 3px solid var(--border); font-size: .84rem; color: var(--text); }
+.morning-journal li + li { border-top: 1px solid var(--border); }
+.morning-journal li > svg { grid-row: span 2; margin-top: 2px; color: var(--muted); }
+.morning-journal li small { grid-column: 2; color: var(--muted); font-size: .74rem; }
+.morning-journal li.is-critical { border-left-color: var(--danger); }
+.morning-journal li.is-warning { border-left-color: var(--warn); }
+.morning-journal li.is-info { border-left-color: var(--accent); }
+
+.morning-days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.morning-day { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 8px; border-radius: var(--r-md); color: var(--muted); font-size: .8rem; }
+.morning-day svg { color: var(--accent-strong); }
+.morning-day strong { color: var(--text); font-size: 1.3rem; }
+.morning-countdown { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 0; color: var(--accent-strong); font-weight: 700; }
+
+.morning-pager { display: flex; justify-content: center; gap: 8px; }
+.morning-pager button { min-height: var(--tap); min-width: 88px; padding: 0 18px; color: var(--muted); font-size: .78rem; font-weight: 650; }
+.morning-pager button.is-active { color: var(--accent-ink); border-color: var(--accent); background-color: var(--accent); background-image: none; }
+
+/* ---- Forecast heads-up on the Home page ---- */
+.forecast-heads-up { display: flex; flex-wrap: wrap; gap: 8px; }
+.forecast-heads-up button { display: inline-flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 6px 14px; border-radius: var(--r-pill); border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--glass-bg)); color: var(--text); font-size: .8rem; font-weight: 650; text-align: left; }
+.forecast-heads-up button.is-critical { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 16%, var(--glass-bg)); }
+.forecast-heads-up button svg { flex-shrink: 0; color: var(--warn); }
+.forecast-heads-up button.is-critical svg { color: var(--danger); }
+
+@media (max-width: 760px) {
+  .morning-sky { grid-template-columns: auto 1fr; }
+  .morning-sun { grid-column: 1 / -1; justify-items: start; grid-auto-flow: column; justify-content: start; gap: 14px; }
+  .morning-pager button { min-width: 0; padding: 0 12px; }
+}

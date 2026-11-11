@@ -2,6 +2,11 @@ import type { DashboardSection } from './types'
 
 export const dashboardSections: DashboardSection[] = [
   {
+    id: 'morning',
+    label: 'Morning',
+    tiles: [],
+  },
+  {
     id: 'insights',
     label: 'Insights',
     tiles: [

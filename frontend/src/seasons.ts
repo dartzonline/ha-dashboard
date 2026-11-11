@@ -28,9 +28,11 @@ export interface SeasonalWeather {
   windX: number
   snowing: boolean
   raining: boolean
+  /** Home Assistant's condition word: 'rainy', 'fog', 'clear-night', 'lightning-rainy'… */
+  condition: string | null
 }
 
-const CALM: SeasonalWeather = { tempC: null, windKmh: 0, windX: 0, snowing: false, raining: false }
+const CALM: SeasonalWeather = { tempC: null, windKmh: 0, windX: 0, snowing: false, raining: false, condition: null }
 
 function toKmh(speed: number, unit: unknown): number {
   if (unit === 'mph') return speed * 1.609
@@ -56,5 +58,6 @@ export function seasonalWeather(entities: Map<string, HAEntity>): SeasonalWeathe
     windX,
     snowing: condition === 'snowy' || condition === 'snowy-rainy',
     raining: condition === 'rainy' || condition === 'pouring' || condition === 'lightning-rainy',
+    condition: condition || null,
   }
 }

@@ -3,6 +3,56 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.21.0 - 2026-11-10: Morning brief, forecast alerts, weather effects and a watchful house
+
+**A Morning page that runs itself.** From 5 to 11 am, rotation brings the new *Morning* page round
+first and again every half hour, stepping through three panels:
+- **Today:** a greeting, the high and low, the sky, sunrise and sunset, how the daylight is
+  changing, and what to do about today and tonight's weather.
+- **Around the house:** what happened overnight (what was left open or on, when and for how
+  long, and what house watch switched off), what needs attention right now, and the one-tap
+  *Turn off what's left on*.
+- **Ahead:** the next three days and anything worth preparing for, plus the Christmas countdown
+  in December.
+
+It stays in the sidebar the rest of the day. Layouts saved before this release pick up the new
+page on their own.
+
+**Forecast alerts that say what to do,** taken from the hourly forecast for today, tonight,
+tomorrow and the two days after:
+- **Wind:** windy (secure the patio furniture, trampoline and bins) and damaging winds.
+- **Leaves:** windy leaf days (the gutters will fill).
+- **Snow:** heavy snow (move the car, shovel and salt by the door) and light snow.
+- **Ice and cold:** freezing rain; hard freeze, freeze and frost (hoses, pipes, plants).
+- **Rain and storms:** heavy rain (gutters, windows, cushions), rain with its start time, and
+  thunderstorms.
+- **Heat and air:** hot and extreme heat (blinds, watering early, pets), muggy (dehumidifier),
+  very dry air, high UV, and morning fog.
+- **The pleasant ones:** a lovely evening to eat outside, a cool night to open the windows, a
+  good day to line-dry laundry, and much colder or warmer tomorrow.
+
+Warnings for today, tonight and tomorrow also appear at the top of the Home page; tap one to open
+the brief.
+
+**Weather effects all year, from the live weather.** Rain slants with the wind and splashes when
+it pours. Thunderstorms flash. Fog drifts, snow falls and hail bounces. Gusts streak across the
+screen. Sunny days get soft rays, with a heat shimmer when it is hot. Clear nights twinkle with
+stars and the odd shooting star, plus fireflies on summer nights. Clouds drift by, and spring
+blossom falls on dry days. Turn them off with *Weather effects* in Settings > Theme.
+
+**House watch notices much more:**
+- **After dark:** doors and windows open more than 30 minutes, the garage open more than 15
+  (critical), and locks unlocked more than 30 (critical).
+- **Rain:** windows open while it is raining.
+- **Away:** doors and windows open, the garage open, and heating or cooling an empty house.
+- **Daylight:** porch, patio and other outdoor lights on in daylight.
+- **Kitchen and fridge:** an oven or stove on more than an hour, and a fridge or freezer running
+  warm.
+- **Around the house:** laundry finished and waiting, and a bathroom fan left running.
+
+Outdoor lights and bath fans join *Turn off what's left on*. House watch keeps a 48-hour log of
+what it saw for the morning brief; the log starts over when the add-on restarts.
+
 ## 1.20.0 - 2026-11-10: Fall, seasons that change on their own, and a livelier Christmas
 
 **A new Fall theme for November.** Leaves tumble down in three depths, drift with the real wind
