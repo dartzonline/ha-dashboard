@@ -1,15 +1,15 @@
 .fall-scene { position: absolute; inset: 0; }
-.fall-sky { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 115%, rgba(232, 134, 42, .12), transparent 55%), radial-gradient(circle at 84% 12%, rgba(255, 200, 120, .08), transparent 30%); }
-.fall-moon { position: absolute; top: 4%; right: 26%; width: 90px; aspect-ratio: 1; border-radius: 50%; opacity: .2;
-  background: radial-gradient(circle at 38% 36%, #ffe2b0, #f2a057 62%, #c96f2b);
-  box-shadow: 0 0 60px 18px rgba(242, 160, 87, .35); animation: moon-breathe 12s ease-in-out infinite alternate; }
-@keyframes moon-breathe { from { opacity: .14; } to { opacity: .24; } }
+.fall-sky { position: absolute; inset: 0; background: radial-gradient(ellipse 70% 40% at 50% 110%, rgba(245, 138, 46, .10), transparent 70%), linear-gradient(180deg, rgba(255, 199, 146, .035), transparent 30%); }
+.fall-moon { position: absolute; top: 4%; right: 26%; width: 64px; aspect-ratio: 1; border-radius: 50%; opacity: .18;
+  background: radial-gradient(circle at 40% 38%, #fff1dc, #ffc792 58%, #f58a2e 100%);
+  box-shadow: 0 0 0 1px rgba(255, 199, 146, .35), 0 0 48px 10px rgba(245, 138, 46, .22); animation: moon-breathe 14s ease-in-out infinite alternate; }
+@keyframes moon-breathe { from { opacity: .14; } to { opacity: .22; } }
 
 /* ---- Leaves: three depths; the outer box falls and sways, the inner one tumbles in 3-D ---- */
 .leaf { position: absolute; top: -50px; left: var(--leaf-left); width: var(--leaf-size); animation: leaf-fall var(--leaf-duration) var(--leaf-delay) linear infinite; }
-.leaf-far { opacity: .45; filter: blur(1px) saturate(.8); }
-.leaf-mid { opacity: .75; }
-.leaf-near { opacity: .9; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .35)); }
+.leaf-far { opacity: .28; filter: blur(1.2px) saturate(.75); }
+.leaf-mid { opacity: .55; }
+.leaf-near { opacity: .78; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .4)); }
 .leaf-spin { display: block; animation: leaf-tumble var(--leaf-spin) linear infinite; }
 .leaf-art { display: block; width: 100%; overflow: visible; }
 @keyframes leaf-fall {
@@ -51,14 +51,9 @@
 }
 
 /* ---- Leaves piled along the bottom edge ---- */
-.fall-pile { position: absolute; left: 0; right: 0; bottom: 0; height: 60px; opacity: .8;
-  background:
-    radial-gradient(ellipse 180px 34px at 10% 100%, rgba(168, 64, 28, .7) 0 60%, transparent 63%),
-    radial-gradient(ellipse 240px 40px at 36% 100%, rgba(201, 111, 43, .6) 0 60%, transparent 63%),
-    radial-gradient(ellipse 200px 30px at 62% 100%, rgba(143, 59, 27, .7) 0 60%, transparent 63%),
-    radial-gradient(ellipse 230px 42px at 88% 100%, rgba(184, 134, 42, .6) 0 60%, transparent 63%);
-  mask-image: linear-gradient(0deg, #000 40%, transparent); }
-.fall-pile > span { position: absolute; display: block; }
+.fall-pile { position: absolute; left: 0; right: 0; bottom: 0; height: 64px;
+  background: linear-gradient(0deg, rgba(245, 138, 46, .12), rgba(245, 138, 46, .04) 45%, transparent); }
+.fall-pile > span { position: absolute; display: block; opacity: .62; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
 .is-stormy > .fall-pile { height: 74px; }
 
 /* ---- The visitor in the middle ---- */

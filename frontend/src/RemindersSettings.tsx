@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BellRing, Check, Send, Trash2 } from 'lucide-react'
+import { BellRing, Car, Check, Send, Trash2 } from 'lucide-react'
 import { apiUrl, responseError } from './api'
 import './RemindersSettings.css'
 
@@ -23,6 +23,14 @@ export interface NotificationSettings {
   quietEnd: string
 }
 
+export interface MorningRunSettings {
+  enabled: boolean
+  weekdays: number[]
+  start: string
+  end: string
+  vacuum: boolean
+}
+
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 /** "notify.mobile_app_pixel_8" reads as "Pixel 8". */
@@ -44,6 +52,7 @@ type Status = { tone: 'success' | 'error'; text: string } | null
 export function RemindersSettings() {
   const [bins, setBins] = useState<BinScheduleSettings | null>(null)
   const [notify, setNotify] = useState<NotificationSettings | null>(null)
+  const [run, setRun] = useState<MorningRunSettings | null>(null)
   const [targets, setTargets] = useState<string[] | null>(null)
   const [status, setStatus] = useState<Status>(null)
   const [busy, setBusy] = useState(false)
@@ -52,7 +61,11 @@ export function RemindersSettings() {
     const abort = new AbortController()
     fetch(apiUrl('config'), { signal: abort.signal })
       .then((response) => response.json())
-      .then((data: { binSchedule: BinScheduleSettings; notifications: NotificationSettings }) => { setBins(data.binSchedule); setNotify(data.notifications) })
+      .then((data: { binSchedule: BinScheduleSettings; notifications: NotificationSettings; morningRun?: MorningRunSettings }) => {
+        setBins(data.binSchedule)
+        setNotify(data.notifications)
+        setRun(data.morningRun ?? { enabled: true, weekdays: [0, 1, 2, 3, 4], start: '07:30', end: '09:45', vacuum: false })
+      })
       .catch(() => { if (!abort.signal.aborted) setStatus({ tone: 'error', text: 'Could not load reminder settings.' }) })
     fetch(apiUrl('notifications/targets'), { signal: abort.signal })
       .then((response) => (response.ok ? response.json() : { targets: [] }))
@@ -68,7 +81,7 @@ export function RemindersSettings() {
     try {
       const response = await fetch(apiUrl('config'), {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ binSchedule: bins, notifications: notify }),
+        body: JSON.stringify({ binSchedule: bins, notifications: notify, ...(run ? { morningRun: run } : {}) }),
       })
       if (!response.ok) throw await responseError(response, 'Save failed')
       setStatus({ tone: 'success', text: 'Reminders saved.' })
@@ -142,6 +155,32 @@ export function RemindersSettings() {
         Tap <strong>Bins are out</strong> to stop the reminders for that week.
       </p>
     </fieldset>
+
+    {run && <fieldset>
+      <legend><Car size={16} aria-hidden="true" /> Morning run</legend>
+      <label className="config-light-check">
+        <input type="checkbox" checked={run.enabled} onChange={(event) => setRun({ ...run, enabled: event.target.checked })} />
+        <span>Check the house when I head out in the morning</span>
+      </label>
+      <div className="reminders-weekdays" role="group" aria-label="Morning run days">
+        {WEEKDAYS.map((day, index) => <label key={day} className="config-light-check">
+          <input type="checkbox" checked={run.weekdays.includes(index)} onChange={(event) => setRun({ ...run, weekdays: event.target.checked ? [...run.weekdays, index].sort() : run.weekdays.filter((item) => item !== index) })} />
+          <span>{day.slice(0, 3)}</span>
+        </label>)}
+      </div>
+      <div className="reminders-grid">
+        <label><span>From</span><input type="time" value={run.start} onChange={(event) => setRun({ ...run, start: event.target.value })} /></label>
+        <label><span>Until</span><input type="time" value={run.end} onChange={(event) => setRun({ ...run, end: event.target.value })} /></label>
+      </div>
+      <label className="config-light-check">
+        <input type="checkbox" checked={run.vacuum} onChange={(event) => setRun({ ...run, vacuum: event.target.checked })} />
+        <span>Start the vacuum while I’m out</span>
+      </label>
+      <p className="config-hint">
+        The first time the garage opens in this window counts as leaving. While you’re out, the dashboard lists anything left
+        unlocked, open or on, and offers to secure the house. The vacuum only starts once the house has had no motion for ten minutes.
+      </p>
+    </fieldset>}
 
     <fieldset>
       <legend><BellRing size={16} aria-hidden="true" /> Phone notifications</legend>

@@ -183,7 +183,29 @@ def salt_status(states: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
     depth_entity = index.get("sensor.esphome_web_79cc76_salt_level")
     percent_entity = index.get("sensor.esphome_web_79cc76_salt_level_percent")
     if not depth_entity and not percent_entity:
+        # The sensor's entities vanish when its ESPHome device stops answering; anything else still
+        # named for salt (its automation, its network sensor) says there should be one.
+        if any("salt" in str(entity.get("entity_id", "")) for entity in index.values()):
+            return {
+                "depthCm": None, "reportedPercent": None, "percent": None, "fromDepth": False,
+                "sensorDisagrees": False, "sensorFault": True, "offline": True, "severity": "unknown",
+            }
         return None
+
+    # The depth reading is the real measurement. When it is missing, the percentage Home Assistant
+    # derives from it falls to 0% -- an empty tank that is not empty. Say the sensor is not reading.
+    # (A plausible percentage with the depth missing is still used, below.)
+    reported_now = _number((percent_entity or {}).get("state")) if percent_entity else None
+    if depth_entity is not None and depth_entity.get("state") in DEAD_STATES and (reported_now is None or reported_now <= 0):
+        return {
+            "depthCm": None,
+            "reportedPercent": None,
+            "percent": None,
+            "fromDepth": False,
+            "sensorDisagrees": False,
+            "sensorFault": True,
+            "severity": "unknown",
+        }
 
     depth_cm = _number((depth_entity or {}).get("state")) if depth_entity and depth_entity.get("state") not in DEAD_STATES else None
     reported = _number((percent_entity or {}).get("state")) if percent_entity and percent_entity.get("state") not in DEAD_STATES else None
@@ -205,6 +227,7 @@ def salt_status(states: Iterable[dict[str, Any]]) -> dict[str, Any] | None:
         "percent": round(percent, 1) if percent is not None else None,
         "fromDepth": from_depth is not None,
         "sensorDisagrees": disagrees,
+        "sensorFault": False,
         "severity": _severity((percent / 100) if percent is not None else None),
     }
 
@@ -375,3 +398,71 @@ def maintenance_summary(states: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "ok": sum(1 for item in items if item["severity"] == "ok"),
         },
     }
+
+
+REPLACE_AT = 0.15
+# Wear items that are cleaned rather than bought (a vacuum's cliff sensors, the dock strainer).
+CLEAN_ONLY_PARTS = ("sensor_time_left", "strainer")
+SALT_LOW_PERCENT = 25.0
+SALT_SOON_DAYS = 14.0
+
+
+def replace_now(states: Iterable[dict[str, Any]], salt_forecast: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Everything to replace, refill or check now: worn filters and brushes, salt, and a salt
+    sensor that has stopped reading. Each item names what to buy, for the shopping list."""
+    states = list(states)
+    items: list[dict[str, Any]] = []
+    for item in consumables(states):
+        fraction = item["fraction"]
+        if not item["overdue"] and (fraction is None or fraction > REPLACE_AT):
+            continue
+        name = str(item["name"])
+        detail = (
+            f"Overdue by {abs(item['remainingHours']):.0f} h" if item["overdue"] and item["remainingHours"] is not None
+            else f"{item['percent']:.0f}% left"
+        )
+        clean_only = any(part in str(item["entityId"]) for part in CLEAN_ONLY_PARTS)
+        items.append({
+            "id": item["entityId"],
+            "kind": "clean" if clean_only else "consumable",
+            "title": f"Clean: {_shopping_name(name)}" if clean_only else _shopping_name(name),
+            "detail": detail,
+            "severity": "critical" if item["overdue"] or (fraction is not None and fraction <= 0.05) else "warning",
+            "buy": None if clean_only else _shopping_name(name),
+        })
+
+    salt = salt_status(states)
+    if salt is not None:
+        if salt.get("sensorFault"):
+            items.append({
+                "id": "salt-sensor", "kind": "fault",
+                "title": "Salt sensor offline" if salt.get("offline") else "Salt sensor not reading",
+                "detail": (
+                    "Home Assistant has lost the softener's salt sensor. Check it has power and Wi-Fi."
+                    if salt.get("offline")
+                    else "The 0% is not real. Check the sensor in the softener lid is seated and pointing at the salt."
+                ),
+                "severity": "warning", "buy": None,
+            })
+        elif salt.get("percent") is not None and salt["percent"] <= SALT_LOW_PERCENT:
+            items.append({
+                "id": "salt", "kind": "salt", "title": "Water softener salt",
+                "detail": f"{salt['percent']:.0f}% left", "severity": "critical" if salt["percent"] <= 10 else "warning",
+                "buy": "Water softener salt",
+            })
+        elif salt_forecast and salt_forecast.get("daysToLow") is not None and salt_forecast["daysToLow"] <= SALT_SOON_DAYS:
+            items.append({
+                "id": "salt", "kind": "salt", "title": "Water softener salt",
+                "detail": f"Runs low in about {salt_forecast['daysToLow']:.0f} days (around {salt_forecast['lowOn']})",
+                "severity": "info", "buy": "Water softener salt",
+            })
+    order = {"critical": 0, "warning": 1, "info": 2}
+    items.sort(key=lambda entry: order.get(entry["severity"], 9))
+    return items
+
+
+def _shopping_name(name: str) -> str:
+    """"Dyson 3WF-US-UGF5956A Carbon Filter Life" reads better on a list as "Dyson Carbon Filter"."""
+    words = [word for word in name.replace("_", " ").split() if not any(char.isdigit() for char in word) or len(word) < 4]
+    cleaned = " ".join(word for word in words if word.lower() not in ("life", "time", "left", "remaining"))
+    return cleaned or name

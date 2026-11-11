@@ -3,6 +3,58 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.23.0 - 2026-11-11: Morning run, a working energy page, salt you can trust
+
+**Fixed: every multi-day chart showed one day, or nothing.** Home Assistant's history endpoint
+returns only the first 24 hours after the start unless an end time is given, and the dashboard
+never gave one. A 30-day request came back as a single day from a month ago, and as nothing once
+that was past the recorder's retention. Every request now covers the whole window.
+
+**The Energy page works.** It now reads the SmartHub whole-home meter: about $74 so far this month
+against $3.43 before. The top row shows whole-home yesterday and this month, with the tracked
+appliances in their own card. Bills use the actual tariff: $0.1091/kWh (delivery $0.022546 +
+transmission $0.020688 + base power $0.0659) plus the $32.50 monthly service charge, prorated so
+far and in full for the projection. Both are editable on the page.
+
+**Morning run.** Weekdays from 7:30 to 9:45 (set in Settings > Reminders):
+- **Before you leave:** a card on Home and the Morning page checks rain, jacket weather, whether
+  the car is locked, car doors and windows, and range.
+- **The departure:** the first time the garage opens.
+- **While you're out:** the card lists anything left unlocked, open or on. *Secure the house*
+  locks the house doors and switches off lights and media, after a confirm, and never touches
+  the car or the toddler's sound machine. Phones hear about it after five minutes if
+  notifications are on.
+- **Vacuum:** optionally starts once you're out and the house has had no motion for ten minutes.
+
+**Replace now.** Worn filters and brushes, cleaning jobs that are overdue, salt, and a faulty
+salt sensor, in one list on the Maintenance and Morning pages. *Add to list* puts the refill on
+the Home Assistant shopping list.
+
+**Salt you can trust.** The salt sensor stopped reading on November 1, and Home Assistant turned
+"no reading" into 0%, so the refill was never noticed. The dashboard now says the sensor is not
+reading, or offline, instead of showing an empty tank. Once it reads again, it logs a level every
+six hours and notices refills. It works out how fast salt is used and warns (and notifies) about
+ten days before the tank reaches 20%.
+
+**House watch:**
+- **Presence:** any motion in the last hour means someone is home, whatever the phones say, so
+  the away rules stop firing while people are in the house.
+- **Car:** the car's lock is no longer treated as a house door. An unlocked car is only flagged
+  when the garage is open after dark (critical). The garage open after dark on its own stays
+  critical.
+- **Pantry light:** switched off once the pantry door has been left open ten minutes.
+
+**A sharper, calmer Fall.** Crisper contrast and a deeper, cleaner palette with a burnt-orange
+accent. There are fewer and quieter leaves, a soft amber ground glow in place of the leaf pile,
+and a smaller, crisper harvest moon.
+
+**Taps are a surprise again.** Popping a visitor now picks one of five reactions at random:
+- the burst
+- a swirling vortex
+- a shower (acorns, ornaments or candy that tumble down)
+- glowing ripples
+- a critter that runs off: a squirrel, a snow bunny or a bat
+
 ## 1.22.0 - 2026-11-10: Bin night, phone notifications, plant care and a weekly report
 
 **Bin night reminders.** Trash goes out every Thursday and recycling every other Thursday: this

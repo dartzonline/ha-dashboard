@@ -57,6 +57,22 @@ class NotificationsPayload(BaseModel):
         return list(dict.fromkeys(value))
 
 
+class MorningRunPayload(BaseModel):
+    enabled: bool = True
+    # Monday is 0.
+    weekdays: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4])
+    start: str = Field(default="07:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    end: str = Field(default="09:45", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    vacuum: bool = False
+
+    @field_validator("weekdays")
+    @classmethod
+    def _weekdays(cls, value: list[int]) -> list[int]:
+        if any(day < 0 or day > 6 for day in value):
+            raise ValueError("Weekdays run from 0 (Monday) to 6 (Sunday)")
+        return sorted(set(value))
+
+
 class DashboardConfigPayload(BaseModel):
     sections: list[DashboardSection] | None = None
     # Night Mode only ever calls `light.turn_off` on these, so anything that is not a `light.`
@@ -66,6 +82,8 @@ class DashboardConfigPayload(BaseModel):
     # A negative or NaN rate would render as a nonsense bill; `allow_inf_nan=False` is what turns
     # a JSON `NaN` (which Python's parser accepts) into a 422 rather than a stored poison value.
     energyRatePerKwh: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    # The utility's fixed monthly charge (service availability), billed whatever the usage.
+    energyFixedMonthly: float | None = Field(default=None, ge=0, le=1000, allow_inf_nan=False)
     # Entities the household has explicitly declined from the "New devices" tray, so discovery
     # (docs/auto-entity-discovery.md) stops re-proposing them every session.
     ignoredEntityIds: list[str] | None = None
@@ -75,6 +93,7 @@ class DashboardConfigPayload(BaseModel):
     lightAutoOffMinutes: int | None = Field(default=None, ge=1, le=24 * 60)
     lightAutoOffExcludedIds: list[str] | None = None
     binSchedule: BinSchedulePayload | None = None
+    morningRun: MorningRunPayload | None = None
     notifications: NotificationsPayload | None = None
 
     @field_validator("nightModeIndoorLights")

@@ -13,12 +13,20 @@ interface EnergyViewProps {
   entities: Map<string, HAEntity>
   ratePerKwh: number
   onSaveRate: (rate: number) => Promise<void>
+  /** The utility's fixed monthly charge, billed whatever the usage. */
+  fixedMonthly?: number
+  onSaveFixed?: (amount: number) => Promise<void>
 }
 
 const DAILY_TREND_DAYS = 14
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value)
+}
+
+/** Per-kWh rates are fractions of a cent apart; $0.109134 should not read as $0.11. */
+function formatRate(value: number) {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(value)
 }
 
 function daysInCurrentMonth() {
@@ -92,10 +100,12 @@ const DailyChart = memo(function DailyChart({ data, ratePerKwh }: { data: { labe
   )
 })
 
-export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps) {
+export function EnergyView({ entities, ratePerKwh, onSaveRate, fixedMonthly = 0, onSaveFixed }: EnergyViewProps) {
   const { devices, wholeHome, daily, loading, isEmpty } = useEnergy(entities)
   const [editingRate, setEditingRate] = useState(false)
   const [rateDraft, setRateDraft] = useState(String(ratePerKwh))
+  const [editingFixed, setEditingFixed] = useState(false)
+  const [fixedDraft, setFixedDraft] = useState(String(fixedMonthly))
 
   const totals = useMemo(() => {
     const hasYesterday = devices.some((device) => device.yesterdayKWh !== null)
@@ -118,6 +128,15 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
 
   const stats = useMemo(() => {
     const cards: StatCard[] = []
+    // With a whole-home meter, the headline numbers are the house's; the per-device sensors cover
+    // only a couple of appliances and once read as if they were the whole bill.
+    if (wholeHome && (wholeHome.yesterdayKWh !== null || wholeHome.thisMonthKWh !== null)) {
+      if (wholeHome.yesterdayKWh !== null) cards.push({ label: 'Whole home yesterday', value: formatKWh(wholeHome.yesterdayKWh) })
+      if (wholeHome.thisMonthKWh !== null) cards.push({ label: 'Whole home this month', value: formatKWh(wholeHome.thisMonthKWh) })
+      if (totals.thisMonth !== null) cards.push({ label: devices.length === 1 ? `${devices[0].name} this month` : 'Tracked appliances this month', value: formatKWh(totals.thisMonth) })
+      if (wholeHome.lastMonthKWh !== null) cards.push({ label: 'Whole home last month', value: formatKWh(wholeHome.lastMonthKWh) })
+      return cards
+    }
     if (totals.yesterday !== null) cards.push({ label: 'Yesterday total', value: formatKWh(totals.yesterday) })
     if (totals.thisMonth !== null) cards.push({ label: 'This month total', value: formatKWh(totals.thisMonth) })
     if (totals.lastMonth !== null) cards.push({ label: 'Last month total', value: formatKWh(totals.lastMonth) })
@@ -130,7 +149,7 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
       })
     }
     return cards
-  }, [totals])
+  }, [totals, wholeHome, devices])
 
   /**
    * Bill so far this month. The whole-home meter is preferred when present because it already
@@ -144,18 +163,20 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
 
     const dayOfMonth = new Date().getDate()
     const monthLength = daysInCurrentMonth()
-    const cost = kWh * ratePerKwh
+    const energyCost = kWh * ratePerKwh
+    // The fixed charge accrues through the month for "so far", and lands whole on the projection.
+    const fixedSoFar = (fixedMonthly * dayOfMonth) / monthLength
     return {
       kWh,
-      cost,
+      cost: energyCost + fixedSoFar,
       // Straight-line projection from the month-to-date average; deliberately simple, and labelled
       // as an estimate rather than a forecast.
-      projected: dayOfMonth > 0 ? (cost / dayOfMonth) * monthLength : cost,
+      projected: (dayOfMonth > 0 ? (energyCost / dayOfMonth) * monthLength : energyCost) + fixedMonthly,
       wholeHomeBased: wholeHomeMonth !== null,
       dayOfMonth,
       monthLength,
     }
-  }, [ratePerKwh, totals.thisMonth, wholeHome])
+  }, [ratePerKwh, fixedMonthly, totals.thisMonth, wholeHome])
 
   const dailyTrend = useMemo(() => daily.slice(-DAILY_TREND_DAYS).map((entry) => ({
     label: shortDay(entry.day),
@@ -178,6 +199,20 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
       await onSaveRate(parsed)
     } catch {
       setRateDraft(String(ratePerKwh))
+    }
+  }
+
+  async function commitFixed() {
+    const parsed = Number(fixedDraft)
+    setEditingFixed(false)
+    if (!onSaveFixed || !Number.isFinite(parsed) || parsed < 0 || parsed === fixedMonthly) {
+      setFixedDraft(String(fixedMonthly))
+      return
+    }
+    try {
+      await onSaveFixed(parsed)
+    } catch {
+      setFixedDraft(String(fixedMonthly))
     }
   }
 
@@ -221,7 +256,7 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
             <strong>{bill ? formatMoney(bill.cost) : '--'}</strong>
             <small>
               {bill
-                ? `${formatKWh(bill.kWh)} this month · day ${bill.dayOfMonth} of ${bill.monthLength}${bill.wholeHomeBased ? '' : ' · tracked devices only'}`
+                ? `${formatKWh(bill.kWh)} this month · day ${bill.dayOfMonth} of ${bill.monthLength}${fixedMonthly > 0 ? ` · incl. ${formatMoney(fixedMonthly)}/mo service charge` : ''}${bill.wholeHomeBased ? '' : ' · tracked devices only'}`
                 : 'Waiting for this month’s usage'}
             </small>
           </div>
@@ -253,14 +288,44 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate }: EnergyViewProps
                 className="energy-rate-value"
                 onClick={() => { setRateDraft(String(ratePerKwh)); setEditingRate(true) }}
                 title="Edit the cost per kWh"
-                aria-label={`Rate ${formatMoney(ratePerKwh)} per kWh, edit`}
+                aria-label={`Rate ${formatRate(ratePerKwh)} per kWh, edit`}
               >
-                <strong>{formatMoney(ratePerKwh)}</strong>
+                <strong>{formatRate(ratePerKwh)}</strong>
                 <small>/kWh</small>
                 <Pencil size={13} aria-hidden="true" />
               </button>
             )}
           </div>
+          {onSaveFixed && <div className="energy-rate">
+            <span>Monthly charge</span>
+            {editingFixed ? (
+              <span className="energy-rate-edit">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  autoFocus
+                  value={fixedDraft}
+                  aria-label="Fixed monthly charge"
+                  onChange={(event) => setFixedDraft(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') void commitFixed() }}
+                />
+                <button type="button" className="glass-pill" onClick={() => void commitFixed()} title="Save monthly charge" aria-label="Save monthly charge"><Check size={16} /></button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="energy-rate-value"
+                onClick={() => { setFixedDraft(String(fixedMonthly)); setEditingFixed(true) }}
+                title="Edit the fixed monthly charge"
+                aria-label={`Monthly charge ${formatMoney(fixedMonthly)}, edit`}
+              >
+                <strong>{formatMoney(fixedMonthly)}</strong>
+                <small>/mo</small>
+                <Pencil size={13} aria-hidden="true" />
+              </button>
+            )}
+          </div>}
         </div>
       </div>
 

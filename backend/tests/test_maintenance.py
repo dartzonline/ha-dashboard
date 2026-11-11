@@ -449,6 +449,21 @@ class TestSaltStatus:
         assert status["fromDepth"] is False
         assert status["severity"] == "unknown"
 
+    def test_a_dead_depth_sensor_with_zero_percent_is_a_sensor_fault_not_an_empty_tank(self):
+        """On this install the percentage is computed from the depth; when the depth stopped
+        reading on 1 Nov the percentage fell to 0% and stayed there through a refill."""
+        status = maintenance.salt_status(salt(depth="unknown", reported=0))
+        assert status["sensorFault"] is True
+        assert status["percent"] is None
+        [item] = [entry for entry in maintenance.replace_now(salt(depth="unknown", reported=0)) if entry["id"] == "salt-sensor"]
+        assert item["buy"] is None
+
+    def test_a_salt_sensor_that_dropped_out_of_home_assistant_is_reported_offline(self):
+        states = [{"entity_id": "automation.salt_alert", "state": "unavailable", "attributes": {}}]
+        assert maintenance.salt_status(states)["offline"] is True
+        [item] = maintenance.replace_now(states)
+        assert item["title"] == "Salt sensor offline"
+
     def test_a_dead_depth_sensor_falls_back_to_the_percentage(self):
         status = maintenance.salt_status(salt(depth="unavailable", reported=65))
         assert status["percent"] == 65.0

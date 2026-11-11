@@ -6,15 +6,16 @@ import './FallScene.css'
 
 export { fallVisitors } from './fallArt'
 
+// Fewer, quieter leaves read as autumn without competing with the dashboard's own content.
 const LEAF_LAYERS = [
-  { name: 'far', count: 10, size: [14, 20], duration: [20, 28] },
-  { name: 'mid', count: 10, size: [22, 30], duration: [14, 20] },
-  { name: 'near', count: 6, size: [32, 44], duration: [10, 14] },
+  { name: 'far', count: 8, size: [12, 18], duration: [22, 30] },
+  { name: 'mid', count: 7, size: [20, 26], duration: [16, 22] },
+  { name: 'near', count: 4, size: [28, 36], duration: [12, 16] },
 ] as const
 /** Shown for Blizzard intensity, or when the forecast wind is strong enough to strip the trees. */
 const EXTRA_LEAVES = 16
 const GUST_LEAVES = 9
-const PILE_LEAVES = 14
+const PILE_LEAVES = 9
 const WINDY_KMH = 25
 
 const between = (range: readonly [number, number], t: number) => range[0] + (range[1] - range[0]) * t

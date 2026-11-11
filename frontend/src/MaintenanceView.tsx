@@ -3,6 +3,7 @@ import {
   AlertTriangle, CheckCircle2, Download, ExternalLink, Filter, Gauge, Warehouse, Waves, WashingMachine, Wrench,
 } from 'lucide-react'
 import { cachedJson, invalidate, isAbortError } from './cachedFetch'
+import { ReplaceNow, type ReplaceItem } from './ReplaceNow'
 import type { TileConfig } from './types'
 import { PageFrame } from './ui/PageFrame'
 import type { Tone } from './ui/PageFrame'
@@ -28,7 +29,20 @@ interface Salt {
   percent: number | null
   fromDepth: boolean
   sensorDisagrees: boolean
+  /** The depth sensor is not reading, so the percentage it feeds is meaningless. */
+  sensorFault?: boolean
+  /** The sensor has dropped out of Home Assistant entirely. */
+  offline?: boolean
   severity: Severity
+}
+
+interface SaltForecast {
+  percent: number | null
+  perDay: number | null
+  daysToLow: number | null
+  lowOn: string | null
+  lastRefill: string | null
+  refilledTo: number | null
 }
 
 interface Garage {
@@ -73,6 +87,8 @@ interface MaintenancePayload {
   appliances: Appliance[]
   updates: SoftwareUpdate[]
   counts: { critical: number; warning: number; ok: number }
+  saltForecast?: SaltForecast
+  replaceNow?: ReplaceItem[]
 }
 
 interface MaintenanceViewProps {
@@ -278,6 +294,8 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
         </ul>
       )}
 
+      {payload?.replaceNow && payload.replaceNow.length > 0 && <ReplaceNow items={payload.replaceNow} />}
+
       {payload && payload.faults.length > 0 && (
         <ul className="maint-list glass tone-danger">
           {payload.faults.map((fault) => (
@@ -344,12 +362,27 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
             <section className={`maint-panel glass tone-${SEVERITY_TONE[payload.salt.severity]} is-${payload.salt.severity}`} aria-label="Water softener salt">
               <header className="maint-panel-head">
                 <h3><Waves size={14} aria-hidden="true" />Water softener salt</h3>
-                {severityWord(payload.salt.severity, false) && <span className="maint-status">{payload.salt.severity === 'critical' ? 'Refill now' : 'Refill soon'}</span>}
+                {payload.salt.sensorFault
+                  ? <span className="maint-status">{payload.salt.offline ? 'Sensor offline' : 'Sensor not reading'}</span>
+                  : severityWord(payload.salt.severity, false) && <span className="maint-status">{payload.salt.severity === 'critical' ? 'Refill now' : 'Refill soon'}</span>}
               </header>
               <div className="maint-figure">
                 <strong>{payload.salt.percent === null ? '—' : `${Math.round(payload.salt.percent)}%`}</strong>
-                <small>{payload.salt.depthCm !== null ? `${payload.salt.depthCm} cm to surface` : 'Depth unavailable'}</small>
+                <small>{payload.salt.sensorFault ? 'No depth reading' : payload.salt.depthCm !== null ? `${payload.salt.depthCm} cm to surface` : 'Depth unavailable'}</small>
               </div>
+              {payload.salt.sensorFault && (
+                <p className="maint-warn">
+                  {payload.salt.offline
+                    ? 'Home Assistant has lost the softener’s salt sensor. Check it has power and is on Wi-Fi.'
+                    : 'The depth sensor stopped reading, so the tank’s own 0% is not real — a refill would not show. Check the sensor in the softener lid is seated and pointing straight down at the salt.'}
+                </p>
+              )}
+              {!payload.salt.sensorFault && payload.saltForecast?.daysToLow != null && (
+                <p className="maint-note">
+                  Using about {payload.saltForecast.perDay}% a day; reaches 20% around {payload.saltForecast.lowOn}
+                  {payload.saltForecast.lastRefill ? ` · refilled to ${Math.round(payload.saltForecast.refilledTo ?? 0)}% on ${new Date(payload.saltForecast.lastRefill).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : ''}.
+                </p>
+              )}
               <span className="maint-bar-track is-wide glass-inset" role="presentation">
                 <i style={{ width: `${Math.max(1, payload.salt.percent ?? 0)}%` }} />
               </span>
@@ -365,6 +398,7 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
               <button
                 type="button"
                 className="maint-link glass-pill"
+                disabled={payload.salt.offline}
                 onClick={() => open('sensor.esphome_web_79cc76_salt_level', 'Salt depth', 'waves')}
               >
                 Open depth history

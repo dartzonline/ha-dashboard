@@ -497,3 +497,63 @@ class TestJournalPersistence:
             assert reloaded.actions[0]["service"] == "light.turn_off"
 
         run(scenario())
+
+
+class TestPresenceNeedsStillness:
+    def test_recent_motion_means_someone_is_home_whatever_the_phone_says(self):
+        """The phone's location only updates while the app is open, so it said "away" while
+        the main-floor motion sensor was on."""
+        states = [
+            row("person.alex", "not_home", changed_ago=3 * HOUR),
+            row("binary_sensor.main_floor_motion", "on", changed_ago=2 * MINUTE, device_class="motion"),
+            row("binary_sensor.back_door", "on", changed_ago=2 * HOUR, device_class="door"),
+            row("climate.main", "cool", hvac_action="cooling"),
+        ]
+        rules = {item.rule for item in house_watch.findings(states, BASE)}
+        assert "open_while_away" not in rules and "hvac_empty_house" not in rules
+
+    def test_an_hour_of_stillness_lets_away_rules_apply_again(self):
+        states = [
+            row("person.alex", "not_home", changed_ago=3 * HOUR),
+            row("binary_sensor.living_room_occupancy", "off", changed_ago=90 * MINUTE, device_class="occupancy"),
+            row("binary_sensor.back_door", "on", changed_ago=2 * HOUR, device_class="door"),
+        ]
+        assert any(item.rule == "open_while_away" for item in house_watch.findings(states, BASE))
+
+
+class TestCarAndGarage:
+    def test_unlocked_car_in_a_closed_garage_is_fine(self):
+        states = [sun("below_horizon", 3 * HOUR), row("lock.volvo_xc60_lock", "unlocked", changed_ago=5 * HOUR, name="Volvo XC60 Lock"),
+                  row("cover.garage_door", "closed", changed_ago=5 * HOUR)]
+        assert house_watch.findings(states, BASE) == []
+
+    def test_unlocked_car_with_the_garage_open_after_dark_is_critical(self):
+        states = [sun("below_horizon", 3 * HOUR), row("lock.volvo_xc60_lock", "unlocked", changed_ago=5 * HOUR, name="Volvo XC60 Lock"),
+                  row("cover.garage_door", "open", changed_ago=5 * MINUTE)]
+        rules = {item.rule: item for item in house_watch.findings(states, BASE)}
+        assert rules["car_unlocked_garage_open"].severity == "critical"
+        assert "lock_unlocked" not in rules
+
+    def test_garage_open_after_dark_on_its_own_is_still_critical(self):
+        states = [sun("below_horizon", 3 * HOUR), row("cover.garage_door", "open", changed_ago=20 * MINUTE)]
+        [finding] = house_watch.findings(states, BASE)
+        assert finding.severity == "critical"
+
+
+class TestPantryLight:
+    def test_light_switched_off_ten_minutes_after_the_door_is_left_open(self):
+        light = row("light.smart_wi_fi_switch_2", "on", changed_ago=12 * MINUTE, name="pantry light")
+        door = row("binary_sensor.kitchen_pantry_door_door", "on", changed_ago=12 * MINUTE, device_class="door", name="pantry door Door")
+        [finding] = house_watch.findings([light, door], BASE)
+        assert finding.rule == "door_lit_room"
+        assert house_watch.due_actions([light, door], BASE) == [("light", "turn_off", "light.smart_wi_fi_switch_2")]
+
+    def test_a_quick_trip_into_the_pantry_is_left_alone(self):
+        light = row("light.smart_wi_fi_switch_2", "on", changed_ago=3 * MINUTE, name="pantry light")
+        door = row("binary_sensor.kitchen_pantry_door_door", "on", changed_ago=3 * MINUTE, device_class="door", name="pantry door Door")
+        assert house_watch.due_actions([light, door], BASE) == []
+
+    def test_door_closed_means_nothing_to_do(self):
+        light = row("light.smart_wi_fi_switch_2", "on", changed_ago=30 * MINUTE, name="pantry light")
+        door = row("binary_sensor.kitchen_pantry_door_door", "off", changed_ago=29 * MINUTE, device_class="door", name="pantry door Door")
+        assert all(item.rule != "door_lit_room" for item in house_watch.findings([light, door], BASE))

@@ -360,3 +360,75 @@ class TestRemindersAndNotifications:
 
     def test_test_notification_needs_a_target(self, isolated_config):
         assert client.post("/api/notifications/test", json={"targets": []}).status_code == 400
+
+
+class _SecureClient(FakeClient):
+    calls: list = []
+
+    async def states(self):
+        return [{"entity_id": "lock.front_door", "state": "unlocked", "attributes": {"friendly_name": "Front Door"}},
+                {"entity_id": "lock.volvo_xc60_lock", "state": "unlocked", "attributes": {"friendly_name": "Volvo XC60 Lock"}},
+                {"entity_id": "light.kitchen", "state": "on", "attributes": {}},
+                {"entity_id": "todo.shopping_list", "state": "0", "attributes": {}}]
+
+    async def call_service(self, domain, service, data):
+        _SecureClient.calls.append((domain, service, data))
+        return []
+
+
+class TestSecureHouseAndShopping:
+    def setup_method(self):
+        _SecureClient.calls = []
+        app.dependency_overrides[get_client] = _SecureClient
+
+    def teardown_method(self):
+        app.dependency_overrides[get_client] = FakeClient
+
+    def test_secure_house_needs_confirmation_and_never_touches_the_car(self):
+        assert client.post("/api/actions/secure-house", json={}).status_code == 400
+        body = client.post("/api/actions/secure-house", json={"confirm": True}).json()
+        assert sorted(body["secured"]) == ["light.kitchen", "lock.front_door"]
+        assert ("lock", "lock", {"entity_id": ["lock.front_door"]}) in _SecureClient.calls
+
+    def test_adds_one_item_to_the_shopping_list(self):
+        body = client.post("/api/actions/shopping-list", json={"item": "Dyson Carbon Filter"}).json()
+        assert body == {"status": "added", "list": "todo.shopping_list", "item": "Dyson Carbon Filter"}
+        assert _SecureClient.calls == [("todo", "add_item", {"entity_id": "todo.shopping_list", "item": "Dyson Carbon Filter"})]
+
+
+def test_fixed_monthly_charge_defaults_to_the_tariff_and_saves(isolated_config, monkeypatch):
+    # The add-on entrypoint test leaves ENERGY_RATE_PER_KWH set in the process environment.
+    monkeypatch.delenv("ENERGY_RATE_PER_KWH", raising=False)
+    monkeypatch.delenv("ENERGY_FIXED_MONTHLY", raising=False)
+    config = client.get("/api/config").json()
+    assert config["energyRatePerKwh"] == 0.109134
+    assert config["energyFixedMonthly"] == 32.5
+    assert client.put("/api/config", json={"energyFixedMonthly": 30}).json()["energyFixedMonthly"] == 30
+    assert client.put("/api/config", json={"energyFixedMonthly": -1}).status_code == 422
+
+
+def test_history_asks_for_the_whole_window():
+    """Without an end_time Home Assistant returns only the first day after the start."""
+    import asyncio as _asyncio
+
+    from app.ha_client import HomeAssistantClient
+    from app.config import Settings
+
+    seen = {}
+
+    class _Recorder:
+        async def get(self, path, params=None):
+            seen["params"] = params
+
+            class _Response:
+                def raise_for_status(self):
+                    return None
+
+                def json(self):
+                    return []
+            return _Response()
+
+    ha = HomeAssistantClient(Settings(ha_url="http://ha", ha_token="t", cors_origins=()))
+    ha.client = _Recorder()
+    _asyncio.run(ha.history_many(["sensor.x"], hours=720))
+    assert "end_time" in seen["params"]
