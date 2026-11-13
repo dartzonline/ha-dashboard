@@ -1,0 +1,21 @@
+.car-week { display: flex; flex-direction: column; gap: 10px; }
+.car-week .volvo-card-head { margin-bottom: 0; }
+.car-week-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.car-week-stats > div { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-raised); }
+.car-week-stats em { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .72rem; font-style: normal; font-weight: 650; text-transform: uppercase; letter-spacing: .02em; }
+.car-week-stats em svg { color: var(--accent-strong); }
+.car-week-stats b { color: var(--text); font-size: 1.45rem; line-height: 1.1; font-weight: 750; }
+.car-week-stats small { color: var(--muted); font-size: .74rem; }
+.car-week-meter { position: relative; display: block; height: 6px; margin-top: 4px; border-radius: 99px; background: color-mix(in srgb, var(--muted) 22%, transparent); overflow: hidden; }
+.car-week-meter > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--good); }
+.car-week-note { margin: 0; color: var(--muted); font-size: .8rem; }
+.car-week-sessions { display: grid; margin: 0; padding: 0; list-style: none; font-size: .8rem; }
+.car-week-sessions li { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto auto; gap: 12px; align-items: baseline; padding: 7px 0; color: var(--text); }
+.car-week-sessions li + li { border-top: 1px solid var(--border); }
+.car-week-sessions li span:nth-child(2), .car-week-sessions li span:nth-child(3) { color: var(--muted); }
+.car-week-foot { margin: 0; color: var(--muted); font-size: .7rem; }
+
+@media (max-width: 560px) {
+  .car-week-sessions li { grid-template-columns: minmax(0, 1fr) auto; }
+  .car-week-sessions li span:nth-child(3) { display: none; }
+}

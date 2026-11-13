@@ -79,9 +79,11 @@ interface MorningViewProps {
   onRetry: () => void
   /** The live morning-run card, shown at the top of Today while a run is on. */
   run?: ReactNode
+  /** When the car leaves, its charge by then, and a warm-up on cold mornings. */
+  car?: ReactNode
 }
 
-export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry, run }: MorningViewProps) {
+export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry, run, car }: MorningViewProps) {
   const sky = skyFor(brief?.today?.weatherCode ?? null)
   const overnight = brief ? overnightEntries(brief.journal, now) : []
   const nightStart = new Date(now)
@@ -110,6 +112,7 @@ export function MorningView({ brief, failed, now, slide, onSelectSlide, onRetry,
     {brief && <div className="morning-panel" role="tabpanel" id="morning-panel" aria-labelledby={`morning-tab-${slide}`}>
       {slide === 0 && <div className="morning-today">
         {run}
+        {car}
         {brief.today ? <div className="morning-sky glass">
           <sky.Icon size={54} aria-hidden="true" />
           <div className="morning-temps">

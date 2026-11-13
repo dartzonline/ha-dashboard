@@ -497,3 +497,132 @@ def await_states(fake):
     import asyncio as _asyncio
 
     return _asyncio.run(fake.states())
+
+
+class _CarRoomsClient(FakeClient):
+    """A plug-in car with a day of charging, and two rooms beside a thermostat."""
+
+    async def config(self):
+        return {"time_zone": "America/Chicago", "unit_system": {"temperature": "°F", "length": "mi"}}
+
+    async def states(self):
+        def temp(entity_id, name, state):
+            return {"entity_id": entity_id, "state": state, "attributes": {"friendly_name": name, "device_class": "temperature", "unit_of_measurement": "°F"}}
+
+        return [
+            {"entity_id": "sensor.volvo_xc60_battery", "state": "100", "attributes": {"device_class": "battery"}},
+            {"entity_id": "sensor.volvo_xc60_charging_connection_status", "state": "connected", "attributes": {}},
+            {"entity_id": "sensor.volvo_xc60_battery_capacity", "state": "18.8", "attributes": {}},
+            {"entity_id": "sensor.volvo_xc60_odometer", "state": "1000", "attributes": {}},
+            temp("sensor.den_thermostat_temperature", "Den Thermostat Temperature", "71"),
+            temp("sensor.office_temperature", "Office Temperature", "66"),
+            temp("sensor.nursery_temperature", "Nursery Temperature", "71"),
+            {"entity_id": "climate.den", "state": "cool", "attributes": {}},
+        ]
+
+    async def history_many(self, entity_ids, hours=24):
+        import time as _time
+
+        start = _time.time() - 3 * 86400
+        rows = {
+            "sensor.volvo_xc60_battery": [str(level) for level in range(20, 101, 10)],
+            "sensor.volvo_xc60_charging_connection_status": ["connected"],
+            "sensor.volvo_xc60_odometer": ["1000"],
+            "sensor.den_thermostat_temperature": ["71", "71.2"] * 30,
+            "sensor.office_temperature": ["66", "66.2"] * 30,
+            "sensor.nursery_temperature": ["71", "71.3"] * 30,
+        }
+        # Home Assistant leaves out entities with no history and names each only on its first row.
+        return [
+            [{"entity_id": entity_id, "state": rows[entity_id][0], "last_changed": _iso(start)}]
+            + [{"state": state, "last_changed": _iso(start + (i + 1) * 3600)} for i, state in enumerate(rows[entity_id][1:])]
+            for entity_id in reversed(entity_ids) if entity_id in rows
+        ]
+
+
+def _iso(stamp):
+    from datetime import datetime as _dt, timezone as _tz
+
+    return _dt.fromtimestamp(stamp, _tz.utc).isoformat()
+
+
+def test_car_and_room_insights_endpoints():
+    from app import slow_cache
+
+    slow_cache.clear()
+    app.dependency_overrides[get_client] = _CarRoomsClient
+    try:
+        car = client.get("/api/insights/car").json()
+        assert car["available"] is True and car["charges"] == 1 and car["kwh"] > 0
+        rooms = client.get("/api/insights/rooms").json()
+        by_label = {room["label"]: room for room in rooms["rooms"]}
+        assert by_label["Office"]["status"] == "cool" and by_label["Nursery"]["status"] == "balanced"
+        assert rooms["reference"]["label"] == "Den Thermostat"
+    finally:
+        app.dependency_overrides[get_client] = FakeClient
+        slow_cache.clear()
+
+
+def test_car_insight_without_a_car():
+    from app import slow_cache
+
+    slow_cache.clear()
+    assert client.get("/api/insights/car").json() == {"available": False}
+
+
+class _ApplianceClient(FakeClient):
+    """A thermostat with a cooling afternoon, a fridge energy meter and a garage door."""
+
+    async def config(self):
+        return {"time_zone": "America/Chicago", "unit_system": {"temperature": "°F"}}
+
+    async def states(self):
+        return [
+            {"entity_id": "climate.hall", "state": "cool", "attributes": {"hvac_action": "idle"}},
+            {"entity_id": "sensor.refrigerator_energy_this_month", "state": "20000",
+             "attributes": {"device_class": "energy", "unit_of_measurement": "Wh", "friendly_name": "Refrigerator Energy"}},
+            {"entity_id": "sensor.outdoor_temperature", "state": "70", "attributes": {"device_class": "temperature", "unit_of_measurement": "°F"}},
+        ]
+
+    async def history_with_attributes(self, entity_id, hours=24):
+        import time as _time
+
+        yesterday_noon = (_time.time() // 86400 - 1) * 86400 + 18 * 3600
+        return [[
+            {"state": "cool", "last_changed": _iso(yesterday_noon), "attributes": {"hvac_action": "cooling"}},
+            {"state": "cool", "last_changed": _iso(yesterday_noon + 3600), "attributes": {"hvac_action": "idle"}},
+        ]]
+
+
+def test_fridge_and_hvac_endpoints_and_the_filter(monkeypatch):
+    import time as _time
+
+    from app import hvac_runtime, main as app_main, slow_cache
+
+    async def stats(ids, days):
+        start = (_time.time() // 86400 - 60) * 86400
+        return {ids[0]: [{"start": (start + day * 86400) * 1000, "change": 2000.0, "mean": 70.0} for day in range(60)]}
+
+    slow_cache.clear()
+    monkeypatch.setattr(app_main, "fetch_statistics", stats)
+    monkeypatch.setattr(app_main, "hvac_log", hvac_runtime.HvacLog(None))
+    app.dependency_overrides[get_client] = _ApplianceClient
+    try:
+        fridge = client.get("/api/insights/fridge").json()
+        assert fridge["available"] is True and fridge["status"] == "ok" and abs(fridge["usualKwhPerDay"] - 2.0) < 0.01
+        hvac = client.get("/api/insights/hvac").json()
+        assert hvac["available"] is True and hvac["weekHours"] >= 0.9
+        assert hvac["filter"]["status"] == "unknown"
+        changed = client.post("/api/maintenance/hvac-filter", json={"changedOn": "2026-01-01"}).json()
+        assert changed["filter"]["changedOn"] == "2026-01-01" and changed["filter"]["status"] == "due"
+        assert client.post("/api/maintenance/hvac-filter", json={"changedOn": "2999-01-01"}).status_code == 400
+    finally:
+        app.dependency_overrides[get_client] = FakeClient
+        slow_cache.clear()
+
+
+def test_departure_without_a_car():
+    from app import slow_cache
+
+    slow_cache.clear()
+    assert client.get("/api/car/departure").json() == {"available": False}

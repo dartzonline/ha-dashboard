@@ -23,6 +23,7 @@ import { nextRotationSection } from './morningRotation'
 import { headsUp, preferredUnits, useMorningBrief, type Advice } from './useMorningBrief'
 import { useReminders } from './useReminders'
 import { MorningRunCard, useMorningRun } from './MorningRunCard'
+import { DepartureCard } from './DepartureCard'
 import { WifiSheet } from './WifiSheet'
 import type { ConfigTab } from './ConfigPanel'
 import { repaintTheme } from './theme'
@@ -762,6 +763,18 @@ function NavigationPanel({ children, onClose, onInteract }: { children: ReactNod
 function App() {
   // Read once: the page and slide a reload (or a bookmarked #/climate) should land on.
   const [startLocation] = useState(() => parseShellHash(window.location.hash))
+  // Weather and Flights float the topbar over a full-height page, so they need its real height:
+  // with the flight banner and the clock it is ~120 px on a 1280 px tablet, not the ~55 px of a
+  // phone, and a fixed offset slid the top of those pages under it.
+  const topbarRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const bar = topbarRef.current
+    if (!bar || typeof ResizeObserver === 'undefined') return
+    const root = document.documentElement
+    const observer = new ResizeObserver(() => root.style.setProperty('--topbar-h', `${Math.round(bar.getBoundingClientRect().height)}px`))
+    observer.observe(bar)
+    return () => { observer.disconnect(); root.style.removeProperty('--topbar-h') }
+  }, [])
   const [requestedSection, setActiveSection] = useState(() => startLocation.section ?? 'home')
   const photoIds = usePhotoLibrary()
   const [now, setNow] = useState(() => new Date())
@@ -1190,7 +1203,7 @@ function App() {
       >
         {/* Behind everything in main, on the few pages quiet enough to carry one. */}
         <PhotoBackdrop sectionId={activeSection} photoIds={photoIds} />
-        <header className="topbar">
+        <header className="topbar" ref={topbarRef}>
           <div className="page-title">
             <button
               type="button"
@@ -1335,7 +1348,7 @@ function App() {
         ) : activeSection === 'flights' ? (
           lazyView('Preparing flights', <FlightsView entities={entities} slide={flightsSlide} onSelectSlide={selectFlightsSlide} />)
         ) : activeSection === 'morning' ? (
-          <MorningView brief={morning.brief} failed={morning.failed} now={now} slide={morningSlide} onSelectSlide={selectMorningSlide} onRetry={morning.reload} run={<MorningRunCard status={morningRun.status} onChanged={morningRun.reload} />} />
+          <MorningView brief={morning.brief} failed={morning.failed} now={now} slide={morningSlide} onSelectSlide={selectMorningSlide} onRetry={morning.reload} run={<MorningRunCard status={morningRun.status} onChanged={morningRun.reload} />} car={<DepartureCard onService={callService} />} />
         ) : activeSection === 'health' ? (
           lazyView('Checking home health', <HealthView onExpand={expandTile} />)
         ) : activeSection === 'maintenance' ? (
@@ -1349,7 +1362,7 @@ function App() {
         ) : activeSection === 'energy' ? (
           lazyView('Preparing energy usage', <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveRateWhenReady} fixedMonthly={energyFixedMonthly} onSaveFixed={saveFixedWhenReady} />)
         ) : activeSection === 'volvo' ? (
-          lazyView('Preparing Volvo', <VolvoView entities={entities} onExpand={expandTile} />)
+          lazyView('Preparing Volvo', <VolvoView entities={entities} onExpand={expandTile} onService={callService} />)
         ) : (
           <PageFrame
             className="overview has-pane"

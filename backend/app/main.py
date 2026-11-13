@@ -5,7 +5,7 @@ import os
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
 from urllib.parse import urlencode
@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import air_quality, bins, connectivity, flaky, garage_health, garden, home_health, house_watch, local_time, maintenance, morning_run, notifier, routines, salt_watch, slow_cache, weather_advice, weekly
+from . import air_quality, bins, car_energy, connectivity, departure, flaky, fridge_trend, garage_health, garden, home_health, house_watch, hvac_runtime, local_time, maintenance, morning_run, notifier, room_balance, routines, salt_watch, slow_cache, weather_advice, weekly
 from .storage import data_file
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
@@ -36,6 +36,7 @@ bridge = EventBridge(settings)
 ha_client = HomeAssistantClient(settings)
 registry_snapshot = RegistrySnapshot(bridge)
 salt_log = salt_watch.SaltWatch(data_file("salt-log.json"))
+hvac_log = hvac_runtime.HvacLog(data_file("hvac-log.json"))
 run_tracker = morning_run.MorningRun()
 
 
@@ -1245,7 +1246,7 @@ async def _safe(awaitable: Any) -> Any:
     """Optional extras (history reads) must never take down the page they decorate."""
     try:
         return await awaitable
-    except (httpx.HTTPError, ValueError, KeyError):
+    except (httpx.HTTPError, ValueError, KeyError, ConnectionError, RuntimeError, asyncio.TimeoutError):
         return None
 
 
@@ -1286,6 +1287,300 @@ async def device_dropouts(days: int = 7, client: HomeAssistantClient = Depends(g
     except httpx.HTTPError as error:
         raise upstream_error(error) from error
     return {"days": window, "watched": len(ids), "devices": devices[:12]}
+
+
+def _points_by_entity(series: list[list[dict[str, Any]]], ids: list[str]) -> dict[str, list[tuple[float, str]]]:
+    """History rows keyed by entity id. Home Assistant names the entity only on each series'
+    first row, and leaves out entities it has no history for, so position alone is not enough."""
+    result: dict[str, list[tuple[float, str]]] = {entity_id: [] for entity_id in ids}
+    for rows in series:
+        entity_id = next((row.get("entity_id") for row in rows if row.get("entity_id")), None)
+        if entity_id in result:
+            result[entity_id] = [point for row in rows if (point := connectivity.parse_point(row))]
+    return result
+
+
+@app.get("/api/insights/rooms", dependencies=[Depends(require_configuration)])
+async def room_balance_insight(days: int = 7, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Which rooms run warmer or cooler than the thermostat, and at what time of day."""
+    window = max(1, min(days, 14))
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    rooms, reference = room_balance.room_sensors(states)
+    ids = [str(entity["entity_id"]) for entity in rooms] + ([str(reference["entity_id"])] if reference else [])
+    if len(rooms) < 2:
+        return {"days": window, "unit": None, "reference": None, "spread": None, "rooms": []}
+    unit = str(((reference or rooms[0]).get("attributes") or {}).get("unit_of_measurement") or "°F")
+    climate = next((entity for entity in states if str(entity.get("entity_id", "")).startswith("climate.")), None)
+    mode = str(climate.get("state")) if climate else None
+
+    async def load() -> dict[str, list[tuple[float, str]]]:
+        return _points_by_entity(await client.history_many(ids, window * 24), ids)
+
+    try:
+        series = await slow_cache.cached(f"rooms:{window}:{','.join(ids)}", ROUTINE_TTL_S, load)
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    zone = await local_time.home_zone(client.config)
+    by_id = {str(entity["entity_id"]): entity for entity in states}
+    return room_balance.room_balance(
+        series, by_id, str(reference["entity_id"]) if reference else None, zone, time.time(), window, unit,
+        mode if mode in ("cool", "heat") else None,
+    )
+
+
+CAR_ROLES = {
+    "battery": "_battery",
+    "connection": "_charging_connection_status",
+    "odometer": "_odometer",
+    "fuel": "_fuel_amount",
+    "range": "_distance_to_empty_battery",
+}
+
+
+def car_sensors(states: list[dict[str, Any]]) -> tuple[dict[str, str], float | None]:
+    """The car's sensors by role, and its battery capacity in kWh."""
+    cars = [entity for entity in states if str(entity.get("entity_id", "")).startswith("sensor.") and house_watch._is_car(entity)]
+    roles: dict[str, str] = {}
+    capacity: float | None = None
+    for entity in cars:
+        entity_id = str(entity["entity_id"])
+        if entity_id.endswith("_battery_capacity"):
+            try:
+                capacity = float(entity.get("state"))
+            except (TypeError, ValueError):
+                pass
+            continue
+        for role, suffix in CAR_ROLES.items():
+            if entity_id.endswith(suffix) and role not in roles:
+                roles[role] = entity_id
+    return roles, capacity
+
+
+async def car_summary_now(client: HomeAssistantClient, states: list[dict[str, Any]], window: int = 7) -> dict[str, Any] | None:
+    """The car's charging week (see car_energy), or None when there is no plug-in car."""
+    roles, capacity = car_sensors(states)
+    if "battery" not in roles or "connection" not in roles:
+        return None
+    ids = list(roles.values())
+
+    async def load() -> dict[str, list[tuple[float, str]]]:
+        return _points_by_entity(await client.history_many(ids, window * 24), ids)
+
+    series = await slow_cache.cached(f"car:{window}", ROUTINE_TTL_S, load)
+    rate = load_overrides().get("energyRatePerKwh")
+    zone = await local_time.home_zone(client.config)
+    return car_energy.car_week(
+        {role: series.get(entity_id, []) for role, entity_id in roles.items()}, capacity,
+        float(rate) if isinstance(rate, (int, float)) else default_energy_rate(), zone, time.time(),
+    )
+
+
+@app.get("/api/insights/car", dependencies=[Depends(require_configuration)])
+async def car_insight(days: int = 7, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Charging sessions, their cost at the household's rate, and how much driving was electric."""
+    window = max(1, min(days, 14))
+    try:
+        states = await client.states()
+        summary = await car_summary_now(client, states, window)
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    return {"available": False} if summary is None else {"available": True, **summary}
+
+
+def _number(entity: dict[str, Any] | None) -> float | None:
+    try:
+        return float((entity or {}).get("state"))
+    except (TypeError, ValueError):
+        return None
+
+
+@app.get("/api/car/departure", dependencies=[Depends(require_configuration)])
+async def car_departure(client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """When the car usually leaves, its charge by then, and whether to warm or cool it first."""
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    roles, _ = car_sensors(states)
+    if "battery" not in roles:
+        return {"available": False}
+    by_id = {str(entity["entity_id"]): entity for entity in states}
+    prefix = roles["battery"].removesuffix("_battery")
+    garage = next(
+        (entity for entity in states if str(entity.get("entity_id", "")).startswith("cover.")
+         and ((entity.get("attributes") or {}).get("device_class") == "garage" or house_watch._mentions(entity, house_watch.GARAGE_TERMS))),
+        None,
+    )
+    zone = await local_time.home_zone(client.config)
+
+    async def mornings() -> dict[str, int]:
+        if garage is not None:
+            rows = await client.history(str(garage["entity_id"]), 14 * 24)
+            found = departure.morning_departures(_history_points(rows), zone, ("opening", "open"))
+            if found:
+                return found
+        use_id = f"{prefix}_car_connection"
+        rows = await client.history(use_id, 14 * 24) if use_id in by_id else [[]]
+        return departure.morning_departures(_history_points(rows), zone, ("car_in_use",))
+
+    try:
+        found = await slow_cache.cached("departures", ROUTINE_TTL_S, mornings)
+        week = await _safe(car_summary_now(client, states))
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    forecast = None
+    location = home_location(states)
+    if location is not None:
+        forecast = await _safe(weather_advice.fetch_forecast(get_http_client(), *location))
+    plugged, _ = house_watch.car_charging_state(states)
+    charging = str((by_id.get(f"{prefix}_charging_status") or {}).get("state", "")).lower() == "charging"
+    climate_start = f"button.{prefix.split('.', 1)[1]}_start_climatization"
+    plan = departure.departure_plan(
+        found=found,
+        now=datetime.now(zone),
+        level=_number(by_id.get(roles["battery"])),
+        target=_number(by_id.get(f"{prefix}_target_battery_charge_level")) or 100.0,
+        plugged=bool(plugged),
+        charging=charging,
+        minutes_to_full=_number(by_id.get(f"{prefix}_estimated_charging_time")),
+        pct_per_hour=(week or {}).get("pctPerHour"),
+        miles_per_pct=(week or {}).get("milesPerPct"),
+        forecast=forecast,
+    )
+    feels = (plan.get("departure") or {}).get("feelsLikeC")
+    imperial = await local_time.home_is_imperial(client.config)
+    if plan.get("departure") is not None:
+        plan["departure"]["feelsLike"] = (round(feels * 9 / 5 + 32) if imperial else round(feels)) if feels is not None else None
+        plan["departure"]["temperatureUnit"] = "°F" if imperial else "°C"
+    return {
+        "available": True,
+        "source": "garage" if garage is not None else "car",
+        "climateButton": climate_start if climate_start in by_id else None,
+        **plan,
+    }
+
+
+async def fetch_statistics(statistic_ids: list[str], days: int) -> dict[str, list[dict[str, Any]]]:
+    """Daily long-term statistics over the WebSocket API: months of history the recorder has
+    already summarised, where the plain history API keeps only about ten days."""
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    result = await bridge.send_command(
+        "recorder/statistics_during_period",
+        start_time=start, statistic_ids=statistic_ids, period="day", types=["change", "mean"],
+    )
+    return result if isinstance(result, dict) else {}
+
+
+@app.get("/api/insights/fridge", dependencies=[Depends(require_configuration)])
+async def fridge_insight(client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Whether the fridge is using more electricity than it used to."""
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    meters = [
+        entity for entity in states
+        if str(entity.get("entity_id", "")).startswith("sensor.")
+        and (entity.get("attributes") or {}).get("device_class") == "energy"
+        and house_watch._mentions(entity, ("fridge", "refrigerator"))
+    ]
+    if not meters:
+        return {"available": False}
+    ids = [str(entity["entity_id"]) for entity in meters]
+
+    async def load() -> dict[str, list[dict[str, Any]]]:
+        return await fetch_statistics(ids, fridge_trend.RECENT_DAYS + fridge_trend.BASELINE_DAYS + 2)
+
+    try:
+        stats = await slow_cache.cached("fridge-stats", 3 * 3600.0, load)
+    except (ConnectionError, RuntimeError, asyncio.TimeoutError) as error:
+        raise HTTPException(502, f"Home Assistant statistics unavailable: {error}") from error
+    zone = await local_time.home_zone(client.config)
+    best: tuple[str, dict[Any, float]] | None = None
+    for entity in meters:
+        unit = str((entity.get("attributes") or {}).get("unit_of_measurement") or "kWh")
+        days = fridge_trend.daily_use(stats.get(str(entity["entity_id"]), []), zone, 0.001 if unit == "Wh" else 1.0)
+        if best is None or len(days) > len(best[1]):
+            best = (str(entity["entity_id"]), days)
+    rate = load_overrides().get("energyRatePerKwh")
+    assert best is not None
+    report = fridge_trend.fridge_trend(
+        best[1], datetime.now(zone).date(), float(rate) if isinstance(rate, (int, float)) else default_energy_rate(), states,
+    )
+    return {"available": True, "entityId": best[0], **report}
+
+
+def _outdoor_statistic(states: list[dict[str, Any]]) -> tuple[str, str] | None:
+    """(entity id, unit) of the outdoor temperature sensor whose daily mean the HVAC log stores."""
+    for entity in states:
+        attributes = entity.get("attributes") or {}
+        if (
+            str(entity.get("entity_id", "")).startswith("sensor.") and attributes.get("device_class") == "temperature"
+            and house_watch._mentions(entity, house_watch.OUTDOOR_TERMS)
+        ):
+            return str(entity["entity_id"]), str(attributes.get("unit_of_measurement") or "°F")
+    return None
+
+
+@app.get("/api/insights/hvac", dependencies=[Depends(require_configuration)])
+async def hvac_insight(client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    """Daily heating/cooling runtime, how it compares with similar weather, and the filter."""
+    try:
+        states = await client.states()
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    climate = next((entity for entity in states if str(entity.get("entity_id", "")).startswith("climate.")), None)
+    if climate is None:
+        return {"available": False}
+    climate_id = str(climate["entity_id"])
+    zone = await local_time.home_zone(client.config)
+
+    async def load() -> tuple[dict[str, dict[str, float]], dict[str, float]]:
+        rows = await client.history_with_attributes(climate_id, 10 * 24)
+        points = [
+            (stamp, str((row.get("attributes") or {}).get("hvac_action") or "idle"))
+            for row in (rows[0] if rows else [])
+            if (stamp := house_watch._parse_time(row.get("last_changed"))) is not None
+        ]
+        runtime = hvac_runtime.daily_runtime(points, zone, time.time())
+        outdoor: dict[str, float] = {}
+        source = _outdoor_statistic(states)
+        if source is not None:
+            stats = await _safe(fetch_statistics([source[0]], 12)) or {}
+            for row in stats.get(source[0], []):
+                if isinstance(row.get("mean"), (int, float)) and isinstance(row.get("start"), (int, float)):
+                    day = datetime.fromtimestamp(row["start"] / 1000, zone).date().isoformat()
+                    outdoor[day] = row["mean"] if source[1] in ("°F", "F") else row["mean"] * 9 / 5 + 32
+        return runtime, outdoor
+
+    try:
+        runtime, outdoor = await slow_cache.cached(f"hvac:{climate_id}", ROUTINE_TTL_S, load)
+    except httpx.HTTPError as error:
+        raise upstream_error(error) from error
+    today = datetime.now(zone).date()
+    if hvac_log.merge(runtime, outdoor, today):
+        hvac_log.save()
+    report = hvac_runtime.hvac_report(hvac_log, runtime.get(today.isoformat()), today)
+    return {"available": True, "entityId": climate_id, "action": (climate.get("attributes") or {}).get("hvac_action"), **report}
+
+
+class FilterChangedRequest(BaseModel):
+    # The day the filter was changed; null forgets it.
+    changedOn: date | None
+
+
+@app.post("/api/maintenance/hvac-filter", dependencies=[Depends(require_configuration)])
+async def hvac_filter_changed(request: FilterChangedRequest, client: HomeAssistantClient = Depends(get_client)) -> dict[str, Any]:
+    zone = await local_time.home_zone(client.config)
+    today = datetime.now(zone).date()
+    if request.changedOn is not None and request.changedOn > today:
+        raise HTTPException(400, "The filter cannot have been changed in the future")
+    hvac_log.filter_changed = request.changedOn.isoformat() if request.changedOn else None
+    hvac_log.save()
+    return {"filter": hvac_runtime.filter_status(hvac_log, today)}
 
 
 @app.get("/api/insights/maintenance", dependencies=[Depends(require_configuration)])

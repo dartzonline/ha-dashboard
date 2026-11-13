@@ -31,7 +31,7 @@ main > .topbar { position: sticky; top: 0; z-index: 5; }
 main.is-fixed-view { max-width: none; padding: 0; overflow: hidden; }
 main.is-fixed-view > .topbar { position: absolute; z-index: 10; top: 10px; left: clamp(10px, 2vw, 24px); right: clamp(10px, 2vw, 24px); }
 /* Just under the floating header: its height is the date + title stack (~2.5rem) plus padding. */
-main.is-fixed-view > .shell-banners { position: absolute; z-index: 9; top: calc(40px + 2.6rem); left: clamp(10px, 2vw, 24px); right: clamp(10px, 2vw, 24px); }
+main.is-fixed-view > .shell-banners { position: absolute; z-index: 9; top: calc(var(--topbar-h, 2.6rem + 30px) + 10px); left: clamp(10px, 2vw, 24px); right: clamp(10px, 2vw, 24px); }
 main.is-fixed-view .page-slide { min-height: 100svh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; margin: 0; }
 /* Card views fill the viewport too, but keep the header in flow so nothing slides under it. */
 main.is-tall-view { max-width: none; overflow: hidden; }
@@ -522,6 +522,12 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
   main { height: 100svh; overflow-x: hidden; overflow-y: auto; }
   .page-slide { display: flex; flex-direction: column; }
   .page-slide > * { flex: 1 1 auto; min-height: 0; }
+  /* Pages that are longer than the screen scroll instead of being squeezed to fit it. Squeezing a
+     flex column at 800 px tall (a Fire HD 10 in landscape) collapsed page headers under the first
+     card and slid Morning's content under its pager. Insights and Weather are laid out to fit and
+     keep the rule above. */
+  .page-slide > :is(.health-view, .maint-view, .morning-view, .volvo-view, .network-view, .roborock-view) { flex-shrink: 0; }
+  .page-frame-head { flex-shrink: 0; }
 
   .overview { display: flex; flex-direction: column; }
   /* Three tiles per row keeps values large (a 6-wide home section fills two full rows); the track

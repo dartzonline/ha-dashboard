@@ -11,6 +11,7 @@ export const insightsSlides: InsightsSlideMeta[] = [
   { id: 'climate', label: 'Climate', title: 'Climate and comfort', subtitle: '24-hour room temperature with live telemetry' },
   { id: 'network', label: 'Network', title: 'Connectivity and energy', subtitle: 'Gateway throughput, monthly energy, softener salt' },
   { id: 'health', label: 'Health', title: 'Home health', subtitle: 'Batteries, plants, appliances, and maintenance' },
+  { id: 'rooms', label: 'Rooms', title: 'Room balance', subtitle: 'Each room against the thermostat, past 7 days' },
 ]
 
 /** Each panel group holds for this long, so Insights stays on screen for slides x duration. */
