@@ -1,0 +1,19 @@
+.appliance-panel.is-warning { border-color: color-mix(in srgb, var(--warn) 55%, var(--glass-border)); }
+.appliance-panel.is-watch .appliance-chip { color: var(--warn); }
+.appliance-panel.is-warning .appliance-chip { color: var(--danger); }
+.appliance-chip { font-weight: 700; }
+.appliance-line { width: 100%; height: 34px; overflow: visible; }
+.appliance-line polyline { stroke: var(--accent-strong); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.appliance-advice { display: grid; gap: 4px; margin: 0; padding: 0 0 0 16px; color: var(--muted); font-size: .76rem; line-height: 1.4; }
+.appliance-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.appliance-actions button { min-height: var(--tap); padding: 0 16px; font-size: .78rem; font-weight: 650; }
+.appliance-actions button.is-armed { border-color: var(--warn); color: var(--warn); }
+.appliance-error { color: var(--danger); font-size: .74rem; }
+
+.hvac-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; height: 120px; align-items: end; }
+.hvac-day { display: grid; grid-template-rows: auto 1fr auto auto; justify-items: center; gap: 2px; height: 100%; min-width: 0; }
+.hvac-day > span { align-self: end; width: 70%; min-height: 3px; border-radius: 4px 4px 1px 1px; background: color-mix(in srgb, var(--muted) 40%, transparent); }
+.hvac-day.is-cool > span { background: #4f9be8; }
+.hvac-day.is-heat > span { background: var(--warn); }
+.hvac-day small { color: var(--muted); font-size: .64rem; font-variant-numeric: tabular-nums; }
+.hvac-day em { color: var(--text); font-size: .68rem; font-style: normal; font-weight: 650; }

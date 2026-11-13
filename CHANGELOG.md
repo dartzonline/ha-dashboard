@@ -3,6 +3,51 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.25.0 - 2026-11-12: Car mornings, room balance, fridge and AC checks, tablet fit
+
+**Charging & electric driving.** The car page adds up the week: how many times the car charged,
+roughly how many kWh that took from the wall and what it cost at your electricity rate, what a
+full charge costs, how fast it charges (and whether that is a standard wall outlet), and how many
+of the miles driven were electric. Gas used and miles per gallon on gas sit alongside, with the
+last few charging sessions listed. It is worked out from the battery level, so the figures are
+estimates; a charge rise without the cable plugged in (regenerative braking) is not counted.
+
+**Plug in the car.** After dark, a plug-in car parked under 30% and not plugged in shows on the
+Health page and sends one phone reminder that evening.
+
+**Room balance.** A new Rooms tab on Insights compares every room with the thermostat over the
+past week, by night, morning, afternoon and evening: which rooms run warm or cool, when it is at
+its worst, and what to try (a vent, blinds, a draughty window). A sensor whose reading has not
+moved for days is called out as stuck rather than mistaken for a hot or cold room.
+
+**Garage light.** A garage light left on with the garage door shut gets its own, much shorter
+limit: a warning at 15 minutes and switched off at an hour. It is timed from whichever came
+later, the light coming on or the door closing, and can be switched off in one tap from Health.
+
+**Leaving with the car.** The Morning page (and the car page) learns when the car usually leaves
+from the first garage-door opening each morning, weekdays and weekends separately, and shows the
+charge it will have by then: "43% now, 100% by 8:30". It says when the car needs plugging in to
+be ready, and on a cold or hot morning offers a two-tap "Warm up the car" or "Cool down the car"
+using the car's own climate start. Nothing starts on its own.
+
+**Fridge efficiency.** The Maintenance page compares the fridge's last two weeks with its usual
+daily use over the three months before, from Home Assistant's long-term statistics, with a
+16-week trend line and what it costs a year. A rise brings advice (coils, door seals), and a
+freezer or fridge set colder than it needs to be is pointed out.
+
+**Heating & cooling.** The Maintenance page shows how long the heating or AC ran each of the last
+seven days against the outdoor temperature, how long a typical run lasts, and, once a few weeks
+are logged, whether it now runs longer than it used to in the same weather (the usual sign of a
+clogged filter). Tap "I changed the filter today" to track days and run hours since.
+
+**Fits a 10-inch tablet.** Checked page by page at 1280 x 800 (a Fire HD 10 in landscape):
+long pages (Health, Maintenance, Morning, Volvo, Network, Roborock) now scroll instead of
+squeezing their headers under the first card; Morning's content no longer slides under its pager;
+Weather and Flights start below the real height of the top bar instead of under it; flight rows
+keep the route beside the flight number instead of spilling into the next row; battery names on
+Insights stay on one line; and room balance has its own Insights tab, two rooms across, instead of
+squashing the temperature chart. Names Home Assistant doubles up ("Media Door Door") are tidied.
+
 ## 1.24.0 - 2026-11-11: Share Wi-Fi, routines, dropouts, backups, opener health and air
 
 **Share Wi-Fi.** A new button in the top bar shows your Wi-Fi as a QR code with the network name

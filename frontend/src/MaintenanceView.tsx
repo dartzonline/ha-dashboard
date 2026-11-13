@@ -4,6 +4,7 @@ import {
 } from 'lucide-react'
 import { cachedJson, invalidate, isAbortError } from './cachedFetch'
 import { ReplaceNow, type ReplaceItem } from './ReplaceNow'
+import { FridgePanel, HvacPanel } from './AppliancePanels'
 import type { TileConfig } from './types'
 import { PageFrame } from './ui/PageFrame'
 import type { Tone } from './ui/PageFrame'
@@ -498,6 +499,13 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
           ))}
         </div>
       )}
+
+      {/* Fetched on their own (months of statistics, ten days of thermostat history), so the rest of
+          the page never waits for them. */}
+      <div className="maint-grid">
+        <HvacPanel />
+        <FridgePanel />
+      </div>
     </section>
   )
 }

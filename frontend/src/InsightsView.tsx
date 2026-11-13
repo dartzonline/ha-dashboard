@@ -1,7 +1,8 @@
 import { memo, useMemo, useState } from 'react'
+import { RoomBalancePanel } from './RoomBalance'
 import type { LucideIcon } from 'lucide-react'
 import {
-  BatteryCharging, Bot, CloudSun, Droplets, Gauge, HeartPulse, Maximize2,
+  BatteryCharging, Bot, CloudSun, Droplets, Gauge, HeartPulse, Maximize2, Scale,
   Refrigerator, ShieldCheck, Sprout, Thermometer, TrendingUp, WashingMachine,
   Waves, Wifi, Wind, Zap,
 } from 'lucide-react'
@@ -65,7 +66,7 @@ const roomSensors = [
 ]
 
 const monthlyEnergyId = 'sensor.smarthub_energy_monthly_usage_3001575154_641_hickory_bend_trail_smarthub_energy_monthly_usage_3001575154_641_hickory_bend_trail'
-const slideIcons: LucideIcon[] = [Thermometer, Wifi, HeartPulse]
+const slideIcons: LucideIcon[] = [Thermometer, Wifi, HeartPulse, Scale]
 /** The gateway reports KiB/s; Mbps is decimal, so x8 x1024 / 1e6 (the old x8/1024 understated by ~2.4%). */
 const mbpsScale = KIB_PER_SEC_TO_MBPS
 
@@ -83,6 +84,14 @@ const DOOR_CLASSES = ['door', 'garage_door', 'window', 'opening']
  * seven filter-and-sort passes over ~800 entities run only when a lock, opening, cover, battery or
  * humidity sensor actually moves.
  */
+/** One line on the battery chart: "Master Bedroom Temperature Battery" wrapped onto three lines and
+ *  ran into its neighbours on an 800 px-tall tablet, so words that say nothing here go and the rest
+ *  is capped. */
+function shortBatteryName(name: string) {
+  const short = name.replace(/\b(battery( level)?|sensor|temperature|level)\b/gi, '').replace(/\s+/g, ' ').trim() || name
+  return short.length > 16 ? `${short.slice(0, 15).trimEnd()}…` : short
+}
+
 function scanSignature(entities: Map<string, HAEntity>) {
   const parts: string[] = []
   for (const entity of entities.values()) {
@@ -107,7 +116,7 @@ function scanEntities(entities: Map<string, HAEntity>) {
   const batteryEntities = all.filter((entity) => entity.attributes.device_class === 'battery')
   const batteryData = batteryEntities
     .filter((entity) => Number.isFinite(Number(entity.state)))
-    .map((entity) => ({ entityId: entity.entity_id, name: friendlyName(entity).replace(/ battery( level)?/i, ''), value: Number(entity.state) }))
+    .map((entity) => ({ entityId: entity.entity_id, name: shortBatteryName(friendlyName(entity)), value: Number(entity.state) }))
     .sort((left, right) => left.value - right.value)
     .slice(0, 8)
   const plantData = all
@@ -302,6 +311,16 @@ function BatteryLabel({ x = 0, y = 0, width = 0, height = 0, value }: BatteryLab
   )
 }
 
+/** A y-axis label that never wraps: the chart library breaks long labels onto extra lines, and
+ *  with eight bars in a short panel those lines ran into each other. */
+function OneLineTick({ x = 0, y = 0, payload }: { x?: number; y?: number; payload?: { value?: string } }) {
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fill="var(--muted)" fontSize={11}>
+      {payload?.value ?? ''}
+    </text>
+  )
+}
+
 const BatteryChart = memo(function BatteryChart({ data }: { data: { name: string; value: number }[] }) {
   if (!data.length) return <EmptyState size="compact" icon={<BatteryCharging />} title="No battery devices" hint="Looks for entities with device_class battery" />
   return (
@@ -309,7 +328,7 @@ const BatteryChart = memo(function BatteryChart({ data }: { data: { name: string
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 76, left: 0, bottom: 0 }}>
           <XAxis type="number" domain={[0, 100]} hide />
-          <YAxis type="category" dataKey="name" {...yAxisProps} width={104} />
+          <YAxis type="category" dataKey="name" {...yAxisProps} width={118} interval={0} tick={<OneLineTick />} />
           <Tooltip cursor={barTooltipCursor} content={<GlassTooltip valueFormat={(value) => `${formatNumber(value)}%${batteryStatus(value) ? ` · ${batteryStatus(value)?.word}` : ''}`} />} />
           <Bar dataKey="value" name="Battery" fill={seriesColor(0)} {...hBarProps} background={{ fill: 'rgba(255, 255, 255, .04)', radius: 4 }}>
             <LabelList dataKey="value" content={<BatteryLabel />} />
@@ -701,7 +720,9 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
     ? { title: `${formatNumber(inside, 1)}° inside, comfort ${comfort}`, tone: 'neutral' as const }
     : activeSlide.id === 'network'
       ? { title: online ? 'Internet online' : 'Internet offline', tone: online ? 'neutral' as const : 'danger' as const }
-      : { title: lowBatteries ? `${lowBatteries} ${lowBatteries === 1 ? 'battery needs' : 'batteries need'} replacing` : 'Nothing needs attention', tone: lowBatteries ? 'warn' as const : 'neutral' as const }
+      : activeSlide.id === 'rooms'
+        ? { title: 'Which rooms run warm or cool', tone: 'neutral' as const }
+        : { title: lowBatteries ? `${lowBatteries} ${lowBatteries === 1 ? 'battery needs' : 'batteries need'} replacing` : 'Nothing needs attention', tone: lowBatteries ? 'warn' as const : 'neutral' as const }
   const hasInsightEntities = entities.size > 0 && (
     climateSeries.some((item) => entities.has(item.entityId))
     || networkDefinitions.some((item) => entities.has(item.entityId))
@@ -810,6 +831,12 @@ export function InsightsView({ entities, series, loading, slide, onSelectSlide }
                 </div>
               </article>
             </div>
+          </div>
+        )}
+
+        {activeSlide.id === 'rooms' && (
+          <div className="insight-slide rooms-slide" key="rooms">
+            <RoomBalancePanel />
           </div>
         )}
 

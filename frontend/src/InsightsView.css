@@ -1,5 +1,6 @@
 /* Insights fills the page slide and never scrolls on a wall display: rows are sized, charts flex. */
 .insights-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: var(--gap); overflow: hidden; }
+.insights-view > :not(.insights-panel) { flex-shrink: 0; }
 
 /* Every tile is a button that opens an explanation sheet. Pressed feedback comes from the global
    :active scale; hover only nudges the border because a touch panel keeps "hover" stuck after a tap. */
@@ -30,6 +31,8 @@
 .insights-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .insight-slide { flex: 1 1 auto; min-height: 0; display: grid; gap: var(--gap); overflow: hidden; animation: slide-in .3s ease-out; }
 .climate-slide { grid-template-rows: auto minmax(0, 1fr) auto; }
+.rooms-slide { grid-template-rows: minmax(0, 1fr); }
+.rooms-slide .room-balance { overflow-y: auto; overscroll-behavior: contain; }
 .network-slide { grid-template-rows: minmax(0, 1.15fr) minmax(0, 1fr); }
 .health-slide { grid-template-rows: minmax(0, 1fr) auto; }
 .slide-row { min-height: 0; display: grid; gap: var(--gap); }

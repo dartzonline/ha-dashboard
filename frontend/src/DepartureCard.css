@@ -1,0 +1,29 @@
+.departure-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border-radius: var(--r-lg); border-left: 4px solid var(--good); }
+.departure-card.is-warn { border-left-color: var(--warn); }
+.departure-card header { display: flex; align-items: center; gap: 8px; }
+.departure-card header svg { color: var(--accent-strong); }
+.departure-card h3 { margin: 0; color: var(--text); font-size: .95rem; font-weight: 750; letter-spacing: 0; text-transform: none; }
+.departure-card header span { margin-left: auto; color: var(--muted); font-size: .74rem; font-weight: 600; }
+
+.departure-charge { display: flex; flex-direction: column; gap: 6px; }
+.departure-levels { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; color: var(--muted); }
+.departure-levels strong { color: var(--text); font-size: 1.6rem; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
+.departure-levels small { font-size: .78rem; }
+.departure-range { margin-left: auto; }
+.departure-bar { position: relative; display: block; height: 8px; border-radius: 99px; background: color-mix(in srgb, var(--muted) 20%, transparent); overflow: hidden; }
+.departure-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: inherit; }
+.departure-bar-then { background: color-mix(in srgb, var(--good) 40%, transparent); }
+.departure-bar-now { background: var(--good); }
+.departure-card.is-warn .departure-bar-now { background: var(--warn); }
+
+.departure-status { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); font-size: .84rem; }
+.departure-status svg { color: var(--good); flex-shrink: 0; }
+.departure-card.is-warn .departure-status { color: var(--warn); font-weight: 650; }
+.departure-card.is-warn .departure-status svg { color: var(--warn); }
+
+.departure-climate { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text); font-size: .84rem; }
+.departure-climate > svg { color: var(--accent-strong); flex-shrink: 0; }
+.departure-climate > span { flex: 1; min-width: 12rem; }
+.departure-climate button { min-height: var(--tap); padding: 0 18px; font-weight: 700; }
+.departure-climate button.is-armed { border-color: var(--warn); color: var(--warn); }
+.departure-error { flex-basis: 100%; color: var(--danger); font-size: .76rem; }

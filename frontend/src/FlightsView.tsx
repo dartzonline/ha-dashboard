@@ -645,11 +645,13 @@ export function FlightsView({ entities, slide, onSelectSlide }: FlightsViewProps
                     >
                       <AirlineLogo code={aircraft.airlineCode} />
                       <div className="flight-row-main">
-                        <strong>{aircraft.callsign}</strong>
+                        {/* Two lines, route beside the callsign: a third line overflowed the
+                            56 px row on an 800 px-tall tablet and read as the next flight's route. */}
+                        <strong>
+                          {aircraft.callsign}
+                          {aircraft.fromCode && aircraft.toCode && <em className="flight-row-route">{aircraft.fromCode} → {aircraft.toCode}</em>}
+                        </strong>
                         <span>{aircraft.airline ?? 'General aviation'}{aircraft.type ? ` · ${aircraft.type}` : ''}</span>
-                        <span className="flight-route">
-                          {aircraft.fromCode && aircraft.toCode ? `${aircraft.fromCode} → ${aircraft.toCode}` : '—'}
-                        </span>
                       </div>
                       <div className="flight-row-metrics">
                         <span>{aircraft.altitudeFt !== null ? `${formatNumber(aircraft.altitudeFt)} ft` : '—'}</span>

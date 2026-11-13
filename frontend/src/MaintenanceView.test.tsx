@@ -56,7 +56,8 @@ describe('MaintenanceView loading', () => {
 
     await waitFor(() => expect(screen.getByText('Garage ESPHome')).toBeTruthy())
     await new Promise((resolve) => setTimeout(resolve, 60))
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    // The heating/cooling and fridge panels fetch their own data once each; the guard is on the main payload.
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('insights/maintenance'))).toHaveLength(1)
   })
 
   it('re-reads after a successful install so the progress shows, and explains a refused one', async () => {

@@ -68,6 +68,18 @@ class HomeAssistantClient:
     async def history(self, entity_id: str, hours: int = 24) -> list[list[dict[str, Any]]]:
         return await self.history_many([entity_id], hours)
 
+    async def history_with_attributes(self, entity_id: str, hours: int = 24) -> list[list[dict[str, Any]]]:
+        """One entity's history *with* attributes, for state that lives in an attribute (a
+        thermostat's `hvac_action`). Kept to a single entity: attributes make every row large."""
+        end = datetime.now(timezone.utc)
+        start = end - timedelta(hours=hours)
+        response = await self.client.get(
+            f"/api/history/period/{start.isoformat()}",
+            params={"filter_entity_id": entity_id, "end_time": end.isoformat()},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def history_many(self, entity_ids: list[str], hours: int = 24) -> list[list[dict[str, Any]]]:
         """History for several entities in one round trip.
 

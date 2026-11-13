@@ -35,10 +35,21 @@ take action, and only after a much longer delay than the warning:
 | Bath fan        | 1h     | --        | --                        |
 | Pantry door     | 10m    | --        | pantry light off at 10m   |
 | Car, garage open | --    | after dark | --                       |
+| Garage light    | 15m    | --        | switched off at 1h        |
+| Car not plugged in | after dark, <= 30% | -- | --                |
 
 "Everyone is away" needs more than the phones saying so: any motion in the last hour means
 someone is home. Phone location that only updates while the app is open left the house looking
 empty while people moved around in it.
+
+The garage light is timed from whichever came later, the light coming on or the garage door
+closing: a light left burning in a shut garage is almost always forgotten, so it gets a much
+shorter limit than other lights (15 minutes to warn, off at an hour), and only while the door is
+closed. With no garage door in Home Assistant the rule stays quiet.
+
+A plug-in hybrid parked for the night under 30% charge and not plugged in gets an info finding
+after dark. Without a location the car might be parked away from home; the wording only says what
+is true ("not plugged in"), and the morning finds it gone once the car is charging.
 
 A car's lock is not a house door. An unlocked car in a closed garage is fine; an unlocked car
 with the garage open after dark is the problem, and that is what the car rule reports.
@@ -143,6 +154,11 @@ EMPTY_HOUSE_HVAC_AFTER_S = 2 * HOUR
 LAUNDRY_WAITING_AFTER_S = 20 * MINUTE
 LAUNDRY_FORGET_AFTER_S = 12 * HOUR
 BATH_FAN_WARN_AFTER_S = 1 * HOUR
+GARAGE_LIGHT_WARN_AFTER_S = 15 * MINUTE
+GARAGE_LIGHT_OFF_AFTER_S = 1 * HOUR
+CAR_PLUG_BELOW_PCT = 30.0
+CAR_PARKED_AFTER_S = 30 * MINUTE
+CAR_DARK_AFTER_S = 30 * MINUTE
 # Two weeks and a day, so the weekly report can compare this week with the one before.
 JOURNAL_KEEP_S = 15 * 24 * HOUR
 JOURNAL_MAX = 3000
@@ -228,9 +244,19 @@ def _iso(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
 
 
+def tidy_name(name: str) -> str:
+    """"Media Door Door" -> "Media Door", "pantry door Door" -> "Pantry door": Home Assistant joins
+    the device and entity names, which repeats a word whenever the device is named after its job."""
+    words = name.split()
+    kept = [word for index, word in enumerate(words) if index == 0 or word.lower() != words[index - 1].lower()]
+    joined = " ".join(kept)
+    return joined[:1].upper() + joined[1:]
+
+
 def _name(entity: dict[str, Any]) -> str:
     attributes = entity.get("attributes") or {}
-    return str(attributes.get("friendly_name") or entity.get("entity_id") or "")
+    friendly = attributes.get("friendly_name")
+    return tidy_name(str(friendly)) if friendly else str(entity.get("entity_id") or "")
 
 
 def _domain(entity: dict[str, Any]) -> str:
@@ -301,6 +327,11 @@ class Context:
     garage_open: bool = False
     # Room word -> when its door opened, for doors that are open now ("pantry" -> timestamp).
     open_doors: dict[str, float] = field(default_factory=dict)
+    # When the garage door last closed, if there is one and every garage door is closed now.
+    garage_closed_since: float | None = None
+    # The car's charging cable: True plugged in, False not, None when the car does not say.
+    car_plugged: bool | None = None
+    car_in_use: bool = False
 
 
 def build_context(states: list[dict[str, Any]], now: float, settings: WatchSettings | None = None) -> Context:
@@ -344,12 +375,41 @@ def build_context(states: list[dict[str, Any]], now: float, settings: WatchSetti
         for room in DOOR_LIT_ROOMS:
             if opened is not None and _mentions(entity, (room,)):
                 open_doors[room] = opened
+    garage_closed_since: float | None = None
+    if not garage_open:
+        closed = [
+            _parse_time(entity.get("last_changed")) for entity in states
+            if _domain(entity) == "cover" and entity.get("state") == "closed"
+            and (_device_class(entity) == "garage" or _mentions(entity, GARAGE_TERMS))
+        ]
+        stamps = [stamp for stamp in closed if stamp is not None]
+        garage_closed_since = max(stamps) if stamps else None
+    car_plugged, car_in_use = car_charging_state(states)
     return Context(
         now=now, away_since=away_since, hvac_action=hvac_action, settings=settings or _settings,
         outdoor_temp_c=outdoor_temperature_c(states),
         dark_since=dark_since, light_since=light_since, raining=raining,
         garage_open=garage_open, open_doors=open_doors,
+        garage_closed_since=garage_closed_since, car_plugged=car_plugged, car_in_use=car_in_use,
     )
+
+
+def car_charging_state(states: list[dict[str, Any]]) -> tuple[bool | None, bool]:
+    """(plugged in?, being driven?) from the car's charging-connection and connection sensors."""
+    plugged: bool | None = None
+    in_use = False
+    for entity in states:
+        entity_id = str(entity.get("entity_id", ""))
+        if _domain(entity) != "sensor" or not _is_car(entity):
+            continue
+        state = str(entity.get("state", "")).lower()
+        if entity_id.endswith("charging_connection_status") and state not in DEAD_STATES:
+            plugged = state in ("connected", "plugged_in", "connection_ok") or (
+                "connect" in state and "disconnect" not in state
+            )
+        elif entity_id.endswith("car_connection") and state == "car_in_use":
+            in_use = True
+    return plugged, in_use
 
 
 def latest_motion(states: list[dict[str, Any]], now: float) -> float | None:
@@ -800,7 +860,45 @@ def _bath_fan_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding 
     )
 
 
+def _garage_light_on(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    """The garage light still on with the garage door shut."""
+    if ctx.garage_closed_since is None or not _watched_light(entity, ctx) or not _mentions(entity, GARAGE_TERMS):
+        return None
+    forgotten_since = max(since, ctx.garage_closed_since)
+    forgotten = ctx.now - forgotten_since
+    if forgotten < GARAGE_LIGHT_WARN_AFTER_S:
+        return None
+    overdue = forgotten >= GARAGE_LIGHT_OFF_AFTER_S
+    return Finding(
+        rule="garage_light_on", category="light", severity="warning",
+        entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
+        detail=f"On with the garage shut for {duration_label(forgotten)} — "
+        + ("switching off now" if overdue else f"switches off at {_limit_label(GARAGE_LIGHT_OFF_AFTER_S)}"),
+        action=("light", "turn_off"), action_at=forgotten_since + GARAGE_LIGHT_OFF_AFTER_S,
+    )
+
+
+def _car_needs_plug(entity: dict[str, Any], since: float, ctx: Context) -> Finding | None:
+    """A plug-in car parked for the night with a low battery and no cable."""
+    if _domain(entity) != "sensor" or _device_class(entity) != "battery" or not _is_car(entity):
+        return None
+    if ctx.car_plugged is not False or ctx.car_in_use or ctx.dark_since is None:
+        return None
+    try:
+        level = float(entity.get("state"))
+    except (TypeError, ValueError):
+        return None
+    if level > CAR_PLUG_BELOW_PCT or ctx.now - since < CAR_PARKED_AFTER_S or ctx.now - ctx.dark_since < CAR_DARK_AFTER_S:
+        return None
+    return Finding(
+        rule="car_needs_plug", category="car", severity="info",
+        entity_id=str(entity["entity_id"]), name="Plug in the car", seconds=ctx.now - since,
+        detail=f"Battery at {level:.0f}% and not plugged in",
+    )
+
+
 RULES: tuple[Rule, ...] = (
+    _garage_light_on,
     _light_left_on,
     _irrigation_in_frost,
     _irrigation_running,
@@ -821,6 +919,7 @@ RULES: tuple[Rule, ...] = (
     _away_and_on,
     _door_lit_room,
     _car_unlocked_garage_open,
+    _car_needs_plug,
 )
 
 
@@ -883,7 +982,7 @@ def attention_items(states: Iterable[dict[str, Any]], now: float | None = None) 
 # always safe to stop. Garages, locks, doors and the fridge need someone to go and look.
 SWITCH_OFF_RULES = {
     "light_left_on", "away_and_on", "irrigation_running", "irrigation_frost", "space_heater_on",
-    "outdoor_light_day", "bath_fan_on",
+    "outdoor_light_day", "bath_fan_on", "garage_light_on",
 }
 _OFF_SERVICE = {
     "light": ("light", "turn_off"),

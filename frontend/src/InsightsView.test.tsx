@@ -36,7 +36,7 @@ describe('InsightsView', () => {
     render(<InsightsView entities={home} series={new Map()} loading={false} slide={0} onSelectSlide={onSelectSlide} />)
     const tablist = screen.getByRole('tablist', { name: 'Insights panels' })
     const tabs = within(tablist).getAllByRole('tab')
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Climate', 'Network', 'Health'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Climate', 'Network', 'Health', 'Rooms'])
     expect(tabs[0].getAttribute('aria-selected')).toBe('true')
     expect(tabs[0].getAttribute('tabindex')).toBe('0')
     expect(tabs[1].getAttribute('tabindex')).toBe('-1')
@@ -47,7 +47,7 @@ describe('InsightsView', () => {
     fireEvent.keyDown(tablist, { key: 'ArrowRight' })
     expect(onSelectSlide).toHaveBeenCalledWith(1)
     fireEvent.keyDown(tablist, { key: 'ArrowLeft' })
-    expect(onSelectSlide).toHaveBeenCalledWith(2)
+    expect(onSelectSlide).toHaveBeenCalledWith(3)
   })
 
   it('carries low batteries and dry plants as words, not only colour', () => {

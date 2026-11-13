@@ -7,7 +7,7 @@
   width: 100%;
   min-height: 0;
   margin: 0;
-  padding: 66px clamp(12px, 2vw, 24px) 10px;
+  padding: calc(var(--topbar-h, 54px) + 18px) clamp(12px, 2vw, 24px) 10px;
   display: flex;
   flex-direction: column;
   gap: var(--gap);
@@ -152,9 +152,9 @@
 .airline-logo-fallback { display: grid; place-items: center; color: var(--muted); font-size: .66rem; font-weight: 800; }
 
 .flight-row-main { min-width: 0; display: grid; gap: 1px; }
-.flight-row-main strong { font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flight-row-main strong { display: flex; align-items: baseline; min-width: 0; font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .flight-row-main span { color: var(--muted); font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flight-row-main .flight-route { color: var(--text); font: 700 .7rem var(--mono); }
+.flight-row-route { display: inline; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; margin-left: 8px; color: var(--muted); font: 700 .7rem var(--mono); font-style: normal; }
 
 .flight-row-metrics { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: right; }
 .flight-row-metrics span { color: var(--muted); font: 700 .7rem var(--mono); white-space: nowrap; }

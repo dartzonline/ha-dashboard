@@ -6,6 +6,7 @@ Four kinds, each switched on or off in Settings > Reminders, and each sent once:
   All share one notification tag, so a phone shows the latest rather than a stack of them.
 * Forecast warnings (warning or worse) for today and tonight, and for tomorrow from 5 pm.
 * Critical house-watch findings: the garage open after dark, a freezer warming up.
+* "Plug in the car": once an evening, when the car is parked low and unplugged after dark.
 * The weekly house report, Sunday at 7 pm.
 
 Quiet hours hold back everything except critical house-watch findings: a garage left open at
@@ -185,6 +186,16 @@ class Notifier:
                         f"run:{departed}", f"You left {len(left)} thing{'s' if len(left) != 1 else ''}",
                         " · ".join(left[:5]) + ". Open the dashboard to secure the house.", tag="home-panel-run",
                     ))
+
+        if settings.house_watch and self.sources.watcher is not None:
+            # One reminder an evening, not one per battery blip: the car's sensors drop to
+            # "unavailable" every few hours, which restarts the finding without changing anything.
+            for entry in self.sources.watcher.report_journal():
+                if entry["endedAt"] is None and entry["rule"] == "car_needs_plug":
+                    messages.append(Message(
+                        f"plug:{local.date().isoformat()}", "Plug in the car", f"{entry['detail']}.", tag="home-panel-car",
+                    ))
+                    break
 
         if settings.house_watch and not quiet and self.sources.get_salt_forecast is not None:
             salt = self.sources.get_salt_forecast()

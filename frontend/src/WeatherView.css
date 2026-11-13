@@ -8,7 +8,7 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: var(--gap);
-  padding: 74px clamp(16px, 3vw, 32px) 14px;
+  padding: calc(var(--topbar-h, 54px) + 20px) clamp(16px, 3vw, 32px) 14px;
   overflow: hidden;
 }
 

@@ -6,6 +6,8 @@ import {
   Lightbulb, Lock, LockOpen, MapPinned, Moon, Plug, Route, ShieldAlert, ShieldCheck, Wrench,
 } from 'lucide-react'
 import { isAbortError } from './cachedFetch'
+import { CarWeekPanel } from './CarWeek'
+import { DepartureCard } from './DepartureCard'
 import { GlassTooltip } from './chartKit'
 import { chartMargin, gridProps, lineProps, seriesColor, tooltipCursor, xAxisProps, yAxisProps } from './chartTheme'
 import { friendlyName } from './entityNames'
@@ -22,6 +24,8 @@ interface VolvoViewProps {
   entities: Map<string, HAEntity>
   /** Opens the shared entity detail sheet, same as tiles in every other section. */
   onExpand: (tile: TileConfig) => void
+  /** Service calls, for starting the car's climate from the departure card. */
+  onService?: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>
 }
 
 /** Every entity ID below was read off the live Home Assistant dump; nothing here is guessed. */
@@ -283,7 +287,7 @@ function sentence(text: string) {
   return text.replace(/^./, (character) => character.toUpperCase())
 }
 
-export function VolvoView({ entities, onExpand }: VolvoViewProps) {
+export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
   const car = useVolvo(entities)
 
   if (!car) {
@@ -593,6 +597,9 @@ export function VolvoView({ entities, onExpand }: VolvoViewProps) {
           </p>
         </section>
       </div>
+
+      {onService && <DepartureCard onService={onService} />}
+      <CarWeekPanel />
 
       <div className="volvo-panel-row">
         <section className="volvo-panel glass glass-card" aria-label="Trip and efficiency">
