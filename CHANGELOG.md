@@ -3,6 +3,11 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.27.1 - 2026-11-16: AdGuard tab fits the screen
+
+The last filter row on the AdGuard tab ("Query log") was cut off at the bottom of the screen. The
+rows are tighter, so all five switches show.
+
 ## 1.27.0 - 2026-11-15: AdGuard tab
 
 **AdGuard on the Network page.** A third tab shows whether ad blocking is actually working: one

@@ -33,12 +33,12 @@
 
 .adguard-switches ul { list-style: none; margin: 0; padding: 0; display: grid; }
 .adguard-switches li + li { border-top: 1px solid var(--border); }
-.adguard-switches li > button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; border-radius: var(--r-sm); }
+.adguard-switches li > button { width: 100%; min-height: 0; display: flex; align-items: center; gap: 12px; padding: 5px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; border-radius: var(--r-sm); }
 .adguard-switches li > button:hover:not(:disabled) { background: var(--surface); }
 .adguard-switch-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.adguard-switch-copy strong { color: var(--text); font-size: .86rem; font-weight: 650; }
-.adguard-switch-copy em { color: var(--muted); font-size: .74rem; font-style: normal; }
-.adguard-pill { min-width: 52px; padding: 5px 12px; border-radius: var(--r-pill); color: var(--muted); background: var(--surface-raised); font-size: .74rem; font-weight: 700; text-align: center; }
+.adguard-switch-copy strong { color: var(--text); font-size: .84rem; font-weight: 650; line-height: 1.2; }
+.adguard-switch-copy em { color: var(--muted); font-size: .7rem; font-style: normal; line-height: 1.2; }
+.adguard-pill { min-width: 50px; padding: 4px 11px; border-radius: var(--r-pill); color: var(--muted); background: var(--surface-raised); font-size: .74rem; font-weight: 700; text-align: center; }
 .adguard-switches li > button.is-on .adguard-pill { color: var(--good-ink, #0d2013); background: var(--good); }
 .adguard-error { margin: 0; color: var(--danger); font-size: .76rem; }
 
