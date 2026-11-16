@@ -7,6 +7,8 @@ import { BAR_GAP, barProps, barTooltipCursor, chartMargin, gridProps, seriesColo
 import { PageFrame } from './ui/PageFrame'
 import { EmptyState, LoadingState } from './ui/StateMessages'
 import { useEnergy } from './useEnergy'
+import { meterCandidates } from './energyMeter'
+import { friendlyName } from './entityNames'
 import type { HAEntity } from './types'
 
 interface EnergyViewProps {
@@ -16,6 +18,9 @@ interface EnergyViewProps {
   /** The utility's fixed monthly charge, billed whatever the usage. */
   fixedMonthly?: number
   onSaveFixed?: (amount: number) => Promise<void>
+  /** The whole-home meter the household picked; null means found automatically. */
+  meterId?: string | null
+  onSaveMeter?: (entityId: string | null) => Promise<void>
 }
 
 const DAILY_TREND_DAYS = 14
@@ -100,8 +105,10 @@ const DailyChart = memo(function DailyChart({ data, ratePerKwh }: { data: { labe
   )
 })
 
-export function EnergyView({ entities, ratePerKwh, onSaveRate, fixedMonthly = 0, onSaveFixed }: EnergyViewProps) {
-  const { devices, wholeHome, daily, loading, isEmpty } = useEnergy(entities)
+export function EnergyView({ entities, ratePerKwh, onSaveRate, fixedMonthly = 0, onSaveFixed, meterId = null, onSaveMeter }: EnergyViewProps) {
+  const { devices, wholeHome, daily, loading, isEmpty } = useEnergy(entities, meterId)
+  const meters = useMemo(() => meterCandidates(entities), [entities])
+  const [meterError, setMeterError] = useState<string | null>(null)
   const [editingRate, setEditingRate] = useState(false)
   const [rateDraft, setRateDraft] = useState(String(ratePerKwh))
   const [editingFixed, setEditingFixed] = useState(false)
@@ -382,11 +389,29 @@ export function EnergyView({ entities, ratePerKwh, onSaveRate, fixedMonthly = 0,
         </section>
       </div>
 
-      {wholeHome && (
-        <p className="energy-whole-home">
+      {(wholeHome || meters.length > 0) && (
+        <div className="energy-whole-home">
           <Home size={14} aria-hidden="true" />
-          <span>Whole-home meter: {formatKWh(wholeHome.currentPeriodKWh)} in the last 30 days</span>
-        </p>
+          <span>{wholeHome ? `Whole-home meter: ${formatKWh(wholeHome.currentPeriodKWh)} in the last 30 days` : 'No whole-home meter found'}</span>
+          {onSaveMeter && meters.length > 0 && (
+            <label className="energy-meter-pick">
+              <span>Meter</span>
+              <select
+                value={meterId ?? ''}
+                onChange={(event) => {
+                  setMeterError(null)
+                  onSaveMeter(event.target.value || null).catch((error: unknown) => setMeterError(error instanceof Error ? error.message : 'Could not save'))
+                }}
+              >
+                <option value="">Automatic</option>
+                {meters.map((entity) => (
+                  <option key={entity.entity_id} value={entity.entity_id}>{friendlyName(entity)}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {meterError && <small className="energy-meter-error">{meterError}</small>}
+        </div>
       )}
     </section>
   )

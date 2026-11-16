@@ -115,6 +115,9 @@ class DashboardConfigPayload(BaseModel):
     morningRun: MorningRunPayload | None = None
     guestWifi: GuestWifiPayload | None = None
     notifications: NotificationsPayload | None = None
+    # The whole-home energy meter, picked on the Energy page. "" puts it back to automatic (the
+    # merging save drops nulls, so an empty string is how a choice is taken back).
+    wholeHomeEnergyEntity: str | None = Field(default=None, max_length=255, pattern=r"^(sensor\.[a-z0-9_]+)?$")
 
     @field_validator("nightModeIndoorLights")
     @classmethod

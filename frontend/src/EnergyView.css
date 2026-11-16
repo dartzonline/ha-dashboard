@@ -62,3 +62,8 @@
   .energy-bill-main strong { font-size: 1.45rem; }
 }
 
+
+.energy-whole-home { flex-wrap: wrap; }
+.energy-meter-pick { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; color: var(--muted); font-size: .76rem; }
+.energy-meter-pick select { min-height: var(--tap); max-width: 260px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-raised); color: var(--text); font: inherit; font-size: .8rem; }
+.energy-meter-error { flex-basis: 100%; color: var(--danger); font-size: .74rem; }

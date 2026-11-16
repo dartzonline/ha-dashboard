@@ -9,6 +9,8 @@ import { countryCode, worldCities } from './worldCities'
 
 interface WorldTimeMapProps {
   now: Date
+  /** Home, from Home Assistant's own location (`zone.home`), so the code never carries an address. */
+  home?: { name: string; lat: number; lon: number } | null
 }
 
 interface Location {
@@ -54,8 +56,7 @@ const TAP_SLOP_PX = 10
 
 // Each city is a category, so it takes the next chart series colour in fixed order, not a status
 // tint: amber/green here would read as "warning"/"fine" rather than "this is Khammam".
-const locations: Location[] = [
-  { id: 'home', city: 'Home', country: 'United States', code: 'US', timeZone: browserTimeZone, lat: 30.50, lon: -97.80, accent: 'var(--chart-1)', isHome: true },
+const otherLocations: Location[] = [
   { id: 'frankfurt', city: 'Frankfurt', country: 'Hesse, Germany', code: 'DE', timeZone: 'Europe/Berlin', lat: 50.11, lon: 8.68, accent: 'var(--chart-2)' },
   { id: 'khammam', city: 'Khammam', country: 'Telangana, India', code: 'IN', timeZone: 'Asia/Kolkata', lat: 17.25, lon: 80.15, accent: 'var(--chart-3)' },
   { id: 'auckland', city: 'Auckland', country: 'New Zealand', code: 'NZ', timeZone: 'Pacific/Auckland', lat: -36.85, lon: 174.76, accent: 'var(--chart-4)' },
@@ -194,7 +195,15 @@ function daylightLabel(hour: number) {
 /** How long a tapped city or map point stays highlighted before the panel returns to home. */
 const SELECTION_HOLD_MS = 8_000
 
-export function WorldTimeMap({ now }: WorldTimeMapProps) {
+function homeLocation(home: WorldTimeMapProps['home']): Location {
+  return {
+    id: 'home', city: home?.name || 'Home', country: '', code: '', timeZone: browserTimeZone,
+    lat: home?.lat ?? 0, lon: home?.lon ?? 0, accent: 'var(--chart-1)', isHome: true,
+  }
+}
+
+export function WorldTimeMap({ now, home = null }: WorldTimeMapProps) {
+  const locations = [homeLocation(home), ...otherLocations]
   const [selectedId, setSelectedId] = useState('home')
   const [pin, setPin] = useState<Reading | null>(null)
   const [weatherFor, setWeatherFor] = useState<Reading | null>(null)

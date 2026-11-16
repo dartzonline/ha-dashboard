@@ -585,9 +585,12 @@ class _ApplianceClient(FakeClient):
         ]
 
     async def history_with_attributes(self, entity_id, hours=24):
-        import time as _time
+        from datetime import datetime as _dt, timedelta as _td
+        from zoneinfo import ZoneInfo
 
-        yesterday_noon = (_time.time() // 86400 - 1) * 86400 + 18 * 3600
+        # Noon yesterday in the house's own time zone: a complete day, whatever the UTC clock says.
+        local = _dt.now(ZoneInfo("America/Chicago"))
+        yesterday_noon = (local.replace(hour=12, minute=0, second=0, microsecond=0) - _td(days=1)).timestamp()
         return [[
             {"state": "cool", "last_changed": _iso(yesterday_noon), "attributes": {"hvac_action": "cooling"}},
             {"state": "cool", "last_changed": _iso(yesterday_noon + 3600), "attributes": {"hvac_action": "idle"}},
@@ -626,3 +629,13 @@ def test_departure_without_a_car():
 
     slow_cache.clear()
     assert client.get("/api/car/departure").json() == {"available": False}
+
+
+def test_whole_home_meter_is_chosen_and_taken_back(tmp_path, monkeypatch):
+    from app import dashboard_config
+
+    monkeypatch.setattr(dashboard_config, "_storage_path", lambda: tmp_path / "overrides.json")
+    assert client.get("/api/config").json()["wholeHomeEnergyEntity"] is None
+    assert client.put("/api/config", json={"wholeHomeEnergyEntity": "sensor.utility_meter"}).json()["wholeHomeEnergyEntity"] == "sensor.utility_meter"
+    assert client.put("/api/config", json={"wholeHomeEnergyEntity": "light.kitchen"}).status_code == 422
+    assert client.put("/api/config", json={"wholeHomeEnergyEntity": ""}).json()["wholeHomeEnergyEntity"] is None

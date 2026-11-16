@@ -3,6 +3,20 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.25.1 - 2026-11-15: Pantry light timing, energy meter picker, privacy
+
+**Pantry light.** The light now gets its full 10 minutes from when it was switched on. It was
+timed from when the door opened, so with the door (or its sensor) reading open for hours, the
+light went off seconds after anyone switched it on.
+
+**Whole-home energy meter.** Insights no longer has a utility meter's entity id written into it:
+it finds the meter the same way the Energy page does, and the Energy page has a new *Meter*
+picker to choose it by hand (or go back to *Automatic*).
+
+**Privacy.** The world clock's home city and position now come from Home Assistant's own
+`zone.home`, and personal details (an account number, a street address, an IP address, a town
+and precise coordinates in tests) were removed from the code and its history.
+
 ## 1.25.0 - 2026-11-12: Car mornings, room balance, fridge and AC checks, tablet fit
 
 **Charging & electric driving.** The car page adds up the week: how many times the car charged,

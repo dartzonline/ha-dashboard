@@ -45,6 +45,7 @@ export function useDashboardConfig() {
   const [nightModeIndoorLights, setNightModeIndoorLights] = useState<string[]>([])
   const [energyRatePerKwh, setEnergyRatePerKwh] = useState(0.109134)
   const [energyFixedMonthly, setEnergyFixedMonthly] = useState(32.5)
+  const [energyMeterId, setEnergyMeterId] = useState<string | null>(null)
   const [lightAutoOff, setLightAutoOff] = useState<LightAutoOffSettings>(defaultLightAutoOff)
   const [customized, setCustomized] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -68,6 +69,7 @@ export function useDashboardConfig() {
         setNightModeIndoorLights(data.nightModeIndoorLights)
         if (Number.isFinite(data.energyRatePerKwh)) setEnergyRatePerKwh(data.energyRatePerKwh)
         if (Number.isFinite(data.energyFixedMonthly)) setEnergyFixedMonthly(data.energyFixedMonthly as number)
+        setEnergyMeterId(data.wholeHomeEnergyEntity ?? null)
         setLightAutoOff(lightAutoOffFrom(data))
         // Entity discovery owns this slice (it writes dismissals back through the same merging PUT),
         // but this response already carries it -- hand it over instead of fetching /api/config twice.
@@ -128,6 +130,23 @@ export function useDashboardConfig() {
     }
   }
 
+  /** Persists the whole-home meter choice; null goes back to finding it automatically. */
+  async function saveEnergyMeter(entityId: string | null) {
+    const previous = energyMeterId
+    setEnergyMeterId(entityId)
+    try {
+      const response = await fetch(apiUrl('config'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wholeHomeEnergyEntity: entityId ?? '' }),
+      })
+      if (!response.ok) throw await responseError(response, 'Could not save the energy meter')
+    } catch (saveError) {
+      setEnergyMeterId(previous)
+      throw saveError
+    }
+  }
+
   /** Persists only the fixed monthly charge, optimistically like the rate. */
   async function saveEnergyFixed(amount: number) {
     const previous = energyFixedMonthly
@@ -166,6 +185,7 @@ export function useDashboardConfig() {
     setSections(defaultSections)
     setNightModeIndoorLights(data.nightModeIndoorLights)
     if (Number.isFinite(data.energyRatePerKwh)) setEnergyRatePerKwh(data.energyRatePerKwh)
+    setEnergyMeterId(null)
     const resetAutoOff = lightAutoOffFrom(data)
     setLightAutoOff(resetAutoOff)
     // A reset clears the stored overrides, dismissals included, so discovery starts proposing again.
@@ -177,5 +197,5 @@ export function useDashboardConfig() {
   /** True once the stored configuration has actually been read; saving before that would clobber it with defaults. */
   const ready = !loading && error === null
 
-  return { sections, nightModeIndoorLights, energyRatePerKwh, energyFixedMonthly, saveEnergyFixed, lightAutoOff, customized, loading, error, ready, save, saveEnergyRate, saveLightAutoOff, reset }
+  return { sections, nightModeIndoorLights, energyRatePerKwh, energyFixedMonthly, saveEnergyFixed, energyMeterId, saveEnergyMeter, lightAutoOff, customized, loading, error, ready, save, saveEnergyRate, saveLightAutoOff, reset }
 }

@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from 'react'
 import { RoomBalancePanel } from './RoomBalance'
+import { findWholeHomeMeter } from './energyMeter'
 import type { LucideIcon } from 'lucide-react'
 import {
   BatteryCharging, Bot, CloudSun, Droplets, Gauge, HeartPulse, Maximize2, Scale,
@@ -31,6 +32,8 @@ interface InsightsViewProps {
   loading: boolean
   slide: number
   onSelectSlide: (slide: number) => void
+  /** The whole-home meter picked on the Energy page; found automatically when unset. */
+  energyMeterId?: string | null
 }
 
 interface SeriesDefinition {
@@ -65,7 +68,6 @@ const roomSensors = [
   { name: 'Guest', temperature: 'sensor.guest_bedroom_sensor_temperature', humidity: 'sensor.guest_bedroom_sensor_humidity' },
 ]
 
-const monthlyEnergyId = 'sensor.smarthub_energy_monthly_usage_smarthub_energy_monthly_usage'
 const slideIcons: LucideIcon[] = [Thermometer, Wifi, HeartPulse, Scale]
 /** The gateway reports KiB/s; Mbps is decimal, so x8 x1024 / 1e6 (the old x8/1024 understated by ~2.4%). */
 const mbpsScale = KIB_PER_SEC_TO_MBPS
@@ -339,7 +341,9 @@ const BatteryChart = memo(function BatteryChart({ data }: { data: { name: string
   )
 })
 
-export function InsightsView({ entities, series, loading, slide, onSelectSlide }: InsightsViewProps) {
+export function InsightsView({ entities, series, loading, slide, onSelectSlide, energyMeterId = null }: InsightsViewProps) {
+  // Found, never hard-coded: a utility meter's entity id can carry the account number and address.
+  const monthlyEnergyId = useMemo(() => findWholeHomeMeter(entities, energyMeterId) ?? '', [entities, energyMeterId])
   const [detail, setDetail] = useState<InsightDetailConfig | null>(null)
   const inside = numericState(entities, 'sensor.main_floor_temperature', 72)
   const insideHumidity = numericState(entities, 'sensor.mainfoor_thermostat_humidity', 45)

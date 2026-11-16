@@ -553,6 +553,14 @@ class TestPantryLight:
         door = row("binary_sensor.kitchen_pantry_door_door", "on", changed_ago=3 * MINUTE, device_class="door", name="pantry door Door")
         assert house_watch.due_actions([light, door], BASE) == []
 
+    def test_a_door_left_open_for_hours_still_gives_the_light_ten_minutes(self):
+        # The door (or its sensor) has read open all night; someone switches the light on now.
+        light = row("light.smart_wi_fi_switch_2", "on", changed_ago=1 * MINUTE, name="pantry light")
+        door = row("binary_sensor.kitchen_pantry_door_door", "on", changed_ago=15 * 60 * MINUTE, device_class="door", name="pantry door Door")
+        assert house_watch.due_actions([light, door], BASE) == []
+        later = BASE + 10 * MINUTE
+        assert house_watch.due_actions([light, door], later) == [("light", "turn_off", "light.smart_wi_fi_switch_2")]
+
     def test_door_closed_means_nothing_to_do(self):
         light = row("light.smart_wi_fi_switch_2", "on", changed_ago=30 * MINUTE, name="pantry light")
         door = row("binary_sensor.kitchen_pantry_door_door", "off", changed_ago=29 * MINUTE, device_class="door", name="pantry door Door")

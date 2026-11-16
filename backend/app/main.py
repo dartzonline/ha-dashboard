@@ -410,6 +410,7 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
         "sections": overrides.get("sections"),
         "nightModeIndoorLights": sorted(NIGHT_MODE_INDOOR_LIGHTS_DEFAULT) if lights is None else lights,
         "energyRatePerKwh": default_energy_rate() if rate is None else rate,
+        "wholeHomeEnergyEntity": overrides.get("wholeHomeEnergyEntity") or None,
         "energyFixedMonthly": default_fixed_monthly() if overrides.get("energyFixedMonthly") is None else overrides["energyFixedMonthly"],
         "ignoredEntityIds": [] if ignored is None else ignored,
         "lightAutoOffMinutes": round(watch.light_auto_off_s / 60),

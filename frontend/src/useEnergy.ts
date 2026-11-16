@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { friendlyName } from './entityNames'
 import { fetchHistory, parseHistoryStates } from './history'
+import { WHOLE_HOME_HINTS } from './energyMeter'
 import type { HistoryPoint } from './history'
 import type { HAEntity } from './types'
 
@@ -38,7 +39,6 @@ const GROUP_SUFFIX = /^(.+)_energy_(yesterday|this_month|last_month)$/
 /** Daily-resetting "energy today" sensors: their peak each day *is* that day's usage. */
 const TODAY_SENSOR = /_energy_today$/
 const FRIENDLY_SUFFIX = /\s+Energy\s+(Yesterday|This\s+Month|Last\s+Month)$/i
-const WHOLE_HOME_HINTS = ['smarthub', 'utility', 'grid', 'whole_home', 'wholehome', 'main_meter']
 
 const HISTORY_HOURS = 720
 /** Thirty days of counter history moves by one sample an hour; a half-hour-old copy is as good as fresh. */
@@ -246,7 +246,7 @@ export function energySignature(entities: Map<string, HAEntity>) {
  * `_energy_last_month` sibling sensors (read directly from current state), and bare lifetime
  * counters with no such siblings (derived from 30 days of history).
  */
-export function useEnergy(entities: Map<string, HAEntity>): UseEnergyResult {
+export function useEnergy(entities: Map<string, HAEntity>, preferredMeter: string | null = null): UseEnergyResult {
   const signature = energySignature(entities)
   // The signature encodes every energy reading the classifier consumes; the Map itself changes on
   // every WebSocket frame and would defeat the memo.
@@ -315,7 +315,9 @@ export function useEnergy(entities: Map<string, HAEntity>): UseEnergyResult {
       return result ? [result] : []
     })
     const allDevices = [...groupedDevices, ...bareDevices]
-    const wholeHomeIndex = allDevices.findIndex(
+    // The household's own choice wins; otherwise the first counter that looks like a utility meter.
+    const chosenIndex = preferredMeter ? allDevices.findIndex((device) => device.isBareCounter && device.id === preferredMeter) : -1
+    const wholeHomeIndex = chosenIndex >= 0 ? chosenIndex : allDevices.findIndex(
       (device) =>
         device.isBareCounter &&
         WHOLE_HOME_HINTS.some((hint) => device.id.toLowerCase().includes(hint) || device.name.toLowerCase().includes(hint)),
@@ -343,5 +345,5 @@ export function useEnergy(entities: Map<string, HAEntity>): UseEnergyResult {
       loading: bareEntityIds ? loading : Boolean(todayEntityIds) && todayResults.size === 0,
       isEmpty: energyEntities.length === 0,
     }
-  }, [bareEntities, bareResults, groupedDevices, todayResults, bareEntityIds, todayEntityIds, loading, energyEntities.length])
+  }, [bareEntities, bareResults, groupedDevices, todayResults, bareEntityIds, todayEntityIds, loading, energyEntities.length, preferredMeter])
 }

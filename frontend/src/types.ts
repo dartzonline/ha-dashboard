@@ -37,6 +37,8 @@ export interface DashboardConfigResponse {
   energyRatePerKwh: number
   /** The utility's fixed monthly charge, added to the bill whatever the usage. */
   energyFixedMonthly?: number
+  /** The whole-home energy meter picked on the Energy page; null means find it automatically. */
+  wholeHomeEnergyEntity?: string | null
   /** Entities dismissed from the "New devices" tray, so discovery stops re-proposing them. */
   ignoredEntityIds: string[]
   /** Minutes a light may stay on before house watch switches it off. */

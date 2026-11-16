@@ -129,6 +129,15 @@ const doorOpeningClasses = ['door', 'garage_door', 'window', 'opening']
  * A count sensor has nothing worth charting, so the Doors tile leads with the plain-language
  * verdict ("Open"/"Closed") and the count, then names which doors are open.
  */
+/** Home on the world clock: Home Assistant's own `zone.home`, never a location written into the code. */
+function homePlace(entities: Map<string, HAEntity>) {
+  const zone = entities.get('zone.home')
+  const lat = Number(zone?.attributes.latitude)
+  const lon = Number(zone?.attributes.longitude)
+  if (!zone || !Number.isFinite(lat) || !Number.isFinite(lon)) return null
+  return { name: String(zone.attributes.friendly_name || 'Home'), lat, lon }
+}
+
 function openDoorSummary(entities: Map<string, HAEntity>): string {
   const doorSensors = Array.from(entities.values()).filter((entity) => {
     const deviceClass = String(entity.attributes.device_class ?? '')
@@ -849,6 +858,8 @@ function App() {
     energyRatePerKwh,
     energyFixedMonthly,
     saveEnergyFixed,
+    energyMeterId,
+    saveEnergyMeter,
     lightAutoOff,
     ready: configReady,
     error: configError,
@@ -1113,6 +1124,13 @@ function App() {
     [configReady, saveEnergyFixed],
   )
 
+  const saveMeterWhenReady = useCallback(
+    (entityId: string | null) => (configReady
+      ? saveEnergyMeter(entityId)
+      : Promise.reject(new Error('Saved settings are still loading, so the meter cannot be saved yet. Try again in a moment.'))),
+    [configReady, saveEnergyMeter],
+  )
+
   async function activateNightMode() {
     // Two taps rather than window.confirm, which kiosk WebViews can suppress outright -- making
     // Night Mode silently impossible to trigger.
@@ -1340,9 +1358,9 @@ function App() {
 
         <div className="page-slide" key={activeSection}>
         {activeSection === 'insights' ? (
-          lazyView('Preparing insights', <InsightsView entities={entities} series={insights.series} loading={insights.loading} slide={insightsSlide} onSelectSlide={selectInsightsSlide} />)
+          lazyView('Preparing insights', <InsightsView entities={entities} series={insights.series} loading={insights.loading} slide={insightsSlide} onSelectSlide={selectInsightsSlide} energyMeterId={energyMeterId} />)
         ) : activeSection === 'world' ? (
-          <WorldTimeMap now={now} />
+          <WorldTimeMap now={now} home={homePlace(entities)} />
         ) : activeSection === 'weather' ? (
           <WeatherView entities={entities} slide={weatherSlide} onSelectSlide={selectWeatherSlide} />
         ) : activeSection === 'flights' ? (
@@ -1360,7 +1378,7 @@ function App() {
         ) : activeSection === 'roborock' ? (
           lazyView('Preparing Roborock', <RoborockView entities={entities} onService={callService} onExpand={expandTile} />)
         ) : activeSection === 'energy' ? (
-          lazyView('Preparing energy usage', <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveRateWhenReady} fixedMonthly={energyFixedMonthly} onSaveFixed={saveFixedWhenReady} />)
+          lazyView('Preparing energy usage', <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveRateWhenReady} fixedMonthly={energyFixedMonthly} onSaveFixed={saveFixedWhenReady} meterId={energyMeterId} onSaveMeter={saveMeterWhenReady} />)
         ) : activeSection === 'volvo' ? (
           lazyView('Preparing Volvo', <VolvoView entities={entities} onExpand={expandTile} onService={callService} />)
         ) : (

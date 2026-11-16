@@ -33,7 +33,7 @@ take action, and only after a much longer delay than the warning:
 | Heating empty house | 2h | --        | --                        |
 | Laundry waiting | 20m    | --        | --                        |
 | Bath fan        | 1h     | --        | --                        |
-| Pantry door     | 10m    | --        | pantry light off at 10m   |
+| Pantry door     | 10m    | --        | light off 10m after it came on with the door open |
 | Car, garage open | --    | after dark | --                       |
 | Garage light    | 15m    | --        | switched off at 1h        |
 | Car not plugged in | after dark, <= 30% | -- | --                |
@@ -706,14 +706,18 @@ def _door_lit_room(entity: dict[str, Any], since: float, ctx: Context) -> Findin
     door_open_since = ctx.open_doors.get(room)
     if door_open_since is None:
         return None
-    open_for = ctx.now - door_open_since
+    # Timed from whichever came later, the door opening or the light coming on. Timed from the door
+    # alone, a door left open (or a sensor stuck reading open) for hours switched the light off
+    # seconds after anyone turned it on.
+    started = max(door_open_since, since)
+    open_for = ctx.now - started
     if open_for < PANTRY_DOOR_LIGHT_OFF_AFTER_S:
         return None
     return Finding(
         rule="door_lit_room", category="light", severity="warning",
         entity_id=str(entity["entity_id"]), name=_name(entity), seconds=ctx.now - since,
-        detail=f"{room.capitalize()} door open {duration_label(open_for)} — switching the light off",
-        action=("light", "turn_off"), action_at=door_open_since + PANTRY_DOOR_LIGHT_OFF_AFTER_S,
+        detail=f"On with the {room} door open for {duration_label(open_for)} — switching the light off",
+        action=("light", "turn_off"), action_at=started + PANTRY_DOOR_LIGHT_OFF_AFTER_S,
     )
 
 
