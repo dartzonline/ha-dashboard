@@ -41,6 +41,15 @@ describe('theme preferences', () => {
     expect(document.documentElement.dataset.themeEffects).toBe('on')
   })
 
+  it('keeps the screen on by default, and remembers when the household turns that off', () => {
+    expect(readTheme().keepAwake).toBeUndefined()
+    saveTheme({ ...defaultTheme })
+    expect(document.documentElement.dataset.themeKeepAwake).toBe('on')
+    saveTheme({ ...defaultTheme, keepAwake: false })
+    expect(readTheme().keepAwake).toBe(false)
+    expect(document.documentElement.dataset.themeKeepAwake).toBe('off')
+  })
+
   it('persists and applies every style and palette combination', () => {
     for (const style of themeStyles) {
       for (const palette of Object.keys(themePalettes) as Array<keyof typeof themePalettes>) {

@@ -18,10 +18,10 @@ export type ThemePalette = keyof typeof themePalettes
 export const effectIntensities = ['light', 'medium', 'blizzard'] as const
 export type EffectIntensity = typeof effectIntensities[number]
 /**
- * `autoSeason` and `effects` default to on when absent, so older saved preferences pick them up.
+ * `autoSeason`, `effects` and `keepAwake` default to on when absent, so older saved preferences pick them up.
  * With `autoSeason` on, `palette` is the one shown outside the seasons.
  */
-export interface ThemePreference { style: ThemeStyle; palette: ThemePalette; effects?: boolean; autoSeason?: boolean; weatherEffects?: boolean; intensity?: EffectIntensity }
+export interface ThemePreference { style: ThemeStyle; palette: ThemePalette; effects?: boolean; autoSeason?: boolean; weatherEffects?: boolean; intensity?: EffectIntensity; keepAwake?: boolean }
 export const defaultTheme: ThemePreference = { style: 'hybrid', palette: 'phosphor' }
 let sessionTheme = { ...defaultTheme }
 let storageWriteFailed = false
@@ -38,6 +38,7 @@ export function readTheme(): ThemePreference {
         ...('autoSeason' in value && typeof value.autoSeason === 'boolean' ? { autoSeason: value.autoSeason } : {}),
         ...('weatherEffects' in value && typeof value.weatherEffects === 'boolean' ? { weatherEffects: value.weatherEffects } : {}),
         ...('intensity' in value && effectIntensities.includes(value.intensity as EffectIntensity) ? { intensity: value.intensity as EffectIntensity } : {}),
+        ...('keepAwake' in value && typeof value.keepAwake === 'boolean' ? { keepAwake: value.keepAwake } : {}),
       }
     }
   } catch { return { ...sessionTheme } }
@@ -69,6 +70,7 @@ function paint(theme: ThemePreference) {
   root.dataset.themeEffects = theme.effects === false ? 'off' : 'on'
   root.dataset.themeIntensity = theme.intensity ?? 'medium'
   root.dataset.themeWeather = theme.weatherEffects === false ? 'off' : 'on'
+  root.dataset.themeKeepAwake = theme.keepAwake === false ? 'off' : 'on'
   const tokens = {
     canvas: palette.canvas, 'canvas-2': palette.canvas2,
     surface: palette.panel, 'surface-solid': palette.panel, 'surface-raised': palette.raised,

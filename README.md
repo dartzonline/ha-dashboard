@@ -252,6 +252,8 @@ always be told apart from a quiet sky.
 
 The dashboard is meant to stay live and rotating through sections at all times on a wall-mounted display — there is no idle screensaver that covers it. **Auto-dim** is the one idle-driven behavior: the whole UI dims automatically after sunset, driven by Home Assistant's `sun.sun` entity.
 
+**Keep the screen on.** The dashboard asks the browser to keep the screen awake while it is open (Settings → Theme → *Keep the screen on*, on by default). Browsers only offer the Screen Wake Lock API on secure pages, so on a plain-http panel it falls back to a one-pixel video that is always playing, which also holds the display on. A kiosk browser's own screen-off timer or the tablet's sleep setting can still win; set *Keep Screen On* in Fully Kiosk (Device Management) and, on a Fire tablet that stays plugged in, turn on *Stay awake* in Developer options.
+
 ## Native one-command start
 
 If Node.js, Python dependencies, and `backend/.env` are already configured, this command rebuilds the current frontend and starts FastAPI:

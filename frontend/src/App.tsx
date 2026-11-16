@@ -14,6 +14,7 @@ import type { HAStateChange } from './useHomeAssistant'
 import { useInsights } from './useInsights'
 import { useDashboardConfig } from './useDashboardConfig'
 import { insightsSlides, rotationInterval } from './insightsSlides'
+import { useKeepAwake } from './useKeepAwake'
 import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
 import { SeasonalEffects } from './SeasonalEffects'
@@ -781,6 +782,7 @@ function NavigationPanel({ children, onClose, onInteract }: { children: ReactNod
 function App() {
   // Read once: the page and slide a reload (or a bookmarked #/climate) should land on.
   const [startLocation] = useState(() => parseShellHash(window.location.hash))
+  useKeepAwake()
   // Weather and Flights float the topbar over a full-height page, so they need its real height:
   // with the flight banner and the clock it is ~120 px on a 1280 px tablet, not the ~55 px of a
   // phone, and a fixed offset slid the top of those pages under it.

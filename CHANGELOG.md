@@ -3,6 +3,15 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.27.3 - 2026-11-16: Keeps the tablet screen on
+
+The dashboard now keeps the screen awake while it is open. It asks for a screen wake lock and, on a
+plain-http panel where browsers don't offer one, plays a hidden one-pixel video, which also holds the
+display on. A *Keep the screen on* switch (Settings, Theme) turns it off; it is on by default. The
+app never previously held the screen awake, so a kiosk browser's own screen-off timer or the
+tablet's sleep setting may still win: see the README for the two device settings that make it
+certain.
+
 ## 1.27.2 - 2026-11-16: AdGuard tab polish
 
 - The hero button now offers **Switch filtering on** when protection is on but filtering is off.

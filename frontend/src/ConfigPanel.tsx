@@ -377,6 +377,11 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
               <span>Weather effects</span>
             </label>
             <p className="theme-season-note">Rain, fog, lightning, snow, gusts, sunshine and starry nights follow the live forecast, all year.</p>
+            <label className="config-light-check theme-effects-toggle">
+              <input type="checkbox" checked={theme.keepAwake !== false} onChange={(event) => updateTheme({ ...theme, keepAwake: event.target.checked })} />
+              <span>Keep the screen on</span>
+            </label>
+            <p className="theme-season-note">Stops this tablet's screen from sleeping while the dashboard is open. If it still turns off, also set Keep Screen On in the kiosk browser or the tablet's own settings.</p>
             {((seasonalShown && theme.effects !== false) || theme.weatherEffects !== false) && <fieldset>
               <legend>Effect intensity</legend>
               <div className="theme-intensity-options">
