@@ -45,10 +45,12 @@ interface Reading {
 }
 
 const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago'
-const satelliteMapUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74218/world.200412.3x5400x2700.jpg'
+/** Bundled copies of NASA's imagery (see public/maps/ATTRIBUTION.md). They used to be fetched from
+    NASA's servers, which moved the files and left the map blank. */
+const satelliteMapUrl = `${import.meta.env.BASE_URL}maps/blue-marble.jpg`
 /** NASA's Black Marble: the same globe, photographed at night. Both images are equirectangular at
     the same extent, so the day and night layers register pixel for pixel. */
-const nightLightsUrl = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/79000/79765/dnb_land_ocean_ice.2012.3600x1800.jpg'
+const nightLightsUrl = `${import.meta.env.BASE_URL}maps/night-lights.jpg`
 /** A dropped pin is "the current selection", so it wears the selection accent, not a series hue. */
 const pinAccent = 'var(--accent-strong)'
 /** Movement beyond this between pointerdown and pointerup is a swipe or a drag, not a tap. */

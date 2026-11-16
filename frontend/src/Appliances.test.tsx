@@ -57,7 +57,7 @@ describe('appliance panels', () => {
   it('labels', () => {
     expect(percentChange(0.018)).toBe('+2%')
     expect(efficiencyLabel({ status: 'longer', ratio: 1.4, matchedDays: 5, loggedDays: 40 })).toBe('Running 40% longer than in the same weather')
-    expect(efficiencyLabel({ status: 'learning', ratio: null, matchedDays: 0, loggedDays: 10 })).toMatch(/^Learning: 10 days logged/)
+    expect(efficiencyLabel({ status: 'learning', ratio: null, matchedDays: 0, loggedDays: 10 })).toMatch(/^Learning · 10 days logged/)
     expect(filterLabel({ changedOn: '2026-08-01', days: 104, runHours: 236, runHoursComplete: false, status: 'due', dueInDays: -14 })).toBe('Changed 104 days ago · at least 236 h of running')
     expect(filterLabel(undefined)).toBe('Not recorded yet')
   })

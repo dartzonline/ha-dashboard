@@ -52,7 +52,10 @@ export function DepartureCard({ onService }: DepartureCardProps) {
       <header>
         <Car size={17} aria-hidden="true" />
         <h3>{leave.leavingNow ? `Leaving now (${leave.time})` : `Leaving ${leave.time} ${leave.day}`}</h3>
-        <span>your usual time</span>
+        <p className="departure-status">
+          {status.tone === 'warn' ? <Plug size={15} aria-hidden="true" /> : <BatteryCharging size={15} aria-hidden="true" />}
+          {status.text}
+        </p>
       </header>
       <div className="departure-charge">
         <div className="departure-levels">
@@ -65,10 +68,6 @@ export function DepartureCard({ onService }: DepartureCardProps) {
           <span className="departure-bar-now" style={{ width: `${Math.min(now, then)}%` }} />
         </span>
       </div>
-      <p className="departure-status">
-        {status.tone === 'warn' ? <Plug size={15} aria-hidden="true" /> : <BatteryCharging size={15} aria-hidden="true" />}
-        {status.text}
-      </p>
       {climate && (
         <div className="departure-climate">
           {climate === 'warm' ? <Flame size={16} aria-hidden="true" /> : <Snowflake size={16} aria-hidden="true" />}

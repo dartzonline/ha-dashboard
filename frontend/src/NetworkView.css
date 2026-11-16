@@ -187,3 +187,40 @@
   .network-view-chart { min-height: 300px; }
 }
 
+
+/* ---- Two tabs, no scrolling -------------------------------------------------------------------
+   Internet: the headline numbers, uptime, then the throughput chart beside the router.
+   Devices: what keeps dropping off, who is connected, and what just joined or left.
+   A long device list scrolls inside its own card; the page itself never does. */
+.network-page { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+.network-bottom { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); min-height: 0; }
+.network-side { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
+.network-devices { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); min-height: 0; }
+.network-devices > .network-dropouts { grid-column: auto; }
+
+@media (min-width: 761px) {
+  .network-view { overflow: hidden; }
+  .network-view > * { flex-shrink: 0; }
+  .network-view > .network-page { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .network-page > * { flex-shrink: 0; }
+  .network-bottom { flex: 1 1 0; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .network-view-chart { min-height: 0; }
+  .network-side .network-router { flex: 0 0 auto; }
+  .network-side .network-router-note { display: none; }
+  .network-side .network-router { gap: 6px; padding-block: 10px; }
+  .network-side .network-router dl { gap: 3px 12px; }
+  .network-side .network-outage-log { flex: 1 1 0; min-height: 96px; overflow: hidden; }
+  .network-side .network-outage-log ul { max-height: none; height: calc(100% - 28px); }
+  .network-devices { flex: 1 1 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, .9fr); height: 100%; }
+  .network-devices > * { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .network-devices .network-clients ul,
+  .network-devices .network-activity ul,
+  .network-devices .dropouts-list { flex: 1 1 0; min-height: 0; max-height: none; overflow-y: auto; scrollbar-width: none; }
+  .network-view-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .network-view .network-card { padding: 10px 14px; }
+}
+
+/* The short list under the uptime figures and the interruptions card say the same thing; on a
+   phone the short one is enough, on a tablet the card beside the chart carries it. */
+@media (max-width: 760px) { .network-outage-log.is-short { display: none; } }
+@media (min-width: 761px) { .network-view .network-uptime-list { display: none; } }

@@ -1,0 +1,7 @@
+.tab-pager { flex: 0 0 auto; display: flex; justify-content: center; gap: 8px; }
+.tab-pager button { display: inline-flex; align-items: center; gap: 7px; min-height: var(--tap); min-width: 96px; padding: 0 18px; color: var(--muted); font-size: .78rem; font-weight: 650; }
+.tab-pager button.is-active { color: var(--accent-ink); border-color: var(--accent); background-color: var(--accent); background-image: none; }
+.tab-pager-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center; font-size: .68rem; font-weight: 800; color: var(--warn-ink, #1b1204); background: var(--warn); }
+.tab-pager-badge.is-danger { color: var(--danger-ink, #fff); background: var(--danger); }
+/* On the selected (accent) tab the badge keeps its own colour so it still reads as an alert. */
+@media (max-width: 680px) { .tab-pager button { min-width: 0; padding: 0 12px; } }

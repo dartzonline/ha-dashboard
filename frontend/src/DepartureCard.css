@@ -1,9 +1,8 @@
-.departure-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; border-radius: var(--r-lg); border-left: 4px solid var(--good); }
+.departure-card { display: flex; flex-direction: column; gap: 8px; padding: 10px 18px 12px; border-radius: var(--r-lg); border-left: 4px solid var(--good); }
 .departure-card.is-warn { border-left-color: var(--warn); }
 .departure-card header { display: flex; align-items: center; gap: 8px; }
 .departure-card header svg { color: var(--accent-strong); }
 .departure-card h3 { margin: 0; color: var(--text); font-size: .95rem; font-weight: 750; letter-spacing: 0; text-transform: none; }
-.departure-card header span { margin-left: auto; color: var(--muted); font-size: .74rem; font-weight: 600; }
 
 .departure-charge { display: flex; flex-direction: column; gap: 6px; }
 .departure-levels { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; color: var(--muted); }
@@ -16,7 +15,7 @@
 .departure-bar-now { background: var(--good); }
 .departure-card.is-warn .departure-bar-now { background: var(--warn); }
 
-.departure-status { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--text); font-size: .84rem; }
+.departure-status { display: flex; align-items: center; gap: 8px; margin: 0 0 0 auto; color: var(--text); font-size: .84rem; text-align: right; }
 .departure-status svg { color: var(--good); flex-shrink: 0; }
 .departure-card.is-warn .departure-status { color: var(--warn); font-weight: 650; }
 .departure-card.is-warn .departure-status svg { color: var(--warn); }

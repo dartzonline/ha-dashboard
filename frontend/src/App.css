@@ -97,13 +97,17 @@ h1 { margin: 0; font: 700 1.65rem/1.15 var(--display-font, var(--mono)); letter-
 }
 .clock-time:hover { color: var(--accent-strong); }
 
+/* The utilities are icon-only: a status dot, a QR, the log and a rotation ring. Words ("Live",
+   "Paused", "14s") were the loudest things in the corner and said nothing the icons could not. */
 .topbar-utilities { display: flex; align-items: center; gap: 6px; }
-.rotation-status { padding: 0 12px; }
-/* The label swings between "14s", "Held" and "Paused"; a fixed slot keeps the header's centre
-   column (and the flight banner in it) from stepping sideways as it counts. */
-.rotation-status span { min-width: 3.4em; font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
-.rotation-status.is-running { color: var(--accent-strong); border-color: color-mix(in srgb, var(--accent) 40%, var(--glass-border)); background-color: color-mix(in srgb, var(--accent) 16%, var(--surface-raised)); }
-.rotation-status.is-running svg { animation: rotate-status 5s linear infinite; }
+.topbar-utilities .topbar-chip,
+.topbar-utilities .connection-chip { position: relative; width: 40px; min-width: 40px; height: 40px; padding: 0; justify-content: center; border-radius: var(--r-sm); }
+.rotation-status { color: var(--muted); }
+.rotation-status.is-running { color: var(--accent-strong); }
+.rotation-status.is-paused { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--glass-border)); }
+.rotation-ring { position: absolute; inset: -1px; width: calc(100% + 2px); height: calc(100% + 2px); transform: rotate(-90deg); pointer-events: none; overflow: visible; }
+.rotation-ring circle { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 100; transition: stroke-dashoffset 1s linear; opacity: .85; }
+@media (prefers-reduced-motion: reduce) { .rotation-ring circle { transition: none; } }
 
 /* ---------- Banners ------------------------------------------------------ */
 .shell-banners { margin-top: 10px; display: grid; gap: 8px; justify-items: stretch; }
@@ -460,8 +464,6 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
   .date { font-size: .64rem; }
   h1 { font-size: 1.25rem; }
   .clock-time { font-size: 1.35rem; }
-  .rotation-status { padding: 0; width: var(--tap); }
-  .rotation-status span { display: none; }
 
   .sidebar { height: 100dvh; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .sidebar nav { scrollbar-width: thin; }
@@ -526,7 +528,7 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
      flex column at 800 px tall (a Fire HD 10 in landscape) collapsed page headers under the first
      card and slid Morning's content under its pager. Insights and Weather are laid out to fit and
      keep the rule above. */
-  .page-slide > :is(.health-view, .maint-view, .morning-view, .volvo-view, .network-view, .roborock-view) { flex-shrink: 0; }
+  .page-slide > :is(.morning-view) { flex-shrink: 0; }
   .page-frame-head { flex-shrink: 0; }
 
   .overview { display: flex; flex-direction: column; }
@@ -556,4 +558,14 @@ main:has(.photo-backdrop) > .topbar, main:has(.photo-backdrop) .page-frame-head 
 /* Very wide panels have room for a fourth column at the same reading size. */
 @media (min-width: 1700px) {
   .entity-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Climate: the thermostat sits beside the room tiles instead of above them, so the page needs no
+   scrolling on a tablet. */
+@media (min-width: 761px) {
+  .overview.has-climate { display: grid; grid-template-columns: minmax(300px, 340px) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); column-gap: var(--gap); row-gap: 8px; overflow: hidden; }
+  .overview.has-climate > .page-frame-head { grid-column: 1 / -1; }
+  .overview.has-climate > .climate-hero { grid-column: 1; grid-row: 2 / 4; align-content: center; padding: 18px 0; }
+  .overview.has-climate > .device-toolbar { grid-column: 2; grid-row: 2; }
+  .overview.has-climate > .entity-grid { grid-column: 2; grid-row: 3; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(96px, 1fr); }
 }

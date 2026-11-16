@@ -81,3 +81,23 @@
 }
 
 
+
+/* ---- Two tabs, no scrolling ---------------------------------------------------------------- */
+.health-page { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+.health-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); min-height: 0; }
+.health-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
+.health-more { margin: 0; padding: 0 4px; color: var(--muted); font-size: .76rem; font-weight: 600; }
+.health-list button { padding-block: 8px; }
+
+@media (min-width: 761px) {
+  .health-view { overflow: hidden; }
+  .health-view > * { flex-shrink: 0; }
+  .health-view > .health-page { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .health-columns { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); height: 100%; }
+  .health-columns.is-single { grid-template-columns: minmax(0, 1fr); }
+  .health-col, .health-columns.is-single > .health-registry { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+}
+
+/* The registry is a short panel: keep it at its natural height at the top instead of stretching. */
+.health-columns.is-single > .health-registry { align-self: start; align-content: start; grid-auto-rows: max-content; }
+.health-registry .health-toggle { min-height: var(--tap); height: auto; padding: 0 18px; justify-self: start; }

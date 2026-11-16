@@ -7,6 +7,7 @@ import { BackupCard } from './HouseCards'
 import type { BackupStatus } from './useMorningBrief'
 import type { TileConfig } from './types'
 import { PageFrame } from './ui/PageFrame'
+import { TabPager } from './ui/TabPager'
 import type { Tone } from './ui/PageFrame'
 import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import './HealthView.css'
@@ -39,7 +40,15 @@ interface HealthPayload {
 
 interface HealthViewProps {
   onExpand: (tile: TileConfig) => void
+  /** The tab on show, driven by the app so the rotation can step through them. */
+  slide?: number
+  onSelectSlide?: (index: number) => void
 }
+
+const HEALTH_TABS = ['attention', 'registry'] as const
+type HealthTab = typeof HEALTH_TABS[number]
+/** The list shows this many, most severe first, and counts the rest, so the page never scrolls. */
+const HEALTH_VISIBLE = 12
 
 const HEALTH_PATH = 'insights/health'
 /** This is state that changes on the order of hours, and the endpoint reads every entity in the house. */
@@ -50,7 +59,8 @@ function attentionTitle(count: number) {
   return `${count} thing${count === 1 ? ' needs' : 's need'} attention`
 }
 
-export function HealthView({ onExpand }: HealthViewProps) {
+export function HealthView({ onExpand, slide = 0, onSelectSlide = () => {} }: HealthViewProps) {
+  const activeTab: HealthTab = HEALTH_TABS[Math.max(0, Math.min(slide, HEALTH_TABS.length - 1))]
   const [payload, setPayload] = useState<HealthPayload | null>(null)
   const [failed, setFailed] = useState(false)
   const [showCleanup, setShowCleanup] = useState(false)
@@ -78,6 +88,8 @@ export function HealthView({ onExpand }: HealthViewProps) {
   const counts = payload?.counts
   const registry = payload?.registry
   const clear = payload !== null && payload.items.length === 0
+  const visibleItems = payload ? payload.items.slice(0, HEALTH_VISIBLE) : []
+  const hiddenCount = payload ? Math.max(0, payload.items.length - HEALTH_VISIBLE) : 0
   const tone: Tone = !counts ? 'neutral'
     : counts.critical > 0 ? 'danger'
     : counts.warning > 0 ? 'warn'
@@ -101,13 +113,15 @@ export function HealthView({ onExpand }: HealthViewProps) {
 
       {!payload && !failed && <LoadingState label="Checking home health" />}
 
-      {payload && <LeftOnAction count={payload.leftOn?.length ?? 0} onDone={retry} />}
-
-      {payload?.backup && <BackupCard backup={payload.backup} always />}
-
+      {payload && (
+        <>
+          <div className="health-page" id="health-panel" role="tabpanel" aria-labelledby={`health-tab-${activeTab}`}>
+            {activeTab === 'attention' ? (
+              <div className="health-columns">
+                <div className="health-col">
       {payload && payload.items.length > 0 && (
         <ul className="health-list glass">
-          {payload.items.map((item) => {
+          {visibleItems.map((item) => {
             const Icon = CATEGORY_ICON[item.category] ?? AlertTriangle
             const clickable = Boolean(item.entityId)
             return (
@@ -132,7 +146,7 @@ export function HealthView({ onExpand }: HealthViewProps) {
           })}
         </ul>
       )}
-
+      {hiddenCount > 0 && <p className="health-more">+{hiddenCount} more, lowest priority</p>}
       {clear && (
         <div className="health-clear glass">
           <EmptyState
@@ -144,6 +158,16 @@ export function HealthView({ onExpand }: HealthViewProps) {
         </div>
       )}
 
+                </div>
+                <div className="health-col">
+      {payload && <LeftOnAction count={payload.leftOn?.length ?? 0} onDone={retry} />}
+
+      {payload?.backup && <BackupCard backup={payload.backup} always />}
+
+                </div>
+              </div>
+            ) : (
+              <div className="health-columns is-single">
       {registry && (
         <section className="health-registry glass" aria-label="Entity registry">
           <header className="health-registry-head">
@@ -201,6 +225,22 @@ export function HealthView({ onExpand }: HealthViewProps) {
             </>
           )}
         </section>
+      )}
+              </div>
+            )}
+          </div>
+
+          <TabPager
+            label="Health sections"
+            idPrefix="health"
+            active={activeTab}
+            onChange={(id) => onSelectSlide(HEALTH_TABS.indexOf(id as HealthTab))}
+            tabs={[
+              { id: 'attention', label: 'Attention', icon: <AlertTriangle size={15} aria-hidden="true" />, badge: counts ? counts.critical + counts.warning : 0, tone: counts && counts.critical > 0 ? 'danger' : 'warn' },
+              { id: 'registry', label: 'Entity registry', icon: <Trash2 size={15} aria-hidden="true" /> },
+            ]}
+          />
+        </>
       )}
     </section>
   )

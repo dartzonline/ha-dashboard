@@ -141,3 +141,79 @@
   .volvo-trip-grid { grid-template-columns: 1fr; }
 }
 
+
+/* ---- One screen, no scrolling ------------------------------------------------------------------
+   Leaving card, the six tiles, a row of charging / trip / service, the three trend charts, and a
+   minimised bar for closures and tyres. The charts take whatever height is left; the drawer opens
+   over the page instead of pushing it. */
+.volvo-view { position: relative; }
+.volvo-mid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); }
+.volvo-dock { position: relative; }
+.volvo-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+.volvo-dock-btn { display: flex; align-items: center; gap: 8px; min-height: var(--tap); padding: 0 14px; color: var(--muted); font-size: .8rem; font-weight: 650; text-align: left; }
+.volvo-dock-btn strong { margin-left: auto; color: var(--text); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.volvo-dock-btn.is-open { border-color: var(--accent); }
+.volvo-dock-chevron { flex: 0 0 auto; transition: transform .18s var(--ease); }
+.volvo-dock-btn.is-open .volvo-dock-chevron { transform: rotate(180deg); }
+/* A problem turns the whole button amber and says what it is, so it needs no opening to be noticed. */
+.volvo-dock-btn.has-alert { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--glass-border)); background-color: var(--warn-soft); }
+.volvo-dock-btn.has-alert strong { color: var(--warn); }
+.volvo-dock-btn.has-alert svg:first-child { animation: volvo-alert 1.6s ease-in-out infinite; }
+@keyframes volvo-alert { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .volvo-dock-btn.has-alert svg:first-child { animation: none; } }
+
+.volvo-drawer { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 6; max-height: min(64svh, 500px); overflow-y: auto; overscroll-behavior: contain; padding: 14px 16px; border-radius: var(--r-lg); box-shadow: 0 12px 40px rgb(0 0 0 / .35); }
+.volvo-drawer-closures { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 20px; }
+.volvo-drawer-closures .volvo-closure-group + .volvo-closure-group { margin-top: 0; }
+.volvo-drawer .volvo-tyre-plan { max-width: 520px; }
+.volvo-drawer h4:first-child { margin-top: 0; }
+.volvo-chips.is-compact .volvo-chip { cursor: default; }
+.volvo-chips.is-compact button.volvo-chip { cursor: pointer; }
+
+@media (min-width: 761px) {
+  .volvo-view { gap: 8px; overflow: hidden; }
+  .volvo-view > * { flex-shrink: 0; }
+  .volvo-view > .volvo-chart-row { flex: 1 1 0; min-height: 92px; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); }
+  .volvo-mid { grid-template-columns: 1.2fr 1fr 1fr; align-items: stretch; }
+  .volvo-banner { padding: 6px 12px; }
+  /* The Locks tile, the page title and the amber bar at the bottom already say it. */
+  .volvo-banner.is-attention { display: none; }
+  .volvo-hero-row .volvo-meter { display: none; }
+  .volvo-mid .volvo-stat { min-height: 30px; }
+  .volvo-mid .car-week-note { font-size: .72rem; }
+
+  .volvo-hero-row { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  .volvo-hero-row .volvo-hero-card { padding: 8px 12px; gap: 2px; }
+  .volvo-hero-card strong { font-size: 1.1rem; }
+  .volvo-hero-label { font-size: .66rem; }
+  .volvo-meter { height: 6px; margin: 1px 0; }
+
+  .volvo-mid .volvo-panel { padding: 10px 14px; }
+  .volvo-mid .volvo-card-head { margin-bottom: 6px; }
+  .volvo-mid .volvo-trip-grid { gap: 10px; }
+  .volvo-mid .volvo-trip-column h4 { margin-bottom: 2px; }
+  .volvo-mid .volvo-stat { padding: 3px 2px; }
+  .volvo-mid .volvo-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .volvo-mid .volvo-stat-grid .volvo-stat { padding: 4px 8px; }
+  .volvo-chips.is-compact { margin-top: 8px; gap: 5px; }
+  .volvo-chips.is-compact .volvo-chip { min-height: 32px; padding: 0 10px; font-size: .72rem; }
+
+  .volvo-chart { min-height: 0; padding: 8px 12px; }
+  .volvo-chart .volvo-card-head { margin-bottom: 2px; }
+  .volvo-chart-body { min-height: 0; }
+
+  /* Charging week, squeezed to its numbers and three sessions. */
+  .car-week.is-compact { gap: 6px; }
+  .car-week.is-compact .car-week-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .car-week.is-compact .car-week-stats > div { padding: 6px 8px; gap: 1px; }
+  .car-week.is-compact .car-week-stats b { font-size: 1.05rem; }
+  .car-week.is-compact .car-week-stats small { font-size: .66rem; }
+  /* The week's totals say it; the session list lives on the car's history sheet. */
+  .car-week.is-compact .car-week-sessions { display: none; }
+}
+
+/* A screen too short for all of it scrolls rather than clipping anything. */
+@media (min-width: 761px) and (max-height: 700px) {
+  .volvo-view { overflow-y: auto; }
+  .volvo-view > .volvo-chart-row { flex: 0 0 auto; min-height: 150px; }
+}

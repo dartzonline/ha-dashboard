@@ -131,11 +131,10 @@
 .connection-panel > footer { padding: 8px 10px 6px; color: var(--muted); font-size: .66rem; }
 
 /* On a phone the word goes; the dot and its count still say it. */
-@media (max-width: 760px) {
-  .connection-chip { padding: 0; justify-content: center; }
-  .connection-chip-label { display: none; }
-  .connection-chip em { position: absolute; top: -4px; right: -4px; }
-}
+/* The word is for screen readers and the tooltip; the dot carries the colour, the badge the count. */
+.connection-chip { padding: 0; justify-content: center; }
+.connection-chip-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.connection-chip em { position: absolute; top: -5px; right: -5px; }
 
 @media (prefers-reduced-motion: reduce) {
   .connection-panel { animation: none; }

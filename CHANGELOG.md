@@ -3,6 +3,31 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.26.0 - 2026-11-15: One screen, no scrolling
+
+**Pages that fit the screen.** Volvo, Network, Maintenance, Health, Roborock and Climate no longer
+scroll on a tablet. Long pages are split into tabs along the bottom, most important first, and the
+automatic rotation steps through every tab in turn, the way it already does for Morning and Insights:
+- **Maintenance:** Needs attention (what to replace, faults, updates), Consumables (with the salt level), Appliances (heating and cooling, fridge, garage door, washer and dryer).
+- **Network:** Internet (speeds, uptime, throughput, router, interruptions), Devices (what keeps dropping off, who is connected, recent activity).
+- **Health:** Attention (the most severe items first, with a count of the rest, plus backups) and Entity registry.
+- **Roborock:** Vacuum (status, controls, consumables) and Dock & care.
+- **Climate:** the thermostat sits beside the room tiles.
+- A tab shows a count when something on it needs attention.
+
+**Volvo.** The leaving card is first. Charging, trip and service sit side by side with the three trend
+charts under them. Closures and tyres are minimised to a bar at the bottom: touch one to open it over
+the page, and it turns amber and says what is wrong ("Unlocked", "2 open", "1 low") when something is.
+
+**Calmer top corner.** The Live, activity and rotation controls are small icon buttons. The rotation
+button shows a thin ring that drains as the next page approaches instead of "14s" or "Paused".
+
+**Cleaner data pages.** Seasonal decorations fade back on the figure-heavy pages (Volvo, Maintenance,
+Health, Network, Roborock, Insights, Energy), so nothing drifts across a number being read.
+
+**World map.** NASA moved the map images, which left the map blank. The two images are now bundled
+with the dashboard, so the map no longer depends on NASA's servers.
+
 ## 1.25.1 - 2026-11-15: Pantry light timing, energy meter picker, privacy
 
 **Pantry light.** The light now gets its full 10 minutes from when it was switched on. It was

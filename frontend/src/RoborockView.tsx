@@ -8,6 +8,7 @@ import { friendlyName } from './entityNames'
 import type { HAEntity, TileConfig } from './types'
 import { EmptyState, InlineError, LoadingState } from './ui/StateMessages'
 import { PageFrame } from './ui/PageFrame'
+import { TabPager } from './ui/TabPager'
 import type { Tone } from './ui/PageFrame'
 import './RoborockView.css'
 
@@ -16,7 +17,13 @@ interface RoborockViewProps {
   onService: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>
   /** Opens the shared entity detail sheet, same as tiles in every other section. */
   onExpand: (tile: TileConfig) => void
+  /** The tab on show, driven by the app so the rotation can step through them. */
+  slide?: number
+  onSelectSlide?: (index: number) => void
 }
+
+const ROBOROCK_TABS = ['vacuum', 'dock'] as const
+type RoborockTab = typeof ROBOROCK_TABS[number]
 
 const VACUUM = 'vacuum.roborock_qrevo_maxv'
 const PREFIX = 'sensor.roborock_qrevo_maxv'
@@ -102,7 +109,8 @@ const ERROR_SENSORS: { entityId: string; label: string; clear: string }[] = [
 /** How long an armed confirmation waits for its second tap, matching useTwoTapConfirm. */
 const CONFIRM_MS = 4_000
 
-export function RoborockView({ entities, onService, onExpand }: RoborockViewProps) {
+export function RoborockView({ entities, onService, onExpand, slide = 0, onSelectSlide = () => {} }: RoborockViewProps) {
+  const activeTab: RoborockTab = ROBOROCK_TABS[Math.max(0, Math.min(slide, ROBOROCK_TABS.length - 1))]
   const [pending, setPending] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   // One armed control at a time. useTwoTapConfirm holds a single flag, and two of these controls
@@ -312,6 +320,9 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
 
       {/* Buttons, not read-only figures: each fronts a real entity so a tap opens
           the same detail sheet with history that tiles elsewhere do. */}
+      <div className="roborock-page" id="roborock-panel" role="tabpanel" aria-labelledby={`roborock-tab-${activeTab}`}>
+        {activeTab === 'vacuum' ? (
+          <>
       <div className="roborock-cards">
         {cards.map((card) => {
           const linked = entities.has(card.entityId)
@@ -365,7 +376,7 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
         {offline && !armedControl && <p className="roborock-controls-note">The vacuum is not reporting, so controls are disabled.</p>}
       </div>
 
-      <div className="roborock-lower">
+            <div className="roborock-lower">
         <section className="roborock-consumables glass glass-card" aria-label="Consumables">
           <header className="roborock-card-head">
             <Filter size={15} aria-hidden="true" />
@@ -416,6 +427,28 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
           </p>
         </section>
 
+        <section className="roborock-totals glass glass-card" aria-label="Lifetime">
+          <header className="roborock-card-head">
+            <Waves size={15} aria-hidden="true" />
+            <h3>Lifetime</h3>
+          </header>
+          <dl>
+            <dt>Cleans</dt>
+            <dd>{totalCleans === null ? '—' : Math.round(totalCleans)}</dd>
+            <dt>Area</dt>
+            <dd>{totalArea === null ? '—' : `${Math.round(totalArea)} m²`}</dd>
+            <dt>Run time</dt>
+            <dd>{totalHours === null ? '—' : `${Math.round(totalHours)} h`}</dd>
+            <dt>Last ended</dt>
+            <dd>{lastEnd && !MISSING.has(lastEnd.state)
+              ? new Date(lastEnd.state).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+              : '—'}</dd>
+          </dl>
+        </section>
+            </div>
+          </>
+        ) : (
+          <div className="roborock-lower is-dock">
         <section className="roborock-dock glass glass-card" aria-label="Dock and maintenance">
           <header className="roborock-card-head">
             <Droplets size={15} aria-hidden="true" />
@@ -475,25 +508,20 @@ export function RoborockView({ entities, onService, onExpand }: RoborockViewProp
           </dl>
         </section>
 
-        <section className="roborock-totals glass glass-card" aria-label="Lifetime">
-          <header className="roborock-card-head">
-            <Waves size={15} aria-hidden="true" />
-            <h3>Lifetime</h3>
-          </header>
-          <dl>
-            <dt>Cleans</dt>
-            <dd>{totalCleans === null ? '—' : Math.round(totalCleans)}</dd>
-            <dt>Area</dt>
-            <dd>{totalArea === null ? '—' : `${Math.round(totalArea)} m²`}</dd>
-            <dt>Run time</dt>
-            <dd>{totalHours === null ? '—' : `${Math.round(totalHours)} h`}</dd>
-            <dt>Last ended</dt>
-            <dd>{lastEnd && !MISSING.has(lastEnd.state)
-              ? new Date(lastEnd.state).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-              : '—'}</dd>
-          </dl>
-        </section>
+          </div>
+        )}
       </div>
+
+      <TabPager
+        label="Vacuum sections"
+        idPrefix="roborock"
+        active={activeTab}
+        onChange={(id) => onSelectSlide(ROBOROCK_TABS.indexOf(id as RoborockTab))}
+        tabs={[
+          { id: 'vacuum', label: 'Vacuum', icon: <Bot size={15} aria-hidden="true" /> },
+          { id: 'dock', label: 'Dock & care', icon: <Droplets size={15} aria-hidden="true" />, badge: problems.length, tone: 'warn' },
+        ]}
+      />
     </PageFrame>
   )
 }

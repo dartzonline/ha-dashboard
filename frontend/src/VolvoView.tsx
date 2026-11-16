@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
-  BatteryCharging, Car, CircleAlert, CircleCheck, CircleGauge, Disc3, DoorOpen, Droplets, Fuel, Gauge,
-  Lightbulb, Lock, LockOpen, MapPinned, Moon, Plug, Route, ShieldAlert, ShieldCheck, Wrench,
+  BatteryCharging, Car, ChevronUp, CircleAlert, CircleCheck, CircleGauge, Disc3, DoorOpen, Fuel, Gauge,
+  Lock, LockOpen, MapPinned, Moon, Plug, Route, ShieldAlert, Wrench,
 } from 'lucide-react'
 import { isAbortError } from './cachedFetch'
 import { CarWeekPanel } from './CarWeek'
@@ -289,6 +289,18 @@ function sentence(text: string) {
 
 export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
   const car = useVolvo(entities)
+  // Closures, tyres and the catch-all signals live in a drawer over the page, so the page itself
+  // fits one screen and never scrolls. It opens from the bar at the bottom and closes on a tap away.
+  const [drawer, setDrawer] = useState<'closures' | 'tyres' | 'signals' | null>(null)
+  const dock = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!drawer) return
+    const away = (event: PointerEvent) => { if (!dock.current?.contains(event.target as Node)) setDrawer(null) }
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDrawer(null) }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', escape)
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', escape) }
+  }, [drawer])
 
   if (!car) {
     // An empty map means the socket has not delivered its first snapshot yet, not that there is no car.
@@ -456,6 +468,108 @@ export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
     serviceWarning ? 'service due' : null,
   ].filter(Boolean).join(' · ')
 
+  const closuresAlert = openClosures.length > 0 || locked === false
+  const tyresAlert = tyreFaults.length > 0
+  const dockButtons: { id: 'closures' | 'tyres' | 'signals'; label: string; status: string; alert: boolean; icon: ReactNode }[] = [
+    {
+      id: 'closures', label: 'Closures', alert: closuresAlert, icon: closuresAlert ? <CircleAlert size={16} /> : <DoorOpen size={16} />,
+      status: closuresAlert
+        ? [locked === false ? 'Unlocked' : null, openClosures.length > 0 ? `${openClosures.length} open` : null].filter(Boolean).join(' · ')
+        : unreadClosures.length === closureItems.length ? 'Not reported' : 'All closed',
+    },
+    {
+      id: 'tyres', label: 'Tyres', alert: tyresAlert, icon: tyresAlert ? <CircleAlert size={16} /> : <Disc3 size={16} />,
+      status: tyresAlert ? `${tyreFaults.length} low` : tyreUnread.length === TYRES.length ? 'Not reported' : 'All nominal',
+    },
+    ...(otherMetrics.length > 0 ? [{ id: 'signals' as const, label: 'More signals', alert: false, icon: <Gauge size={16} />, status: `${otherMetrics.length} sensors` }] : []),
+  ]
+
+  const closuresBody = (
+    <div className="volvo-drawer-closures">
+
+      {CLOSURES.map((group) => (
+        <div key={group.group} className="volvo-closure-group">
+          <h4>{group.group}</h4>
+          <div className="volvo-closure-cells">
+            {group.items.map((item) => {
+              const state = openness(get(item.entityId))
+              return (
+                <button
+                  key={item.entityId}
+                  type="button"
+                  className={`volvo-cell is-${state}`}
+                  onClick={() => open(item.entityId, `${group.group} ${item.label}`, 'door-open')}
+                  disabled={!entities.has(item.entityId)}
+                  title={`${item.label}: ${state === 'unknown' ? 'not reported' : state}`}
+                >
+                  <em>{item.label}</em>
+                  <b>{state === 'open' ? 'Open' : state === 'closed' ? 'Closed' : '—'}</b>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="volvo-closure-group">
+        <h4>Central lock</h4>
+        <div className="volvo-closure-cells">
+          <button
+            type="button"
+            className={`volvo-cell is-wide ${locked === false ? 'is-open' : locked ? 'is-closed' : 'is-unknown'}`}
+            onClick={() => open(ID.lock, 'Central lock', 'lock', 'lock')}
+            disabled={!entities.has(ID.lock)}
+          >
+            <em>Doors</em>
+            <b>{locked === null ? '—' : locked ? 'Locked' : 'Unlocked'}</b>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+  const tyresBody = (
+    <>
+
+      {/* Laid out as the car sits on the road, so "rear left" needs no reading. */}
+      <div className="volvo-tyre-plan">
+        {TYRES.map((tyre) => {
+          const state = health(get(tyre.entityId))
+          return (
+            <button
+              key={tyre.entityId}
+              type="button"
+              className={`volvo-tyre is-${state}`}
+              onClick={() => open(tyre.entityId, `Tyre ${tyre.label}`, 'gauge')}
+              disabled={!entities.has(tyre.entityId)}
+              title={`${tyre.label}: ${state === 'problem' ? 'low pressure' : state === 'ok' ? 'nominal' : 'not reported'}`}
+            >
+              <em>{tyre.label}</em>
+              <b>{state === 'problem' ? 'Low' : state === 'ok' ? 'OK' : '—'}</b>
+            </button>
+          )
+        })}
+      </div>
+      <p className="volvo-note">
+        The car reports pressure <strong>warnings</strong>, not psi values, so there is no pressure reading to show.
+      </p>
+    </>
+  )
+  const signalsBody = (
+
+    <div className="volvo-metric-grid">
+      {otherMetrics.map((metric) => (
+        <button
+          key={metric.entityId}
+          type="button"
+          className="volvo-metric-card"
+          onClick={() => open(metric.entityId, metric.label, 'gauge')}
+        >
+          <span>{metric.label}</span>
+          <strong>{metric.value}</strong>
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <PageFrame
       className="volvo-view"
@@ -465,6 +579,9 @@ export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
       tone={pageTone}
       meta={`Updated ${lastUpdated}${relativeAge(car.updatedAt) ? ` · ${relativeAge(car.updatedAt)}` : ''} · ${car.metrics.length + car.binaries.length} signals`}
     >
+      {/* The leaving card is the page's highlight, so it comes first. */}
+      {onService && <DepartureCard onService={onService} />}
+
       {/* Naming the connection state stops a sleeping car's last-known figures reading as live. */}
       {connection && !reachable && (
         <p className="volvo-banner is-asleep" role="status">
@@ -472,15 +589,12 @@ export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
           <span>Car reports “{enumLabel(connection) ?? 'no connection'}”. Figures below are the last values it sent.</span>
         </p>
       )}
-
-      <p className={`volvo-banner ${alerts > 0 ? 'is-attention' : 'is-clear'}`} role="status">
-        {alerts > 0 ? <ShieldAlert size={15} aria-hidden="true" /> : <ShieldCheck size={15} aria-hidden="true" />}
-        {alerts > 0 ? (
+      {alerts > 0 && (
+        <p className="volvo-banner is-attention" role="status">
+          <ShieldAlert size={15} aria-hidden="true" />
           <span>{sentence(attention)}</span>
-        ) : (
-          <span>Locked, closed and no warnings{unreadClosures.length > 0 ? ` · ${unreadClosures.length} sensor${unreadClosures.length === 1 ? '' : 's'} not reporting` : ''}</span>
-        )}
-      </p>
+        </p>
+      )}
 
       <div className="volvo-hero-row">
         {heroCards.map((card) => {
@@ -517,91 +631,8 @@ export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
         })}
       </div>
 
-      <div className="volvo-panel-row">
-        <section className="volvo-panel glass glass-card" aria-label="Doors, windows and body">
-          <header className="volvo-card-head">
-            <DoorOpen size={15} aria-hidden="true" />
-            <h3>Closures</h3>
-            <span className={openClosures.length > 0 ? 'is-attention' : undefined}>
-              {openClosures.length > 0 ? `${openClosures.length} open` : unreadClosures.length === closureItems.length ? 'Not reported' : 'All closed'}
-            </span>
-          </header>
-          {CLOSURES.map((group) => (
-            <div key={group.group} className="volvo-closure-group">
-              <h4>{group.group}</h4>
-              <div className="volvo-closure-cells">
-                {group.items.map((item) => {
-                  const state = openness(get(item.entityId))
-                  return (
-                    <button
-                      key={item.entityId}
-                      type="button"
-                      className={`volvo-cell is-${state}`}
-                      onClick={() => open(item.entityId, `${group.group} ${item.label}`, 'door-open')}
-                      disabled={!entities.has(item.entityId)}
-                      title={`${item.label}: ${state === 'unknown' ? 'not reported' : state}`}
-                    >
-                      <em>{item.label}</em>
-                      <b>{state === 'open' ? 'Open' : state === 'closed' ? 'Closed' : '—'}</b>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-          <div className="volvo-closure-group">
-            <h4>Central lock</h4>
-            <div className="volvo-closure-cells">
-              <button
-                type="button"
-                className={`volvo-cell is-wide ${locked === false ? 'is-open' : locked ? 'is-closed' : 'is-unknown'}`}
-                onClick={() => open(ID.lock, 'Central lock', 'lock', 'lock')}
-                disabled={!entities.has(ID.lock)}
-              >
-                <em>Doors</em>
-                <b>{locked === null ? '—' : locked ? 'Locked' : 'Unlocked'}</b>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="volvo-panel glass glass-card" aria-label="Tyre pressure warnings">
-          <header className="volvo-card-head">
-            <Disc3 size={15} aria-hidden="true" />
-            <h3>Tyres</h3>
-            <span className={tyreFaults.length > 0 ? 'is-attention' : undefined}>
-              {tyreFaults.length > 0 ? `${tyreFaults.length} low` : tyreUnread.length === TYRES.length ? 'Not reported' : 'All nominal'}
-            </span>
-          </header>
-          {/* Laid out as the car sits on the road, so "rear left" needs no reading. */}
-          <div className="volvo-tyre-plan">
-            {TYRES.map((tyre) => {
-              const state = health(get(tyre.entityId))
-              return (
-                <button
-                  key={tyre.entityId}
-                  type="button"
-                  className={`volvo-tyre is-${state}`}
-                  onClick={() => open(tyre.entityId, `Tyre ${tyre.label}`, 'gauge')}
-                  disabled={!entities.has(tyre.entityId)}
-                  title={`${tyre.label}: ${state === 'problem' ? 'low pressure' : state === 'ok' ? 'nominal' : 'not reported'}`}
-                >
-                  <em>{tyre.label}</em>
-                  <b>{state === 'problem' ? 'Low' : state === 'ok' ? 'OK' : '—'}</b>
-                </button>
-              )
-            })}
-          </div>
-          <p className="volvo-note">
-            The car reports pressure <strong>warnings</strong>, not psi values, so there is no pressure reading to show.
-          </p>
-        </section>
-      </div>
-
-      {onService && <DepartureCard onService={onService} />}
-      <CarWeekPanel />
-
-      <div className="volvo-panel-row">
+      <div className="volvo-mid">
+        <CarWeekPanel compact />
         <section className="volvo-panel glass glass-card" aria-label="Trip and efficiency">
           <header className="volvo-card-head">
             <Route size={15} aria-hidden="true" />
@@ -667,111 +698,88 @@ export function VolvoView({ entities, onExpand, onService }: VolvoViewProps) {
             })}
           </div>
 
-          <div className="volvo-chip-block">
-            <h4><Droplets size={13} aria-hidden="true" /> Fluids</h4>
-            <div className="volvo-chips">
-              {FLUIDS.map((fluid) => {
-                const state = health(get(fluid.entityId))
-                return (
-                  <button
-                    key={fluid.entityId}
-                    type="button"
-                    className={`volvo-chip glass-pill is-${state}`}
-                    onClick={() => open(fluid.entityId, `${fluid.label} level`, 'droplets')}
-                    disabled={!entities.has(fluid.entityId)}
-                  >
-                    {state === 'problem' ? <CircleAlert size={13} aria-hidden="true" /> : state === 'ok' ? <CircleCheck size={13} aria-hidden="true" /> : null}
-                    {fluid.label}
-                    {state === 'problem' && <i>low</i>}
-                    {state === 'unknown' && <i>—</i>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {bulbs.length > 0 && (
-            <div className="volvo-chip-block">
-              <h4><Lightbulb size={13} aria-hidden="true" /> Bulbs</h4>
-              <div className="volvo-chips">
-                {/* Twenty "Off" chips is noise; only failures earn a chip, the rest collapse to a count. */}
-                {bulbFaults.length === 0 ? (
-                  <span className="volvo-chip glass-pill is-ok"><CircleCheck size={13} aria-hidden="true" />{bulbs.length} monitored, none out</span>
-                ) : bulbFaults.map((bulb) => (
-                  <button
-                    key={bulb.entity_id}
-                    type="button"
-                    className="volvo-chip glass-pill is-problem"
-                    onClick={() => open(bulb.entity_id, friendlyName(bulb, bulb.entity_id), 'lightbulb')}
-                  >
-                    <CircleAlert size={13} aria-hidden="true" />
-                    {friendlyName(bulb, bulb.entity_id).replace(/^Volvo\s*XC60\s*/i, '')}
-                    <i>out</i>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="volvo-chip-block">
-            <h4><Car size={13} aria-hidden="true" /> Car</h4>
-            <div className="volvo-chips">
-              <button
-                type="button"
-                className={`volvo-chip glass-pill ${engineRunning ? 'is-problem' : 'is-ok'}`}
-                onClick={() => open(ID.engine, 'Engine status', 'car')}
-                disabled={!entities.has(ID.engine)}
-              >
-                {engineRunning ? 'Engine running' : live(get(ID.engine)) ? 'Engine off' : 'Engine —'}
+          {/* Only failures earn their own chip; everything fine collapses to one reassuring word. */}
+          <div className="volvo-chips is-compact">
+            {fluidFaults.length === 0 ? (
+              <span className={`volvo-chip glass-pill ${FLUIDS.some((fluid) => health(get(fluid.entityId)) === 'ok') ? 'is-ok' : 'is-unknown'}`}>
+                <CircleCheck size={13} aria-hidden="true" />Fluids {FLUIDS.some((fluid) => health(get(fluid.entityId)) === 'ok') ? 'OK' : '—'}
+              </span>
+            ) : fluidFaults.map((fluid) => (
+              <button key={fluid.entityId} type="button" className="volvo-chip glass-pill is-problem" onClick={() => open(fluid.entityId, `${fluid.label} level`, 'droplets')}>
+                <CircleAlert size={13} aria-hidden="true" />{fluid.label}<i>low</i>
               </button>
-              <button
-                type="button"
-                className={`volvo-chip glass-pill ${reachable ? 'is-ok' : 'is-unknown'}`}
-                onClick={() => open(ID.connection, 'Car connection', 'wifi')}
-                disabled={!entities.has(ID.connection)}
-              >
-                {enumLabel(connection) ?? 'Connection —'}
+            ))}
+            {bulbs.length > 0 && (bulbFaults.length === 0 ? (
+              <span className="volvo-chip glass-pill is-ok"><CircleCheck size={13} aria-hidden="true" />{bulbs.length} bulbs OK</span>
+            ) : bulbFaults.map((bulb) => (
+              <button key={bulb.entity_id} type="button" className="volvo-chip glass-pill is-problem" onClick={() => open(bulb.entity_id, friendlyName(bulb, bulb.entity_id), 'lightbulb')}>
+                <CircleAlert size={13} aria-hidden="true" />{friendlyName(bulb, bulb.entity_id).replace(/^Volvo\s*XC60\s*/i, '')}<i>out</i>
               </button>
-              <button
-                type="button"
-                className={`volvo-chip glass-pill ${plugged ? 'is-ok' : 'is-unknown'}`}
-                onClick={() => open(ID.chargingPowerStatus, 'Charging power status', 'battery')}
-                disabled={!entities.has(ID.chargingPowerStatus)}
-              >
-                {enumLabel(get(ID.chargingPowerStatus)) ?? 'Charge point —'}
-              </button>
-            </div>
+            )))}
+            <button
+              type="button"
+              className={`volvo-chip glass-pill ${engineRunning ? 'is-problem' : 'is-ok'}`}
+              onClick={() => open(ID.engine, 'Engine status', 'car')}
+              disabled={!entities.has(ID.engine)}
+            >
+              {engineRunning ? 'Engine running' : live(get(ID.engine)) ? 'Engine off' : 'Engine —'}
+            </button>
+            <button
+              type="button"
+              className={`volvo-chip glass-pill ${reachable ? 'is-ok' : 'is-unknown'}`}
+              onClick={() => open(ID.connection, 'Car connection', 'wifi')}
+              disabled={!entities.has(ID.connection)}
+            >
+              {enumLabel(connection) ?? 'Connection —'}
+            </button>
+            <button
+              type="button"
+              className={`volvo-chip glass-pill ${plugged ? 'is-ok' : 'is-unknown'}`}
+              onClick={() => open(ID.chargingPowerStatus, 'Charging power status', 'battery')}
+              disabled={!entities.has(ID.chargingPowerStatus)}
+            >
+              {enumLabel(get(ID.chargingPowerStatus)) ?? 'Charge point —'}
+            </button>
           </div>
         </section>
       </div>
-
-      {otherMetrics.length > 0 && (
-        <section className="volvo-other glass glass-card" aria-label="Other signals">
-          <header className="volvo-card-head">
-            <Gauge size={15} aria-hidden="true" />
-            <h3>Other signals</h3>
-            <span>{otherMetrics.length}</span>
-          </header>
-          <div className="volvo-metric-grid">
-            {otherMetrics.map((metric) => (
-              <button
-                key={metric.entityId}
-                type="button"
-                className="volvo-metric-card"
-                onClick={() => open(metric.entityId, metric.label, 'gauge')}
-              >
-                <span>{metric.label}</span>
-                <strong>{metric.value}</strong>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
 
       <div className="volvo-chart-row">
         <TrendChart title="Battery" entityId={entities.has(ID.battery) ? ID.battery : null} unit={unitOf(battery)} />
         <TrendChart title="Electric range" entityId={entities.has(ID.rangeBattery) ? ID.rangeBattery : null} unit={unitOf(get(ID.rangeBattery))} />
         <TrendChart title="Charging power" entityId={entities.has(ID.chargingPower) ? ID.chargingPower : null} unit={unitOf(get(ID.chargingPower))} />
+      </div>
+
+      {/* Minimised by default: a button per group, amber with the problem written on it when
+          something needs attention, and a drawer that opens over the page when touched. */}
+      <div className="volvo-dock" ref={dock}>
+        {drawer && (
+          <div className="volvo-drawer glass-strong" id="volvo-drawer" role="region" aria-label={dockButtons.find((button) => button.id === drawer)?.label}>
+            {drawer === 'closures' && closuresBody}
+            {drawer === 'tyres' && tyresBody}
+            {drawer === 'signals' && signalsBody}
+          </div>
+        )}
+        <div className="volvo-strip">
+          {dockButtons.map((button) => {
+            const active = drawer === button.id
+            return (
+              <button
+                key={button.id}
+                type="button"
+                className={`volvo-dock-btn glass-pill${button.alert ? ' has-alert' : ''}${active ? ' is-open' : ''}`}
+                aria-expanded={active}
+                aria-controls="volvo-drawer"
+                onClick={() => setDrawer(active ? null : button.id)}
+              >
+                {button.icon}
+                <span>{button.label}</span>
+                <strong>{button.status}</strong>
+                <ChevronUp size={14} className="volvo-dock-chevron" aria-hidden="true" />
+              </button>
+            )
+          })}
+        </div>
       </div>
     </PageFrame>
   )

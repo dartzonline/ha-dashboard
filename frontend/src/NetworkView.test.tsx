@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearCachedJson } from './cachedFetch'
 import { NetworkView } from './NetworkView'
@@ -40,8 +40,8 @@ function ok(body: unknown) {
   return Promise.resolve({ ok: true, json: () => Promise.resolve(body) } as Response)
 }
 
-function renderView(entities: HAEntity[] = [entity('binary_sensor.cbr750_gateway_wan_status', 'on')], onService = vi.fn(() => Promise.resolve())) {
-  render(<NetworkView entities={new Map(entities.map((item) => [item.entity_id, item]))} onService={onService} onExpand={vi.fn()} />)
+function renderView(entities: HAEntity[] = [entity('binary_sensor.cbr750_gateway_wan_status', 'on')], onService = vi.fn(() => Promise.resolve()), slide = 0) {
+  render(<NetworkView entities={new Map(entities.map((item) => [item.entity_id, item]))} onService={onService} onExpand={vi.fn()} slide={slide} />)
   return onService
 }
 
@@ -50,14 +50,16 @@ describe('NetworkView', () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => ok(String(input).includes('dropouts') ? dropoutsBody : String(input).includes('clients') ? clientsBody : network)))
     renderView()
     expect(screen.getByRole('heading', { name: 'Internet online' })).toBeTruthy()
-    const tabs = screen.getAllByRole('tab')
+    const range = screen.getByRole('tablist', { name: /history window/i })
+    const tabs = within(range).getAllByRole('tab')
     expect(tabs.map((tab) => tab.textContent)).toEqual(['6h', '24h', '3d', '7d'])
     expect(tabs[1].getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(tabs[1].id)
+    expect(document.getElementById('network-history-panel')?.getAttribute('aria-labelledby')).toBe(tabs[1].id)
 
-    fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' })
+    fireEvent.keyDown(range, { key: 'ArrowRight' })
     await waitFor(() => expect(screen.getByRole('tab', { name: '3d' }).getAttribute('aria-selected')).toBe('true'))
-    expect(await screen.findByText('Phone')).toBeTruthy()
+    // The sections tab bar sits beside the range tabs: Internet first, Devices second.
+    expect(screen.getByRole('tablist', { name: /network sections/i })).toBeTruthy()
   })
 
   it('offers a retry when the device list fails, and refetches on tap', async () => {
@@ -70,7 +72,7 @@ describe('NetworkView', () => {
         ? Promise.resolve({ ok: false, status: 500, statusText: 'Server error', json: () => Promise.resolve({}), text: () => Promise.resolve('') } as Response)
         : ok(clientsBody)
     }))
-    renderView()
+    renderView(undefined, undefined, 1)
     const retries = await screen.findAllByRole('button', { name: 'Retry' })
     fireEvent.click(retries[0])
     expect(await screen.findByText('Phone')).toBeTruthy()

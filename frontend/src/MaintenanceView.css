@@ -139,3 +139,31 @@
 .maint-update-install.is-armed { color: var(--warn-ink); background: var(--warn); border-color: var(--warn); }
 .maint-update-warning { flex: 1 1 100%; color: var(--warn); font-size: .78rem; font-weight: 600; }
 .maint-row-pair { display: contents; }
+
+/* ---- Tabs instead of a long page ------------------------------------------------------------
+   The page never scrolls: what matters most is on the first tab, the rest behind the others.
+   A column that is still too long for the screen scrolls inside itself. */
+.maint-page { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+.maint-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--gap); min-height: 0; }
+.maint-col { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; min-height: 0; }
+.maint-clear { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 0; padding: 40px 0; color: var(--muted); font-size: .95rem; }
+.maint-clear svg { color: var(--good); }
+
+@media (min-width: 761px) {
+  .maint-view { overflow: hidden; }
+  .maint-view > * { flex-shrink: 0; }
+  .maint-view > .maint-page { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .maint-columns { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); height: 100%; }
+  .maint-columns.is-consumables { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+  .maint-col { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+  .maint-col::-webkit-scrollbar { display: none; }
+  .maint-page > .maint-grid { height: 100%; overflow-y: auto; scrollbar-width: none; align-content: start; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  .maint-view > .tab-pager { margin-top: auto; }
+}
+
+/* Appliance cards differ a lot in height; columns let the short ones stack under each other
+   instead of leaving gaps, so all of them fit the screen. */
+@media (min-width: 761px) {
+  .maint-page > .maint-grid { display: block; column-width: 260px; column-gap: var(--gap); height: 100%; overflow: hidden; }
+  .maint-page > .maint-grid > * { break-inside: avoid; margin-bottom: var(--gap); }
+}

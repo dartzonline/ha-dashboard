@@ -130,3 +130,18 @@
   .roborock-controls > button { flex: 1 1 44%; justify-content: center; }
 }
 
+
+/* ---- Two tabs, no scrolling ---------------------------------------------------------------- */
+.roborock-page { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+@media (min-width: 761px) {
+  .roborock-view { overflow: hidden; }
+  .roborock-view > * { flex-shrink: 0; }
+  .roborock-view > .roborock-page { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  .roborock-page > * { flex-shrink: 0; }
+  .roborock-page > .roborock-lower { flex: 1 1 0; min-height: 0; }
+  .roborock-lower { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: stretch; }
+  .roborock-lower > section { min-height: 0; overflow-y: auto; scrollbar-width: none; }
+  /* The dock list is a dozen short rows: two columns keep it on the screen. */
+  .roborock-lower.is-dock { grid-template-columns: minmax(0, 1fr); }
+  .roborock-lower.is-dock .roborock-dock ul { grid-template-columns: 1fr 1fr; column-gap: 28px; }
+}

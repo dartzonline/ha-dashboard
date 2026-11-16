@@ -17,7 +17,8 @@ function day(iso: string) {
   return new Date(iso).toLocaleDateString([], { weekday: 'short' })
 }
 
-export function CarWeekPanel() {
+/** `compact` is for the one-screen Volvo page: fewer sessions and no footnote. */
+export function CarWeekPanel({ compact = false }: { compact?: boolean }) {
   const [data, setData] = useState<CarWeekData | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -37,10 +38,10 @@ export function CarWeekPanel() {
 
   const share = data?.electricShare ?? null
   const hours = data ? fullChargeHours(data) : null
-  const sessions = [...(data?.sessions ?? [])].reverse().slice(0, 5)
+  const sessions = [...(data?.sessions ?? [])].reverse().slice(0, compact ? 2 : 5)
 
   return (
-    <section className="volvo-panel glass glass-card car-week" aria-label="Charging this week">
+    <section className={`volvo-panel glass glass-card car-week${compact ? ' is-compact' : ''}`} aria-label="Charging this week">
       <header className="volvo-card-head">
         <BatteryCharging size={15} aria-hidden="true" />
         <h3>Charging &amp; electric driving</h3>
@@ -75,12 +76,16 @@ export function CarWeekPanel() {
               <small>{data.gasMpg ? `${data.gasMpg} mpg on gas` : 'fuel used'}</small>
             </div>
           </div>
-          {data.typicalKw && (
+          {data.typicalKw && (compact ? (
+            <p className="car-week-note">
+              {data.typicalKw.toFixed(1)} kW{data.level1 ? ' (wall outlet)' : ''}{hours ? ` · about ${Math.round(hours)} h empty to full` : ''}
+            </p>
+          ) : (
             <p className="car-week-note">
               Charges at about {data.typicalKw.toFixed(1)} kW{data.level1 ? ', a standard wall outlet' : ''}
               {hours ? `: empty to full takes about ${Math.round(hours)} hours` : ''}.
             </p>
-          )}
+          ))}
           {sessions.length > 0 && (
             <ul className="car-week-sessions">
               {sessions.map((session) => (
@@ -93,7 +98,7 @@ export function CarWeekPanel() {
               ))}
             </ul>
           )}
-          <p className="car-week-foot">Worked out from the battery level, at your electricity rate. Charging away from home is counted the same way.</p>
+          {!compact && <p className="car-week-foot">Worked out from the battery level, at your electricity rate. Charging away from home is counted the same way.</p>}
         </>
       )}
     </section>

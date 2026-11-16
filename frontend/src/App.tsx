@@ -751,12 +751,21 @@ function EntityDetails({ config, entity, onService, onClose }: { config: TileCon
   )
 }
 
+/** Pages that are mostly figures and lists: the seasonal decorations fade back there so a drifting
+ *  sprite never lands on top of a number someone is trying to read. Home and Morning stay lively. */
+const DATA_PAGES = new Set(['volvo', 'maintenance', 'health', 'network', 'roborock', 'insights', 'energy'])
+
+/** Pages split into tabs instead of scrolling: the rotation steps through each one's tabs in turn,
+ *  the way it already does for Morning and Insights. */
+const TAB_SECTION_COUNTS: Record<string, number> = { maintenance: 3, network: 2, health: 2, roborock: 2 }
+
 /** Slide count per section that has slides, so a slide number read from the URL can be clamped. */
 const SLIDE_COUNTS: Record<string, number> = {
   insights: insightsSlides.length,
   weather: WEATHER_SLIDE_COUNT,
   flights: flightsSlideCount,
   morning: MORNING_SLIDES.length,
+  ...TAB_SECTION_COUNTS,
 }
 
 function initialSlide(location: ReturnType<typeof parseShellHash>, sectionId: string) {
@@ -801,6 +810,11 @@ function App() {
   const [weatherSlide, setWeatherSlide] = useState(() => initialSlide(startLocation, 'weather'))
   const [flightsSlide, setFlightsSlide] = useState(() => initialSlide(startLocation, 'flights'))
   const [morningSlide, setMorningSlide] = useState(() => initialSlide(startLocation, 'morning'))
+  // The tab each tabbed page is on, by section id; a page not in here is on its first tab.
+  const [tabSlides, setTabSlides] = useState<Record<string, number>>(() => {
+    const start = startLocation.section
+    return start && start in TAB_SECTION_COUNTS ? { [start]: initialSlide(startLocation, start) } : {}
+  })
   const morningShownAt = useRef<number | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [deviceSearch, setDeviceSearch] = useState({ sectionId: '', query: '' })
@@ -910,7 +924,7 @@ function App() {
   }, [])
 
   // ---- URL state -------------------------------------------------------------------------------
-  const urlSlide = activeSection === 'insights' ? insightsSlide : activeSection === 'weather' ? weatherSlide : activeSection === 'flights' ? flightsSlide : activeSection === 'morning' ? morningSlide : 0
+  const urlSlide = activeSection === 'insights' ? insightsSlide : activeSection === 'weather' ? weatherSlide : activeSection === 'flights' ? flightsSlide : activeSection === 'morning' ? morningSlide : (tabSlides[activeSection] ?? 0)
   const hash = shellHash(activeSection, urlSlide)
   const hashRef = useRef(hash)
   // replaceState, never pushState: every rotation tick changes this, and Back must not have to
@@ -938,7 +952,7 @@ function App() {
   // ---- Rotation --------------------------------------------------------------------------------
   const rotating = autoRotate && !sheetOpen && !sidebarOpen && !searchQuery
   const rotationDelay = activeSection === 'weather' || activeSection === 'flights' ? SLIDE_INTERVAL_MS : rotationInterval
-  const rotationKey = `${activeSection}:${insightsSlide}:${weatherSlide}:${flightsSlide}:${morningSlide}`
+  const rotationKey = `${activeSection}:${insightsSlide}:${weatherSlide}:${flightsSlide}:${morningSlide}:${tabSlides[activeSection] ?? 0}`
   const secondsLeft = countdown?.key === rotationKey ? countdown.seconds : Math.round(rotationDelay / 1000)
 
   // Insights advances through its own panels first, so it holds for slides x interval before the next section.
@@ -969,8 +983,14 @@ function App() {
         setMorningSlide(morningSlide + 1)
         return
       }
+      const tabCount = TAB_SECTION_COUNTS[activeSection]
+      if (tabCount && (tabSlides[activeSection] ?? 0) < tabCount - 1) {
+        setTabSlides({ ...tabSlides, [activeSection]: (tabSlides[activeSection] ?? 0) + 1 })
+        return
+      }
       const next = nextRotationSection(rotationSections.map((item) => item.id), activeSection, new Date(), morningShownAt.current)
       if (next === null) return
+      setTabSlides({})
       setInsightsSlide(0)
       setWeatherSlide(0)
       setFlightsSlide(0)
@@ -981,7 +1001,7 @@ function App() {
       window.clearTimeout(timer)
       window.clearInterval(tick)
     }
-  }, [rotating, rotationDelay, rotationKey, activeSection, insightsSlide, weatherSlide, flightsSlide, morningSlide, rotationSections])
+  }, [rotating, rotationDelay, rotationKey, activeSection, insightsSlide, weatherSlide, flightsSlide, morningSlide, tabSlides, rotationSections])
 
   useEffect(() => () => {
     alertTimers.current.forEach((timer) => window.clearTimeout(timer))
@@ -1064,11 +1084,17 @@ function App() {
     setDeviceSearch({ sectionId, query: '' })
     setSidebarOpen(false)
     if (sectionId !== activeSection) {
+      setTabSlides({})
       setInsightsSlide(0)
       setWeatherSlide(0)
       setFlightsSlide(0)
       setMorningSlide(0)
     }
+  }
+
+  function selectTabSlide(sectionId: string, index: number) {
+    stopRotation()
+    setTabSlides((current) => ({ ...current, [sectionId]: index }))
   }
 
   function selectMorningSlide(index: number) {
@@ -1170,7 +1196,7 @@ function App() {
 
   return (
     <div className={`command-center ${autoDimClass}`.trim()}>
-      <SeasonalEffects weather={weatherForEffects} quiet={sheetOpen} dimmed={autoDimClass !== ''} />
+      <SeasonalEffects weather={weatherForEffects} quiet={sheetOpen || DATA_PAGES.has(activeSection)} dimmed={autoDimClass !== ''} />
       <div className="alert-stack" aria-live="polite" aria-atomic="false" data-swipe-ignore data-dialog-background>
         {alerts.map((alert) => (
           <button type="button" key={alert.id} className={`state-alert glass-strong ${alert.tone}`} onClick={() => setAlerts((current) => current.filter((item) => item.id !== alert.id))}>
@@ -1266,8 +1292,15 @@ function App() {
                 aria-label={rotationTitle}
                 aria-pressed={!autoRotate}
               >
+                {/* A thin ring that drains as the next page approaches replaces the "14s" / "Paused"
+                    text; the words stay available to screen readers and in the tooltip. */}
+                {autoRotate && !(sheetOpen || sidebarOpen || searchQuery) && (
+                  <svg className="rotation-ring" viewBox="0 0 40 40" aria-hidden="true">
+                    <circle cx="20" cy="20" r="18" pathLength="100" style={{ strokeDashoffset: 100 - Math.max(0, Math.min(100, (secondsLeft / Math.max(1, rotationDelay / 1000)) * 100)) }} />
+                  </svg>
+                )}
                 {autoRotate ? <RotateCw size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}
-                <span aria-hidden="true">{rotationLabel}</span>
+                <span className="sr-only">{rotationLabel}</span>
               </button>
             </div>
           </div>
@@ -1368,22 +1401,22 @@ function App() {
         ) : activeSection === 'morning' ? (
           <MorningView brief={morning.brief} failed={morning.failed} now={now} slide={morningSlide} onSelectSlide={selectMorningSlide} onRetry={morning.reload} run={<MorningRunCard status={morningRun.status} onChanged={morningRun.reload} />} car={<DepartureCard onService={callService} />} />
         ) : activeSection === 'health' ? (
-          lazyView('Checking home health', <HealthView onExpand={expandTile} />)
+          lazyView('Checking home health', <HealthView onExpand={expandTile} slide={tabSlides.health ?? 0} onSelectSlide={(index) => selectTabSlide('health', index)} />)
         ) : activeSection === 'maintenance' ? (
-          lazyView('Checking maintenance', <MaintenanceView onExpand={expandTile} onService={callService} />)
+          lazyView('Checking maintenance', <MaintenanceView onExpand={expandTile} onService={callService} slide={tabSlides.maintenance ?? 0} onSelectSlide={(index) => selectTabSlide('maintenance', index)} />)
         ) : activeSection === 'photos' ? (
           lazyView('Loading photos', <PhotosView />)
         ) : activeSection === 'network' ? (
-          lazyView('Preparing network', <NetworkView entities={entities} onService={callService} onExpand={expandTile} />)
+          lazyView('Preparing network', <NetworkView entities={entities} onService={callService} onExpand={expandTile} slide={tabSlides.network ?? 0} onSelectSlide={(index) => selectTabSlide('network', index)} />)
         ) : activeSection === 'roborock' ? (
-          lazyView('Preparing Roborock', <RoborockView entities={entities} onService={callService} onExpand={expandTile} />)
+          lazyView('Preparing Roborock', <RoborockView entities={entities} onService={callService} onExpand={expandTile} slide={tabSlides.roborock ?? 0} onSelectSlide={(index) => selectTabSlide('roborock', index)} />)
         ) : activeSection === 'energy' ? (
           lazyView('Preparing energy usage', <EnergyView entities={entities} ratePerKwh={energyRatePerKwh} onSaveRate={saveRateWhenReady} fixedMonthly={energyFixedMonthly} onSaveFixed={saveFixedWhenReady} meterId={energyMeterId} onSaveMeter={saveMeterWhenReady} />)
         ) : activeSection === 'volvo' ? (
           lazyView('Preparing Volvo', <VolvoView entities={entities} onExpand={expandTile} onService={callService} />)
         ) : (
           <PageFrame
-            className="overview has-pane"
+            className={`overview has-pane${activeSection === 'climate' && thermostat ? ' has-climate' : ''}`}
             title="Devices"
             icon={<SectionIcon />}
             meta={loading ? 'Loading entities…' : `${section.tiles.filter((tile) => entities.has(tile.entityId)).length} available`}

@@ -6,6 +6,7 @@ import {
 import { cachedJson, isAbortError } from './cachedFetch'
 import { ConnectivityPanel, ThroughputPanel } from './NetworkDetail'
 import { DropoutsPanel, type DropoutDevice } from './HouseCards'
+import { TabPager } from './ui/TabPager'
 import {
   DEVICES_COLOR, DOWNLOAD_COLOR, NETWORK_CACHE_TTL_MS, UPLOAD_COLOR, clientsPath, duration, mbps, networkPath, toChartRows,
 } from './networkData'
@@ -25,7 +26,14 @@ interface NetworkViewProps {
   onService: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>
   /** Opens the shared entity detail sheet, same as tiles in every other section. */
   onExpand: (tile: TileConfig) => void
+  /** The tab on show, driven by the app so the rotation can step through them. */
+  slide?: number
+  onSelectSlide?: (index: number) => void
 }
+
+/** Is the internet working first; the devices behind it second. */
+const NETWORK_TABS = ['internet', 'devices'] as const
+type NetworkTab = typeof NETWORK_TABS[number]
 
 interface Client {
   entityId: string
@@ -152,7 +160,8 @@ const RANGES = [
 const DROPOUTS_PATH = 'insights/dropouts?days=7'
 const DROPOUTS_TTL_MS = 30 * 60_000
 
-export function NetworkView({ entities, onService, onExpand }: NetworkViewProps) {
+export function NetworkView({ entities, onService, onExpand, slide = 0, onSelectSlide = () => {} }: NetworkViewProps) {
+  const activeTab: NetworkTab = NETWORK_TABS[Math.max(0, Math.min(slide, NETWORK_TABS.length - 1))]
   const [hours, setHours] = useState(24)
   const [payload, setPayload] = useState<NetworkPayload | null>(null)
   const [payloadAt, setPayloadAt] = useState(0)
@@ -344,6 +353,9 @@ export function NetworkView({ entities, onService, onExpand }: NetworkViewProps)
       {/* Each card fronts a real Home Assistant entity, so tapping one opens the
           same detail sheet (with its own history chart) that tiles elsewhere in
           the dashboard do -- rather than being a dead read-only figure. */}
+      <div className="network-page" id="network-panel" role="tabpanel" aria-labelledby={`network-tab-${activeTab}`}>
+        {activeTab === 'internet' ? (
+          <>
       <div className="network-view-cards">
         {CARDS.map((card) => {
           const entity = entities.get(card.entityId)
@@ -370,8 +382,69 @@ export function NetworkView({ entities, onService, onExpand }: NetworkViewProps)
 
       {connectivity && <ConnectivityPanel data={connectivity} windowEnd={payloadAt} className="glass glass-card" />}
 
-      {connectivity && connectivity.events.length > 4 && (
-        <div className="network-outage-log glass glass-card">
+            <div className="network-bottom">
+      <div
+                className="network-view-chart glass glass-card"
+                id="network-history-panel"
+                role="tabpanel"
+                aria-labelledby={`network-range-${hours}`}
+              >
+                <div className="network-panel-head">
+                  <h3 className="network-card-title"><Activity size={15} aria-hidden="true" />Throughput</h3>
+                  {payload && <span>{payload.points.length} hourly averages</span>}
+                </div>
+                {rows.length > 1 ? (
+                  // The page re-renders on every WebSocket frame; the panel is memoised on its rows.
+                  <ThroughputPanel rows={rows} idPrefix="page" />
+                ) : failed ? (
+                  <InlineError message="Could not load network history" onRetry={retryHistory} />
+                ) : payload ? (
+                  <EmptyState size="compact" icon={<Activity />} title="Not enough history in this window" hint="The chart needs at least two hourly averages from the gateway speed sensors." />
+                ) : (
+                  <LoadingState label="Loading network history" size="compact" />
+                )}
+              </div>
+              <div className="network-side">
+        <div className="network-router glass glass-card">
+          <div className="network-panel-head">
+            <h3 className="network-card-title"><Router size={15} aria-hidden="true" />Router</h3>
+          </div>
+          <dl>
+            <dt>Firmware</dt>
+            <dd>
+              {clients?.router.firmwareInstalled ?? '—'}
+              {clients?.router.updateAvailable
+                ? <b className="is-update"> update available</b>
+                : clients?.router.firmwareInstalled ? <b> up to date</b> : null}
+            </dd>
+            <dt>External IP</dt>
+            <dd className="network-ip">{connectivity?.externalIp ?? '—'}</dd>
+            <dt>WAN</dt>
+            <dd>{online === null ? '—' : online ? 'Online' : 'Offline'}</dd>
+            <dt>Devices</dt>
+            <dd>{clients ? `${clients.onlineCount} online · ${clients.trackedCount} known` : '—'}</dd>
+          </dl>
+          {connectivity && connectivity.ipChanges.length > 0 && (
+            <div className="network-ip-log">
+              <span>IP changes</span>
+              <ul>
+                {connectivity.ipChanges.slice(0, 3).map((change) => (
+                  <li key={change.at}>
+                    <small>{relative(change.at)}</small>
+                    <code>{change.to}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {/* The Netgear integration exposes only gateway-wide throughput, so
+              per-device bandwidth cannot be shown without inventing it. */}
+          <p className="network-router-note">
+            Per-device bandwidth isn’t available — the router only reports gateway totals.
+          </p>
+        </div>
+      {connectivity && connectivity.events.length > 0 && (
+        <div className={`network-outage-log glass glass-card${connectivity.events.length <= 4 ? ' is-short' : ''}`}>
           <h3 className="network-card-title">All interruptions</h3>
           <ul>
             {connectivity.events.map((event) => (
@@ -389,7 +462,13 @@ export function NetworkView({ entities, onService, onExpand }: NetworkViewProps)
         </div>
       )}
 
-      <div className="network-lower">
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="network-devices">
+      <DropoutsPanel devices={dropouts?.devices ?? null} days={dropouts?.days ?? 7} loading={!dropouts && !dropoutsFailed} failed={dropoutsFailed} />
+
         <div className="network-clients glass glass-card">
           <div className="network-panel-head">
             <h3 className="network-card-title"><MonitorSmartphone size={15} aria-hidden="true" />Connected devices</h3>
@@ -465,69 +544,20 @@ export function NetworkView({ entities, onService, onExpand }: NetworkViewProps)
           )}
         </div>
 
-        <div className="network-router glass glass-card">
-          <div className="network-panel-head">
-            <h3 className="network-card-title"><Router size={15} aria-hidden="true" />Router</h3>
           </div>
-          <dl>
-            <dt>Firmware</dt>
-            <dd>
-              {clients?.router.firmwareInstalled ?? '—'}
-              {clients?.router.updateAvailable
-                ? <b className="is-update"> update available</b>
-                : clients?.router.firmwareInstalled ? <b> up to date</b> : null}
-            </dd>
-            <dt>External IP</dt>
-            <dd className="network-ip">{connectivity?.externalIp ?? '—'}</dd>
-            <dt>WAN</dt>
-            <dd>{online === null ? '—' : online ? 'Online' : 'Offline'}</dd>
-            <dt>Devices</dt>
-            <dd>{clients ? `${clients.onlineCount} online · ${clients.trackedCount} known` : '—'}</dd>
-          </dl>
-          {connectivity && connectivity.ipChanges.length > 0 && (
-            <div className="network-ip-log">
-              <span>IP changes</span>
-              <ul>
-                {connectivity.ipChanges.slice(0, 3).map((change) => (
-                  <li key={change.at}>
-                    <small>{relative(change.at)}</small>
-                    <code>{change.to}</code>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {/* The Netgear integration exposes only gateway-wide throughput, so
-              per-device bandwidth cannot be shown without inventing it. */}
-          <p className="network-router-note">
-            Per-device bandwidth isn’t available — the router only reports gateway totals.
-          </p>
-        </div>
-      </div>
-
-      <DropoutsPanel devices={dropouts?.devices ?? null} days={dropouts?.days ?? 7} loading={!dropouts && !dropoutsFailed} failed={dropoutsFailed} />
-
-      <div
-        className="network-view-chart glass glass-card"
-        id="network-history-panel"
-        role="tabpanel"
-        aria-labelledby={`network-range-${hours}`}
-      >
-        <div className="network-panel-head">
-          <h3 className="network-card-title"><Activity size={15} aria-hidden="true" />Throughput</h3>
-          {payload && <span>{payload.points.length} hourly averages</span>}
-        </div>
-        {rows.length > 1 ? (
-          // The page re-renders on every WebSocket frame; the panel is memoised on its rows.
-          <ThroughputPanel rows={rows} idPrefix="page" />
-        ) : failed ? (
-          <InlineError message="Could not load network history" onRetry={retryHistory} />
-        ) : payload ? (
-          <EmptyState size="compact" icon={<Activity />} title="Not enough history in this window" hint="The chart needs at least two hourly averages from the gateway speed sensors." />
-        ) : (
-          <LoadingState label="Loading network history" size="compact" />
         )}
       </div>
+
+      <TabPager
+        label="Network sections"
+        idPrefix="network"
+        active={activeTab}
+        onChange={(id) => onSelectSlide(NETWORK_TABS.indexOf(id as NetworkTab))}
+        tabs={[
+          { id: 'internet', label: 'Internet', icon: <Wifi size={15} aria-hidden="true" /> },
+          { id: 'devices', label: 'Devices', icon: <MonitorSmartphone size={15} aria-hidden="true" />, badge: dropouts?.devices.length ? dropouts.devices.length : 0, tone: 'warn' },
+        ]}
+      />
     </PageFrame>
   )
 }

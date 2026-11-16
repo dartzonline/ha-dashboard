@@ -5,6 +5,7 @@ import {
 import { cachedJson, invalidate, isAbortError } from './cachedFetch'
 import { ReplaceNow, type ReplaceItem } from './ReplaceNow'
 import { FridgePanel, HvacPanel } from './AppliancePanels'
+import { TabPager } from './ui/TabPager'
 import type { TileConfig } from './types'
 import { PageFrame } from './ui/PageFrame'
 import type { Tone } from './ui/PageFrame'
@@ -106,6 +107,9 @@ interface MaintenancePayload {
 interface MaintenanceViewProps {
   onExpand: (tile: TileConfig) => void
   onService: (domain: string, service: string, data: Record<string, unknown>) => Promise<unknown>
+  /** The tab on show, driven by the app so the rotation can step through them. */
+  slide?: number
+  onSelectSlide?: (index: number) => void
 }
 
 function kwh(wh: number | undefined) {
@@ -149,7 +153,11 @@ const INSTALLING_POLL_MS = 10_000
 /** How long a disruptive install stays armed waiting for its confirming second tap. */
 const CONFIRM_WINDOW_MS = 4_000
 
-export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
+/** Most important first: what needs doing, then the wear items, then the appliances. */
+const MAINT_TABS = ['attention', 'consumables', 'appliances'] as const
+type MaintTab = typeof MAINT_TABS[number]
+
+export function MaintenanceView({ onExpand, onService, slide = 0, onSelectSlide = () => {} }: MaintenanceViewProps) {
   const [payload, setPayload] = useState<MaintenancePayload | null>(null)
   const [failed, setFailed] = useState(false)
   const [installing, setInstalling] = useState<string | null>(null)
@@ -187,6 +195,7 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
   const counts = payload?.counts
   const updateCount = payload?.updates.length ?? 0
   const attention = counts ? counts.critical + counts.warning + updateCount : 0
+  const activeTab: MaintTab = MAINT_TABS[Math.max(0, Math.min(slide, MAINT_TABS.length - 1))]
   const tone: Tone = !counts ? 'neutral'
     : counts.critical > 0 ? 'danger'
     : counts.warning > 0 || updateCount > 0 ? 'warn'
@@ -262,6 +271,19 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
         />
       )}
 
+      {payload && !nothingTracked && (
+        <>
+          <div className="maint-page" id="maint-panel" role="tabpanel" aria-labelledby={`maint-tab-${activeTab}`}>
+            {activeTab === 'attention' && (
+              attention === 0 && !(payload.replaceNow && payload.replaceNow.length > 0) && payload.faults.length === 0 ? (
+                <p className="maint-clear"><CheckCircle2 size={18} aria-hidden="true" />Nothing needs doing right now.</p>
+              ) : (
+                <div className="maint-columns">
+                  <div className="maint-col">
+      {payload?.replaceNow && payload.replaceNow.length > 0 && <ReplaceNow items={payload.replaceNow} />}
+
+                        </div>
+                  <div className="maint-col">
       {payload && payload.updates.length > 0 && (
         <ul className="maint-list glass">
           {payload.updates.map((item) => (
@@ -306,9 +328,7 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
         </ul>
       )}
 
-      {payload?.replaceNow && payload.replaceNow.length > 0 && <ReplaceNow items={payload.replaceNow} />}
-
-      {payload && payload.faults.length > 0 && (
+                    {payload && payload.faults.length > 0 && (
         <ul className="maint-list glass tone-danger">
           {payload.faults.map((fault) => (
             <li key={fault.entityId} className="maint-fault">
@@ -321,7 +341,14 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
           ))}
         </ul>
       )}
+                  </div>
+                </div>
+              )
+            )}
 
+            {activeTab === 'consumables' && (
+              <div className="maint-columns is-consumables">
+                <div className="maint-col">
       {payload && !nothingTracked && (
         <section className="maint-panel glass" aria-label="Consumables">
           <header className="maint-panel-head">
@@ -368,9 +395,9 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
         </section>
       )}
 
-      {payload && (payload.salt || payload.garage || payload.appliances.length > 0) && (
-        <div className="maint-grid">
-          {payload.salt && (
+                </div>
+                <div className="maint-col">
+          {payload.salt ? (
             <section className={`maint-panel glass tone-${SEVERITY_TONE[payload.salt.severity]} is-${payload.salt.severity}`} aria-label="Water softener salt">
               <header className="maint-panel-head">
                 <h3><Waves size={14} aria-hidden="true" />Water softener salt</h3>
@@ -416,8 +443,17 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
                 Open depth history
               </button>
             </section>
-          )}
+          ) : <p className="maint-clear">No water softener salt sensor found.</p>}
+                </div>
+              </div>
+            )}
 
+            {activeTab === 'appliances' && (
+              <div className="maint-grid">
+                {/* Fetched on their own (months of statistics, ten days of thermostat history), so the
+                    rest of the page never waits for them. */}
+                <HvacPanel />
+                <FridgePanel />
           {payload.garage && (
             <section className={`maint-panel glass ${payload.garage.obstructed ? 'tone-danger' : ''}`.trim()} aria-label="Garage door">
               <header className="maint-panel-head">
@@ -497,15 +533,23 @@ export function MaintenanceView({ onExpand, onService }: MaintenanceViewProps) {
               </dl>
             </section>
           ))}
-        </div>
-      )}
+              </div>
+            )}
+          </div>
 
-      {/* Fetched on their own (months of statistics, ten days of thermostat history), so the rest of
-          the page never waits for them. */}
-      <div className="maint-grid">
-        <HvacPanel />
-        <FridgePanel />
-      </div>
+          <TabPager
+            label="Maintenance sections"
+            idPrefix="maint"
+            active={activeTab}
+            onChange={(id) => onSelectSlide(MAINT_TABS.indexOf(id as MaintTab))}
+            tabs={[
+              { id: 'attention', label: 'Needs attention', icon: <AlertTriangle size={15} aria-hidden="true" />, badge: attention, tone: counts && counts.critical > 0 ? 'danger' : 'warn' },
+              { id: 'consumables', label: 'Consumables', icon: <Filter size={15} aria-hidden="true" /> },
+              { id: 'appliances', label: 'Appliances', icon: <Gauge size={15} aria-hidden="true" /> },
+            ]}
+          />
+        </>
+      )}
     </section>
   )
 }

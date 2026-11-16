@@ -80,7 +80,7 @@ export function efficiencyLabel(efficiency: HvacReport['efficiency']) {
   if (!efficiency) return '—'
   if (efficiency.status === 'longer' && efficiency.ratio) return `Running ${Math.round((efficiency.ratio - 1) * 100)}% longer than in the same weather`
   if (efficiency.status === 'ok') return 'Normal for the weather'
-  return `Learning: ${efficiency.loggedDays} day${efficiency.loggedDays === 1 ? '' : 's'} logged, compares after about three weeks`
+  return `Learning · ${efficiency.loggedDays} day${efficiency.loggedDays === 1 ? '' : 's'} logged`
 }
 
 export function filterLabel(filter: HvacReport['filter']) {
