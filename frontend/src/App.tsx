@@ -757,7 +757,7 @@ const DATA_PAGES = new Set(['volvo', 'maintenance', 'health', 'network', 'roboro
 
 /** Pages split into tabs instead of scrolling: the rotation steps through each one's tabs in turn,
  *  the way it already does for Morning and Insights. */
-const TAB_SECTION_COUNTS: Record<string, number> = { maintenance: 3, network: 2, health: 2, roborock: 2 }
+const TAB_SECTION_COUNTS: Record<string, number> = { maintenance: 3, network: 3, health: 2, roborock: 2 }
 
 /** Slide count per section that has slides, so a slide number read from the URL can be clamped. */
 const SLIDE_COUNTS: Record<string, number> = {

@@ -1,0 +1,58 @@
+/* The AdGuard tab: one status card, four numbers, then the switches beside the history. Fits the
+   tab without scrolling; the history card scrolls inside itself only on a very short screen. */
+.adguard-page { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; flex: 1 1 auto; }
+.adguard-page > * { flex-shrink: 0; }
+
+.adguard-hero { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: var(--r-lg); border-left: 4px solid var(--good); }
+.adguard-hero.is-protection-off, .adguard-hero.is-filtering-off { border-left-color: var(--danger); background-color: color-mix(in srgb, var(--danger) 10%, var(--glass-bg)); }
+.adguard-hero.is-unknown { border-left-color: var(--warn); }
+.adguard-shield { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: var(--good); background: var(--good-soft); flex: 0 0 auto; }
+.adguard-hero.is-protection-off .adguard-shield, .adguard-hero.is-filtering-off .adguard-shield { color: var(--danger); background: var(--danger-soft); }
+.adguard-hero.is-unknown .adguard-shield { color: var(--warn); background: var(--warn-soft); }
+.adguard-hero-copy { min-width: 0; flex: 1; }
+.adguard-hero-copy h3 { margin: 0; color: var(--text); font-size: 1.15rem; font-weight: 750; letter-spacing: 0; text-transform: none; }
+.adguard-hero-copy p { margin: 3px 0 0; color: var(--muted); font-size: .8rem; }
+.adguard-master { min-height: var(--tap); padding: 0 20px; font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.adguard-master.is-armed { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--glass-border)); background-color: var(--warn-soft); }
+.adguard-master.is-primary { color: var(--accent-ink); border-color: var(--accent); background-color: var(--accent); background-image: none; }
+
+.adguard-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); }
+.adguard-stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; border-radius: var(--r-md); min-width: 0; }
+.adguard-stat > span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: .72rem; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.adguard-stat > span svg { color: var(--accent-strong); }
+.adguard-stat strong { color: var(--text); font-size: 1.7rem; line-height: 1.1; font-weight: 750; font-variant-numeric: tabular-nums; }
+.adguard-stat strong small { margin-left: 2px; color: var(--muted); font-size: .9rem; font-weight: 650; }
+.adguard-stat em { color: var(--muted); font-size: .74rem; font-style: normal; }
+
+.adguard-lower { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: var(--gap); }
+.adguard-lower > section { min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-radius: var(--r-md); }
+.adguard-head { display: flex; align-items: baseline; gap: 10px; }
+.adguard-head h3 { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--text); font-size: .82rem; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.adguard-head h3 svg { color: var(--muted); }
+.adguard-head > span { margin-left: auto; color: var(--muted); font-size: .74rem; font-weight: 600; }
+
+.adguard-switches ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.adguard-switches li + li { border-top: 1px solid var(--border); }
+.adguard-switches li > button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 8px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; border-radius: var(--r-sm); }
+.adguard-switches li > button:hover:not(:disabled) { background: var(--surface); }
+.adguard-switch-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.adguard-switch-copy strong { color: var(--text); font-size: .86rem; font-weight: 650; }
+.adguard-switch-copy em { color: var(--muted); font-size: .74rem; font-style: normal; }
+.adguard-pill { min-width: 52px; padding: 5px 12px; border-radius: var(--r-pill); color: var(--muted); background: var(--surface-raised); font-size: .74rem; font-weight: 700; text-align: center; }
+.adguard-switches li > button.is-on .adguard-pill { color: var(--good-ink, #0d2013); background: var(--good); }
+.adguard-error { margin: 0; color: var(--danger); font-size: .76rem; }
+
+.adguard-count { color: var(--muted); font-size: .74rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.adguard-setup { display: flex; gap: 18px; padding: 22px 24px; border-radius: var(--r-lg); align-items: flex-start; }
+.adguard-setup-icon { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: var(--accent-ink); background: var(--accent); flex: 0 0 auto; }
+.adguard-setup-body h3 { margin: 0 0 6px; color: var(--text); font-size: 1.1rem; font-weight: 750; text-transform: none; letter-spacing: 0; }
+.adguard-setup-body p { margin: 0 0 10px; color: var(--muted); font-size: .86rem; line-height: 1.5; max-width: 62ch; }
+.adguard-setup-body ol { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 6px; color: var(--text); font-size: .88rem; line-height: 1.45; max-width: 62ch; }
+.adguard-setup-foot { margin-bottom: 0 !important; font-size: .78rem !important; }
+
+@media (max-width: 760px) {
+  .adguard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .adguard-lower { grid-template-columns: 1fr; }
+  .adguard-hero { flex-wrap: wrap; }
+}

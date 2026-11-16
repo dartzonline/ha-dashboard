@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import {
-  Activity, ArrowDownToLine, ArrowUpFromLine, Globe, MonitorSmartphone, RotateCw, Router, Search, Wifi, WifiOff,
+  Activity, ArrowDownToLine, ArrowUpFromLine, Globe, MonitorSmartphone, RotateCw, Router, Search, ShieldCheck, Wifi, WifiOff,
 } from 'lucide-react'
 import { cachedJson, isAbortError } from './cachedFetch'
 import { ConnectivityPanel, ThroughputPanel } from './NetworkDetail'
 import { DropoutsPanel, type DropoutDevice } from './HouseCards'
 import { TabPager } from './ui/TabPager'
+import { AdGuardTab } from './AdGuardTab'
+import { adguardModel, blockingState, isLinked } from './adguard'
 import {
   DEVICES_COLOR, DOWNLOAD_COLOR, NETWORK_CACHE_TTL_MS, UPLOAD_COLOR, clientsPath, duration, mbps, networkPath, toChartRows,
 } from './networkData'
@@ -31,8 +33,8 @@ interface NetworkViewProps {
   onSelectSlide?: (index: number) => void
 }
 
-/** Is the internet working first; the devices behind it second. */
-const NETWORK_TABS = ['internet', 'devices'] as const
+/** Is the internet working first; the devices behind it second; the DNS filter that protects them third. */
+const NETWORK_TABS = ['internet', 'devices', 'adguard'] as const
 type NetworkTab = typeof NETWORK_TABS[number]
 
 interface Client {
@@ -161,6 +163,9 @@ const DROPOUTS_PATH = 'insights/dropouts?days=7'
 const DROPOUTS_TTL_MS = 30 * 60_000
 
 export function NetworkView({ entities, onService, onExpand, slide = 0, onSelectSlide = () => {} }: NetworkViewProps) {
+  const adguard = adguardModel(entities)
+  // A badge only when AdGuard is linked and ads are NOT being blocked.
+  const adguardProblem = isLinked(adguard) && ['protection-off', 'filtering-off'].includes(blockingState(adguard))
   const activeTab: NetworkTab = NETWORK_TABS[Math.max(0, Math.min(slide, NETWORK_TABS.length - 1))]
   const [hours, setHours] = useState(24)
   const [payload, setPayload] = useState<NetworkPayload | null>(null)
@@ -465,6 +470,8 @@ export function NetworkView({ entities, onService, onExpand, slide = 0, onSelect
               </div>
             </div>
           </>
+        ) : activeTab === 'adguard' ? (
+          <AdGuardTab entities={entities} onService={onService} />
         ) : (
           <div className="network-devices">
       <DropoutsPanel devices={dropouts?.devices ?? null} days={dropouts?.days ?? 7} loading={!dropouts && !dropoutsFailed} failed={dropoutsFailed} />
@@ -556,6 +563,7 @@ export function NetworkView({ entities, onService, onExpand, slide = 0, onSelect
         tabs={[
           { id: 'internet', label: 'Internet', icon: <Wifi size={15} aria-hidden="true" /> },
           { id: 'devices', label: 'Devices', icon: <MonitorSmartphone size={15} aria-hidden="true" />, badge: dropouts?.devices.length ? dropouts.devices.length : 0, tone: 'warn' },
+          { id: 'adguard', label: 'AdGuard', icon: <ShieldCheck size={15} aria-hidden="true" />, badge: adguardProblem ? 1 : 0, tone: 'danger' },
         ]}
       />
     </PageFrame>

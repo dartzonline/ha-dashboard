@@ -3,6 +3,19 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.27.0 - 2026-11-15: AdGuard tab
+
+**AdGuard on the Network page.** A third tab shows whether ad blocking is actually working: one
+status card ("Blocking ads and trackers", or "Protection is off" / "Filtering is off" in red, since
+ads are only blocked while both are on), lookups, blocked, block rate and answer speed over 24 hours,
+a switch for each filter (filtering, safe browsing, parental control, safe search, query log), and a
+24-hour strip of when protection was on. Four 24-hour charts (lookups, blocked, block rate, answer
+speed) sit beside the switches, and each filter shows how many lookups it has caught. Turning protection or filtering off takes a second tap. The
+tab shows a red badge if AdGuard is linked and not blocking.
+
+It reads Home Assistant's AdGuard Home integration. Until that is linked, the tab says so and walks
+through adding it (Settings, Devices & services, then AdGuard Home), and shows the add-on's version.
+
 ## 1.26.0 - 2026-11-15: One screen, no scrolling
 
 **Pages that fit the screen.** Volvo, Network, Maintenance, Health, Roborock and Climate no longer

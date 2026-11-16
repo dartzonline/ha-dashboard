@@ -1,0 +1,8 @@
+.adguard-charts { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+.adguard-chart { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.adguard-chart > header { display: flex; align-items: baseline; gap: 8px; }
+.adguard-chart h4 { margin: 0; color: var(--muted); font-size: .7rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.adguard-chart > header strong { margin-left: auto; color: var(--text); font-size: .82rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.adguard-chart-body { flex: 1 1 0; min-height: 0; }
+.adguard-chart-note { margin: auto 0; color: var(--muted); font-size: .76rem; }
+@media (max-width: 760px) { .adguard-charts { grid-template-rows: none; grid-auto-rows: 120px; } }
