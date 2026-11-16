@@ -191,14 +191,21 @@ describe('dashboard shell', () => {
     expect(fixtures.callService).not.toHaveBeenCalled()
   })
 
-  it('opens the Wi-Fi QR sheet from the top bar and closes it when the outside is tapped', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ configured: true, ssid: 'HomeNet', password: 'correct horse', security: 'WPA', hidden: false }))))
+  it('opens the share sheet from the top-left button and closes it when the outside is tapped', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => new Response(JSON.stringify(String(input).includes('links')
+      ? { links: [{ label: 'Plex', url: 'http://192.168.1.50:32400/web' }] }
+      : { configured: true, ssid: 'HomeNet', password: 'correct horse', security: 'WPA', hidden: false }))))
     const { container } = render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Share Wi-Fi' }))
+    const button = screen.getByRole('button', { name: 'Share Wi-Fi and links' })
+    // It sits beside the menu button in the top-left, not in the right-hand utilities.
+    expect(button.closest('.page-title')).not.toBeNull()
+    expect(button.closest('.topbar-utilities')).toBeNull()
+    fireEvent.click(button)
     expect(await screen.findByRole('img', { name: 'QR code to join HomeNet' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'QR code to open Plex' })).toBeTruthy()
     expect(screen.getByText('correct horse')).toBeTruthy()
     fireEvent.click(container.querySelector('.detail-backdrop') as HTMLElement)
-    expect(screen.queryByRole('dialog', { name: 'Join the Wi-Fi' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Share' })).toBeNull()
     vi.unstubAllGlobals()
   })
 

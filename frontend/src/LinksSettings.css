@@ -1,0 +1,9 @@
+.links-settings { display: grid; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.links-settings h3 { margin: 0; color: var(--text); font-size: .9rem; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.links-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.links-rows li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 8px; align-items: center; }
+.links-rows input { min-height: var(--tap); padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-raised); color: var(--text); font: inherit; font-size: .86rem; min-width: 0; }
+.links-rows input[aria-invalid='true'] { border-color: var(--danger); }
+.links-add { display: flex; flex-wrap: wrap; gap: 8px; }
+.links-add button { display: inline-flex; align-items: center; gap: 6px; min-height: var(--tap); padding: 0 14px; font-size: .78rem; font-weight: 650; }
+@media (max-width: 560px) { .links-rows li { grid-template-columns: 1fr auto; } .links-rows .links-url { grid-column: 1 / -1; grid-row: 2; } }

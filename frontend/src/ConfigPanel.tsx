@@ -6,6 +6,7 @@ import { friendlyName } from './entityNames'
 import { icons } from './icons'
 import { RemindersSettings } from './RemindersSettings'
 import { WifiSettings } from './WifiSettings'
+import { LinksSettings } from './LinksSettings'
 import { tabListKeyHandler } from './tablist'
 import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
@@ -320,7 +321,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
               {id === 'night-mode' && <><Moon size={16} aria-hidden="true" /> Night Mode lights</>}
               {id === 'auto-off' && <><Lightbulb size={16} aria-hidden="true" /> Light auto-off</>}
               {id === 'reminders' && <><BellRing size={16} aria-hidden="true" /> Reminders</>}
-              {id === 'wifi' && <><Wifi size={16} aria-hidden="true" /> Wi-Fi</>}
+              {id === 'wifi' && <><Wifi size={16} aria-hidden="true" /> Share</>}
             </button>
           ))}
         </div>
@@ -605,7 +606,7 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
         )}
 
         {tab === 'reminders' && <RemindersSettings />}
-        {tab === 'wifi' && <WifiSettings entities={entities} />}
+        {tab === 'wifi' && <><WifiSettings entities={entities} /><LinksSettings /></>}
 
         {tab !== 'theme' && tab !== 'reminders' && tab !== 'wifi' && message && <p className={message.tone === 'error' ? 'detail-error' : 'config-success'} role="status">{message.text}</p>}
         {pending && <div className="detail-progress" role="status">Saving</div>}

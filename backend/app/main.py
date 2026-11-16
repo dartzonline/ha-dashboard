@@ -420,6 +420,7 @@ def config_response(overrides: dict[str, Any]) -> dict[str, Any]:
         "morningRun": morning_run.settings_as_dict(morning_run.settings_from_overrides(overrides)),
         # Never the password: this response is cached by browsers and read by every screen.
         "guestWifi": guest_wifi_summary(overrides.get("guestWifi")),
+        "quickLinks": overrides.get("quickLinks") or [],
     }
 
 
@@ -471,6 +472,13 @@ async def guest_wifi() -> JSONResponse:
         "security": stored.get("security", "WPA"),
         "hidden": bool(stored.get("hidden")),
     }, headers=headers)
+
+
+@app.get("/api/links")
+async def quick_links() -> JSONResponse:
+    """The named addresses the Share button shows as QR codes. Fetched when the sheet opens."""
+    links = load_overrides().get("quickLinks") or []
+    return JSONResponse({"links": links}, headers={"Cache-Control": "no-store"})
 
 
 @app.delete("/api/config")

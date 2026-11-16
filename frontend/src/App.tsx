@@ -25,7 +25,7 @@ import { headsUp, preferredUnits, useMorningBrief, type Advice } from './useMorn
 import { useReminders } from './useReminders'
 import { MorningRunCard, useMorningRun } from './MorningRunCard'
 import { DepartureCard } from './DepartureCard'
-import { WifiSheet } from './WifiSheet'
+import { ShareSheet } from './ShareSheet'
 import type { ConfigTab } from './ConfigPanel'
 import { repaintTheme } from './theme'
 import { EventLog } from './EventLog'
@@ -1261,6 +1261,7 @@ function App() {
             >
               {sidebarOpen ? <PanelLeftClose size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
             </button>
+            <button type="button" className="nav-toggle share-toggle" onClick={() => { stopRotation(); setWifiOpen(true) }} title="Share Wi-Fi and links as QR codes" aria-label="Share Wi-Fi and links"><QrCode size={22} aria-hidden="true" /></button>
             <div><p className="shell-identity">Home / Control</p><h1>{section.label}</h1><p className="date">{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}{christmasNote && <span className="holiday-countdown"><Gift size={12} aria-hidden="true" />{christmasNote}</span>}</p></div>
           </div>
           <TrackedAircraftBadge entities={entities} onOpenFlights={openFlightsSlide} />
@@ -1284,7 +1285,6 @@ function App() {
                 open={connectionOpen}
                 onOpenChange={(open) => { if (open) stopRotation(); setConnectionOpen(open) }}
               />
-              <button type="button" className="topbar-chip" onClick={() => { stopRotation(); setWifiOpen(true) }} title="Share Wi-Fi" aria-label="Share Wi-Fi"><QrCode size={18} aria-hidden="true" /></button>
               <button type="button" className="topbar-chip" onClick={() => { stopRotation(); setEventLogOpen(true) }} title="View activity log" aria-label="View activity log"><History size={18} aria-hidden="true" /></button>
               <button
                 type="button"
@@ -1480,7 +1480,7 @@ function App() {
         />
       )}
       {eventLogOpen && <EventLog events={events} onClose={() => setEventLogOpen(false)} />}
-      {wifiOpen && <WifiSheet onClose={() => setWifiOpen(false)} onOpenSettings={() => { setWifiOpen(false); setConfigTab('wifi'); setConfigOpen(true) }} />}
+      {wifiOpen && <ShareSheet onClose={() => setWifiOpen(false)} onOpenSettings={() => { setWifiOpen(false); setConfigTab('wifi'); setConfigOpen(true) }} />}
     </div>
   )
 }

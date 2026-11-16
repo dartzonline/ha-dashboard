@@ -639,3 +639,30 @@ def test_whole_home_meter_is_chosen_and_taken_back(tmp_path, monkeypatch):
     assert client.put("/api/config", json={"wholeHomeEnergyEntity": "sensor.utility_meter"}).json()["wholeHomeEnergyEntity"] == "sensor.utility_meter"
     assert client.put("/api/config", json={"wholeHomeEnergyEntity": "light.kitchen"}).status_code == 422
     assert client.put("/api/config", json={"wholeHomeEnergyEntity": ""}).json()["wholeHomeEnergyEntity"] is None
+
+
+class TestQuickLinks:
+    def test_saved_listed_and_cleared(self, tmp_path, monkeypatch):
+        from app import dashboard_config
+
+        monkeypatch.setattr(dashboard_config, "_storage_path", lambda: tmp_path / "overrides.json")
+        assert client.get("/api/links").json() == {"links": []}
+        links = [{"label": "Plex", "url": "http://192.168.1.50:32400/web"}, {"label": " Hubitat ", "url": "http://192.168.1.51"}]
+        saved = client.put("/api/config", json={"quickLinks": links}).json()
+        assert [link["label"] for link in saved["quickLinks"]] == ["Plex", "Hubitat"]
+        response = client.get("/api/links")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["links"][1] == {"label": "Hubitat", "url": "http://192.168.1.51"}
+        # Saving something else leaves the links alone; an empty list clears them.
+        assert client.put("/api/config", json={"energyRatePerKwh": 0.1}).json()["quickLinks"] and True
+        assert client.put("/api/config", json={"quickLinks": []}).json()["quickLinks"] == []
+
+    def test_only_web_addresses_and_a_sensible_list(self, tmp_path, monkeypatch):
+        from app import dashboard_config
+
+        monkeypatch.setattr(dashboard_config, "_storage_path", lambda: tmp_path / "overrides.json")
+        for bad in ("javascript:alert(1)", "file:///etc/passwd", "192.168.1.5:8123", "http://a b", "http://"):
+            assert client.put("/api/config", json={"quickLinks": [{"label": "x", "url": bad}]}).status_code == 422, bad
+        assert client.put("/api/config", json={"quickLinks": [{"label": "  ", "url": "http://192.168.1.5"}]}).status_code == 422
+        too_many = [{"label": f"L{i}", "url": f"http://192.168.1.{i}"} for i in range(1, 14)]
+        assert client.put("/api/config", json={"quickLinks": too_many}).status_code == 422

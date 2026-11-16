@@ -1,0 +1,17 @@
+.share-sheet { width: min(1000px, 100%); }
+.share-grid { list-style: none; margin: 0; padding: 18px 0 6px; display: grid; grid-template-columns: repeat(auto-fit, minmax(178px, 1fr)); gap: 14px; }
+.share-card { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 0; padding: 14px 10px 12px; border-radius: var(--r-md); background: var(--surface); }
+/* A QR code needs its own white ground and quiet zone whatever the theme, or phones will not read it. */
+.share-qr { width: min(100%, 164px); aspect-ratio: 1; border-radius: 10px; background: #fff; box-shadow: 0 0 0 5px #fff; margin: 5px 0; }
+.share-qr.is-missing { display: grid; place-items: center; color: #444; font-size: .8rem; }
+.share-card > strong { color: var(--text); font-size: 1rem; font-weight: 750; text-align: center; }
+.share-line { max-width: 100%; color: var(--muted); font-size: .74rem; text-align: center; overflow-wrap: anywhere; }
+.share-password { max-width: 100%; color: var(--accent-strong); font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace); font-size: .86rem; letter-spacing: .03em; text-align: center; overflow-wrap: anywhere; }
+.share-note { margin: 0; padding: 28px 0 8px; color: var(--muted); font-size: .86rem; text-align: center; }
+.share-footer { position: relative; display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.share-countdown { flex: 1; color: var(--muted); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.share-footer .detail-action { min-height: var(--tap); padding: 0 18px; display: inline-flex; align-items: center; gap: 8px; }
+.share-bar { position: absolute; left: 0; top: -1px; height: 2px; width: 100%; background: var(--accent); transform-origin: left; animation-name: share-drain; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes share-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .share-bar { animation: none; } }
+@media (max-width: 760px) { .share-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -68,7 +68,7 @@ export function WifiSettings({ entities }: { entities: Map<string, HAEntity> }) 
   return (
     <div className="wifi-settings" role="tabpanel" id="config-panel-wifi" aria-labelledby="config-tab-wifi">
       <p className="config-hint">
-        The <strong>Wi-Fi</strong> button at the top of the screen shows this network as a QR code for 45 seconds, so guests can join
+        The <strong>QR</strong> button at the top left of the screen shows this network as a QR code (with your links, below) for 30 seconds, so guests can join
         without typing. The password is kept on the add-on and only sent to the screen when the button is pressed.
       </p>
       {suggestions.length > 0 && !ssid && (

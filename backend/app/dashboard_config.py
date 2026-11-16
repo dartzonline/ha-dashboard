@@ -92,6 +92,31 @@ class GuestWifiPayload(BaseModel):
         return self
 
 
+class QuickLink(BaseModel):
+    """One address the Share button turns into a QR code: a name and where it goes."""
+
+    label: str = Field(min_length=1, max_length=40)
+    url: str = Field(min_length=8, max_length=300)
+
+    @field_validator("label")
+    @classmethod
+    def _label_is_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Give the link a name")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def _url_is_a_web_address(cls, value: str) -> str:
+        value = value.strip()
+        # A phone opens what it scans, so only plain web addresses are accepted: no javascript:,
+        # no file:, no embedded spaces.
+        if not re.match(r"^https?://[^\s/]+[^\s]*$", value, re.IGNORECASE):
+            raise ValueError("Use a web address that starts with http:// or https://")
+        return value
+
+
 class DashboardConfigPayload(BaseModel):
     sections: list[DashboardSection] | None = None
     # Night Mode only ever calls `light.turn_off` on these, so anything that is not a `light.`
@@ -114,6 +139,9 @@ class DashboardConfigPayload(BaseModel):
     binSchedule: BinSchedulePayload | None = None
     morningRun: MorningRunPayload | None = None
     guestWifi: GuestWifiPayload | None = None
+    # Named addresses for the Share button's QR codes. An empty list clears them (the merging save
+    # drops only None, so [] is how a household takes them all back).
+    quickLinks: list[QuickLink] | None = Field(default=None, max_length=12)
     notifications: NotificationsPayload | None = None
     # The whole-home energy meter, picked on the Energy page. "" puts it back to automatic (the
     # merging save drops nulls, so an empty string is how a choice is taken back).

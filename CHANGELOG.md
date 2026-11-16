@@ -3,6 +3,19 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.28.0 - 2026-11-16: One Share button for every QR code
+
+**Share.** The QR button moved to the top-left, next to the menu. One tap shows every QR code at
+once, each with its name underneath: the Wi-Fi (with its name and password), Home Assistant, and any
+links you add. The whole sheet closes itself after 30 seconds (a countdown runs along the bottom), or
+as soon as you tap outside it.
+
+**Links.** Settings has a new *Share* tab (the old Wi-Fi tab) with a *Links* section: a name and a web
+address for each, such as Hubitat, Plex or Homebridge, with one-tap name suggestions. Up to 12. Home
+Assistant is always included and its address is worked out from where the panel is served, so there is
+nothing to type. The links are saved on the add-on, never in the code. They only open on phones that
+are on your home Wi-Fi.
+
 ## 1.27.3 - 2026-11-16: Keeps the tablet screen on
 
 The dashboard now keeps the screen awake while it is open. It asks for a screen wake lock and, on a
