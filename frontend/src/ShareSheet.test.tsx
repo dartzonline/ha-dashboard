@@ -27,10 +27,21 @@ describe('ShareSheet', () => {
     expect(screen.getByRole('img', { name: 'QR code to open Plex' })).toBeTruthy()
     expect(screen.getByRole('img', { name: 'QR code to open Hubitat' })).toBeTruthy()
     for (const title of ['Wi-Fi', 'Home Assistant', 'Plex', 'Hubitat']) expect(screen.getByText(title)).toBeTruthy()
-    expect(screen.getByText('correct horse')).toBeTruthy()
+    // The QR carries the password, so it is not written out unless someone asks.
+    expect(screen.queryByText('correct horse')).toBeNull()
     expect(screen.getByText('192.168.1.50:32400/web')).toBeTruthy()
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls.map((call) => (call as unknown as [string, RequestInit])[1].cache)).toEqual(['no-store', 'no-store'])
+  })
+
+  it('shows the password only after "Show password" is tapped, and hides it again', async () => {
+    stub()
+    render(<ShareSheet onClose={vi.fn()} onOpenSettings={vi.fn()} />)
+    await settle()
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }))
+    expect(screen.getByText('correct horse')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }))
+    expect(screen.queryByText('correct horse')).toBeNull()
   })
 
   it('closes the whole sheet by itself after 30 seconds, not before', async () => {
@@ -73,7 +84,7 @@ describe('ShareSheet', () => {
     render(<ShareSheet onClose={vi.fn()} onOpenSettings={vi.fn()} />)
     await settle()
     expect(screen.getByRole('img', { name: 'QR code to join Cafe' })).toBeTruthy()
-    expect(document.querySelector('.share-password')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Show password' })).toBeNull()
   })
 
   it('still shows the links when no Wi-Fi is saved, and offers Settings', async () => {

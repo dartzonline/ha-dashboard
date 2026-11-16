@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import air_quality, bins, car_energy, connectivity, departure, flaky, fridge_trend, garage_health, garden, home_health, house_watch, hvac_runtime, local_time, maintenance, morning_run, notifier, room_balance, routines, salt_watch, slow_cache, weather_advice, weekly
+from . import about, air_quality, bins, car_energy, connectivity, departure, flaky, fridge_trend, garage_health, garden, home_health, house_watch, hvac_runtime, local_time, maintenance, morning_run, notifier, room_balance, routines, salt_watch, slow_cache, weather_advice, weekly
 from .storage import data_file
 from .config import load_settings
 from .dashboard_config import DashboardConfigPayload, clear_overrides, load_overrides, save_overrides
@@ -472,6 +472,12 @@ async def guest_wifi() -> JSONResponse:
         "security": stored.get("security", "WPA"),
         "hidden": bool(stored.get("hidden")),
     }, headers=headers)
+
+
+@app.get("/api/about")
+async def about_this_panel() -> dict[str, Any]:
+    """The running version and the day it was released (shown at the top of Settings)."""
+    return about.about(addon_version(), Path(__file__).resolve().parents[2] / "CHANGELOG.md")
 
 
 @app.get("/api/links")

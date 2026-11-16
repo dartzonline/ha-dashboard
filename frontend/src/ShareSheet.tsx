@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { QrCode, Settings, X } from 'lucide-react'
+import { Eye, EyeOff, QrCode, Settings, X } from 'lucide-react'
 import { apiUrl } from './api'
 import { qrMatrix, wifiQrPayload } from './qr'
 import { SHARE_SHEET_SECONDS, withHomeAssistant } from './shareLinks'
@@ -56,6 +56,7 @@ export function ShareSheet({ onClose, onOpenSettings }: { onClose: () => void; o
   const [wifi, setWifi] = useState<WifiState>({ state: 'loading' })
   const [saved, setSaved] = useState<ShareLink[] | null>(null)
   const [secondsLeft, setSecondsLeft] = useState(SHARE_SHEET_SECONDS)
+  const [reveal, setReveal] = useState(false)
   // The page re-renders constantly (live data); the timer must not restart each time.
   const closeRef = useRef(onClose)
   useEffect(() => { closeRef.current = onClose })
@@ -102,7 +103,17 @@ export function ShareSheet({ onClose, onOpenSettings }: { onClose: () => void; o
             {wifi.state === 'ready' && (
               <QrCard title="Wi-Fi" label={`QR code to join ${wifi.wifi.ssid}`} text={wifiQrPayload(wifi.wifi)}>
                 <small className="share-line">{wifi.wifi.ssid}</small>
-                {wifi.wifi.security !== 'nopass' && <code className="share-password">{wifi.wifi.password}</code>}
+                {/* The QR code carries the password, so nobody needs to read it: it stays hidden unless
+                    someone with a device that cannot scan asks for it. */}
+                {wifi.wifi.security !== 'nopass' && (
+                  <>
+                    {reveal && <code className="share-password">{wifi.wifi.password}</code>}
+                    <button type="button" className="share-reveal" aria-pressed={reveal} onClick={() => setReveal(!reveal)}>
+                      {reveal ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                      {reveal ? 'Hide password' : 'Show password'}
+                    </button>
+                  </>
+                )}
               </QrCard>
             )}
             {links?.map((link) => (

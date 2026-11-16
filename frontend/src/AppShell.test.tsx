@@ -203,7 +203,7 @@ describe('dashboard shell', () => {
     fireEvent.click(button)
     expect(await screen.findByRole('img', { name: 'QR code to join HomeNet' })).toBeTruthy()
     expect(screen.getByRole('img', { name: 'QR code to open Plex' })).toBeTruthy()
-    expect(screen.getByText('correct horse')).toBeTruthy()
+    expect(screen.queryByText('correct horse')).toBeNull()
     fireEvent.click(container.querySelector('.detail-backdrop') as HTMLElement)
     expect(screen.queryByRole('dialog', { name: 'Share' })).toBeNull()
     vi.unstubAllGlobals()

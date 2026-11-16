@@ -3,6 +3,15 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.29.0 - 2026-11-16: Version and release date in Settings, quieter Wi-Fi password
+
+**Settings shows the version.** At the top of Settings: which version is running, the day that version
+was released (read from this changelog), and the copyright line.
+
+**Wi-Fi password.** The Share sheet no longer writes the Wi-Fi password under its QR code. The QR
+carries the password, so nobody needs to read it. A *Show password* button reveals it for a device that
+cannot scan, and *Hide password* puts it away again.
+
 ## 1.28.0 - 2026-11-16: One Share button for every QR code
 
 **Share.** The QR button moved to the top-left, next to the menu. One tap shows every QR code at

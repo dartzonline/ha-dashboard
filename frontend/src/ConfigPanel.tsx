@@ -7,6 +7,7 @@ import { icons } from './icons'
 import { RemindersSettings } from './RemindersSettings'
 import { WifiSettings } from './WifiSettings'
 import { LinksSettings } from './LinksSettings'
+import { AboutLine } from './AboutLine'
 import { tabListKeyHandler } from './tablist'
 import { editableSectionIds } from './useDashboardConfig'
 import { useEntityDiscovery } from './useEntityDiscovery'
@@ -290,6 +291,8 @@ export function ConfigPanel({ entities, sections, nightModeIndoorLights, lightAu
           <div><p>Home / Control</p><h2 id="config-title">Settings</h2></div>
           <button type="button" className="sheet-close" data-autofocus onClick={onClose} title="Close" aria-label="Close configuration"><X size={20} aria-hidden="true" /></button>
         </header>
+
+        <AboutLine />
 
         {!ready && tab !== 'theme' && (
           <p className={loadError ? 'detail-error' : 'config-waiting'} role="status">
