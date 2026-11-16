@@ -3,6 +3,22 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.29.1 - 2026-11-17: Fixes Fully Kiosk closing by itself
+
+**The cause.** The Maintenance page's *Appliances* tab (added in 1.26.0) used a layout the browser could
+not settle: loading it took the page from about 300 MB to over 700 MB within seconds and froze it. On a
+wall tablet the rotation reached that tab every few minutes, so Fully Kiosk ran out of memory and was
+closed, which also looked like the screen turning off. Found by loading each page in a headless browser
+and watching its memory, then confirmed gone: the rotation now runs a full loop without it.
+
+**Lighter, same look.** The World map's two images are now 1600 pixels wide instead of 2700 and 2400, which
+takes their decoded memory from about 26 MB to about 10 MB with no visible difference at screen size.
+Themes, effects and every feature are untouched.
+
+**Safety net.** The panel now refreshes itself quietly around 4 am, once it has been up for a day, and
+also if its memory ever climbs past a safe level. It never does this while a sheet, the menu or search is
+open, and it comes back on the same page with the same theme.
+
 ## 1.29.0 - 2026-11-16: Version and release date in Settings, quieter Wi-Fi password
 
 **Settings shows the version.** At the top of Settings: which version is running, the day that version

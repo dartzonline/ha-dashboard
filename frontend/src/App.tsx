@@ -14,6 +14,7 @@ import type { HAStateChange } from './useHomeAssistant'
 import { useInsights } from './useInsights'
 import { useDashboardConfig } from './useDashboardConfig'
 import { insightsSlides, rotationInterval } from './insightsSlides'
+import { useAutoRefresh } from './useAutoRefresh'
 import { useKeepAwake } from './useKeepAwake'
 import { flightsSlideCount } from './flightsSlides'
 import { ConfigPanel } from './ConfigPanel'
@@ -953,6 +954,8 @@ function App() {
 
   // ---- Rotation --------------------------------------------------------------------------------
   const rotating = autoRotate && !sheetOpen && !sidebarOpen && !searchQuery
+  // Overnight (or if memory ever climbs) the page reloads itself, but never while something is open.
+  useAutoRefresh(!sheetOpen && !sidebarOpen && !searchQuery)
   const rotationDelay = activeSection === 'weather' || activeSection === 'flights' ? SLIDE_INTERVAL_MS : rotationInterval
   const rotationKey = `${activeSection}:${insightsSlide}:${weatherSlide}:${flightsSlide}:${morningSlide}:${tabSlides[activeSection] ?? 0}`
   const secondsLeft = countdown?.key === rotationKey ? countdown.seconds : Math.round(rotationDelay / 1000)

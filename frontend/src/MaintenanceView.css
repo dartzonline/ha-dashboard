@@ -161,9 +161,12 @@
   .maint-view > .tab-pager { margin-top: auto; }
 }
 
-/* Appliance cards differ a lot in height; columns let the short ones stack under each other
-   instead of leaving gaps, so all of them fit the screen. */
+/* Appliance cards differ a lot in height, so they sit in a plain grid, top-aligned. An earlier version
+   packed them with CSS multi-columns inside a fixed-height, overflow-hidden box; on a Fire tablet the
+   browser could not settle that layout and its memory ran away until Fully Kiosk was killed. Do not
+   bring `column-width` back here. */
 @media (min-width: 761px) {
-  .maint-page > .maint-grid { display: block; column-width: 260px; column-gap: var(--gap); height: 100%; overflow: hidden; }
-  .maint-page > .maint-grid > * { break-inside: avoid; margin-bottom: var(--gap); }
+  .maint-page > .maint-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: var(--gap); align-items: start; align-content: start; height: 100%; overflow-y: auto; scrollbar-width: none; }
+  /* The garage door's long explanation is the tallest thing on the tab; its numbers say the same. */
+  .maint-page > .maint-grid .maint-note { display: none; }
 }
