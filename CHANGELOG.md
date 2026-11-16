@@ -3,6 +3,13 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.27.2 - 2026-11-16: AdGuard tab polish
+
+- The hero button now offers **Switch filtering on** when protection is on but filtering is off.
+- Added an add-on update badge when a newer AdGuard Home version is available.
+- Compact Y-axis tick formatting (`k`) on the lookups and blocked history charts.
+- Filter switches now handle `unknown` states and show busy feedback while toggling.
+
 ## 1.27.1 - 2026-11-16: AdGuard tab fits the screen
 
 The last filter row on the AdGuard tab ("Query log") was cut off at the bottom of the screen. The
