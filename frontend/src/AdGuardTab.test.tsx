@@ -122,4 +122,23 @@ describe('AdGuardTab', () => {
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText('Home Assistant is offline')).toBeTruthy()
   })
+
+  it('offers to switch filtering on from the hero when protection is on but filtering is off', async () => {
+    const onService = vi.fn(async () => [])
+    render(<AdGuardTab entities={linked('on', 'off')} onService={onService} />)
+    expect(screen.getByText('Filtering is off')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Switch filtering on' }))
+    await waitFor(() => expect(onService).toHaveBeenCalledWith('switch', 'turn_on', { entity_id: 'switch.adguard_home_filtering' }))
+  })
+
+  it('shows an add-on update badge when an update is available and marks unknown switches', () => {
+    const entities = linked()
+    entities.set('update.adguard_home_update', entity('update.adguard_home_update', 'on', { installed_version: '6.3.2', latest_version: '6.4.0' }))
+    entities.set('switch.adguard_home_safe_browsing', entity('switch.adguard_home_safe_browsing', 'unknown'))
+    render(<AdGuardTab entities={entities} onService={vi.fn()} />)
+    expect(screen.getByText('Update 6.4.0')).toBeTruthy()
+    const sb = screen.getByRole('switch', { name: /Safe browsing/ }) as HTMLButtonElement
+    expect(sb.disabled).toBe(true)
+    expect(screen.getByText('Unknown')).toBeTruthy()
+  })
 })

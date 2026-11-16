@@ -23,6 +23,7 @@ const FILTER_COUNT: Partial<Record<AdGuardSwitchKey, { stat: AdGuardStatKey; wor
 /** Switching one of these off stops ads being blocked, so it takes a second tap. */
 const NEEDS_CONFIRM: AdGuardSwitchKey[] = ['protection', 'filtering']
 const CONFIRM_MS = 4_000
+const isUnreachable = (state: string) => state === 'unavailable' || state === 'unknown'
 
 const HEADLINES = {
   working: { title: 'Blocking ads and trackers', detail: 'Protection and filtering are both on.' },
@@ -79,6 +80,11 @@ export function AdGuardTab({ entities, onService }: AdGuardTabProps) {
   const blocking = blockingState(model)
   const headline = HEADLINES[blocking]
   const protection = model.switches.protection
+  const filtering = model.switches.filtering
+  const heroTarget: AdGuardSwitchKey = blocking === 'filtering-off' && filtering ? 'filtering' : 'protection'
+  const heroEntity = model.switches[heroTarget]
+  const updateAvailable = model.addon?.state === 'on'
+  const latestVersion = model.addon ? String(model.addon.attributes.latest_version ?? '') || null : null
   const queries = number(model.stats.queries)
   const blocked = number(model.stats.blocked)
   const ratio = number(model.stats.ratio) ?? (queries && blocked !== null ? (blocked / queries) * 100 : null)
@@ -107,8 +113,9 @@ export function AdGuardTab({ entities, onService }: AdGuardTabProps) {
     }
   }
 
-  const protectionButtonText = busy === 'protection' ? 'Working…'
-    : protection?.state === 'on' ? (armed === 'protection' ? 'Tap again to switch off' : 'Switch off') : 'Switch on'
+  const heroButtonText = busy === heroTarget ? 'Working…'
+    : heroTarget === 'filtering' ? 'Switch filtering on'
+    : heroEntity?.state === 'on' ? (armed === 'protection' ? 'Tap again to switch off' : 'Switch off') : 'Switch on'
 
   return (
     <div className="adguard-page">
@@ -117,17 +124,22 @@ export function AdGuardTab({ entities, onService }: AdGuardTabProps) {
           {blocking === 'working' ? <ShieldCheck size={30} /> : blocking === 'unknown' ? <ShieldAlert size={30} /> : <ShieldOff size={30} />}
         </span>
         <div className="adguard-hero-copy">
-          <h3>{headline.title}</h3>
+          <h3>
+            {headline.title}
+            {updateAvailable && (
+              <span className="adguard-update">{latestVersion ? `Update ${latestVersion}` : 'Update available'}</span>
+            )}
+          </h3>
           <p>{headline.detail}{protection && sinceLabel(protection.last_changed) ? ` · protection last changed ${sinceLabel(protection.last_changed)}` : ''}</p>
         </div>
-        {protection && (
+        {heroEntity && (
           <button
             type="button"
-            className={`adguard-master glass-pill${armed === 'protection' ? ' is-armed' : ''}${protection.state !== 'on' ? ' is-primary' : ''}`}
-            onClick={() => void flip('protection')}
-            disabled={busy !== null || protection.state === 'unavailable'}
+            className={`adguard-master glass-pill${armed === heroTarget ? ' is-armed' : ''}${heroEntity.state !== 'on' ? ' is-primary' : ''}`}
+            onClick={() => void flip(heroTarget)}
+            disabled={busy !== null || isUnreachable(heroEntity.state)}
           >
-            {protectionButtonText}
+            {heroButtonText}
           </button>
         )}
       </section>
@@ -156,11 +168,11 @@ export function AdGuardTab({ entities, onService }: AdGuardTabProps) {
                     aria-checked={on}
                     className={on ? 'is-on' : ''}
                     onClick={() => void flip(key)}
-                    disabled={busy !== null || entity.state === 'unavailable'}
+                    disabled={busy !== null || isUnreachable(entity.state)}
                   >
                     <span className="adguard-switch-copy"><strong>{SWITCH_LABELS[key].label}</strong><em>{armed === key ? 'Tap again to switch off' : SWITCH_LABELS[key].hint}</em></span>
                     {count && <span className="adguard-count">{compactCount(count.value)} {count.word}</span>}
-                    <span className="adguard-pill">{entity.state === 'unavailable' ? 'Offline' : on ? 'On' : 'Off'}</span>
+                    <span className="adguard-pill">{busy === key ? '…' : entity.state === 'unavailable' ? 'Offline' : entity.state === 'unknown' ? 'Unknown' : on ? 'On' : 'Off'}</span>
                   </button>
                 </li>
               )

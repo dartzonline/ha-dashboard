@@ -10,7 +10,8 @@
 .adguard-hero.is-protection-off .adguard-shield, .adguard-hero.is-filtering-off .adguard-shield { color: var(--danger); background: var(--danger-soft); }
 .adguard-hero.is-unknown .adguard-shield { color: var(--warn); background: var(--warn-soft); }
 .adguard-hero-copy { min-width: 0; flex: 1; }
-.adguard-hero-copy h3 { margin: 0; color: var(--text); font-size: 1.15rem; font-weight: 750; letter-spacing: 0; text-transform: none; }
+.adguard-hero-copy h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0; color: var(--text); font-size: 1.15rem; font-weight: 750; letter-spacing: 0; text-transform: none; }
+.adguard-update { padding: 2px 8px; border-radius: var(--r-pill); color: var(--accent-ink); background: var(--accent); font-size: .68rem; font-weight: 700; letter-spacing: .02em; }
 .adguard-hero-copy p { margin: 3px 0 0; color: var(--muted); font-size: .8rem; }
 .adguard-master { min-height: var(--tap); padding: 0 20px; font-size: .8rem; font-weight: 700; white-space: nowrap; }
 .adguard-master.is-armed { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--glass-border)); background-color: var(--warn-soft); }

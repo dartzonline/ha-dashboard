@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { compactCount } from './adguard'
 import { isAbortError } from './cachedFetch'
 import { GlassTooltip } from './chartKit'
 import { chartMargin, gridProps, lineProps, seriesColor, tooltipCursor, xAxisProps, yAxisProps } from './chartTheme'
@@ -19,10 +20,12 @@ interface AdGuardChartProps {
   unit: string
   /** Series colour index, so the four charts are told apart without implying they are related lines. */
   color: number
+  /** Compact Y-axis ticks (e.g. "53.4k") for large query counts. */
+  compact?: boolean
 }
 
 /** One 24-hour trend of one AdGuard sensor. Memoised: the page re-renders on every Home Assistant frame. */
-const AdGuardChart = memo(function AdGuardChart({ title, entityId, unit, color }: AdGuardChartProps) {
+const AdGuardChart = memo(function AdGuardChart({ title, entityId, unit, color, compact }: AdGuardChartProps) {
   const [points, setPoints] = useState<HistoryPoint[]>([])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
 
@@ -49,7 +52,7 @@ const AdGuardChart = memo(function AdGuardChart({ title, entityId, unit, color }
             <AreaChart data={points} margin={chartMargin}>
               <CartesianGrid {...gridProps} />
               <XAxis dataKey="time" type="number" domain={['dataMin', 'dataMax']} tickFormatter={hourLabel} minTickGap={36} {...xAxisProps} />
-              <YAxis domain={['auto', 'auto']} {...yAxisProps} />
+              <YAxis domain={['auto', 'auto']} tickFormatter={compact ? (v: number) => compactCount(v) : undefined} {...yAxisProps} />
               <Tooltip cursor={tooltipCursor} content={<GlassTooltip labelFormat={clockLabel} valueFormat={(value) => `${number.format(value)}${unit}`} />} />
               <Area type="monotone" dataKey="value" name={title} stroke={stroke} fill={stroke} fillOpacity={0.12} isAnimationActive={false} connectNulls {...lineProps} />
             </AreaChart>
@@ -72,8 +75,8 @@ interface AdGuardChartsProps {
 export function AdGuardCharts({ ids }: AdGuardChartsProps) {
   return (
     <div className="adguard-charts">
-      <AdGuardChart title="Lookups over time" entityId={ids.queries} unit="" color={0} />
-      <AdGuardChart title="Blocked over time" entityId={ids.blocked} unit="" color={1} />
+      <AdGuardChart title="Lookups over time" entityId={ids.queries} unit="" color={0} compact />
+      <AdGuardChart title="Blocked over time" entityId={ids.blocked} unit="" color={1} compact />
       <AdGuardChart title="Block rate" entityId={ids.ratio} unit="%" color={2} />
       <AdGuardChart title="Answer speed" entityId={ids.speed} unit=" ms" color={3} />
     </div>
