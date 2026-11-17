@@ -3,6 +3,13 @@
 Home Assistant's Supervisor shows this file's newest entries as the add-on's "What's new" release
 notes, so every version bump in `config.yaml` gets a matching entry here.
 
+## 1.29.2 - 2026-11-17: Fixes the 1.29.1 install failing
+
+1.29.1 could not be installed: its build stopped on a new test file that the production type check
+does not accept, so Home Assistant kept the old version. This release has the same changes as 1.29.1
+(the Fully Kiosk crash fix, lighter map images and the overnight refresh) and builds. The test now reads
+its stylesheet in a way the production build accepts, and was checked to still catch the bad layout.
+
 ## 1.29.1 - 2026-11-17: Fixes Fully Kiosk closing by itself
 
 **The cause.** The Maintenance page's *Appliances* tab (added in 1.26.0) used a layout the browser could

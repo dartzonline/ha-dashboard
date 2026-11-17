@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+// Read as text by the bundler, so this needs no Node file APIs (the production build type-checks test files too).
+import maintenanceCss from './MaintenanceView.css?inline'
 
 /**
  * Release 1.26.0 packed the Maintenance appliance cards with CSS multi-columns inside a fixed-height,
@@ -10,8 +10,7 @@ import { describe, expect, it } from 'vitest'
  */
 describe('layouts that exhaust a tablet browser', () => {
   it('keeps CSS multi-columns off the appliance grid', () => {
-    const css = readFileSync(join(process.cwd(), 'src', 'MaintenanceView.css'), 'utf8')
-    const rules = css.split('}').filter((rule) => rule.includes('.maint-grid') && !rule.trim().startsWith('/*'))
+    const rules = maintenanceCss.split('}').filter((rule) => rule.includes('.maint-grid') && !rule.trim().startsWith('/*'))
     expect(rules.length).toBeGreaterThan(0)
     for (const rule of rules) expect(rule, rule).not.toMatch(/column-width|column-count|[^-]columns\s*:/)
   })

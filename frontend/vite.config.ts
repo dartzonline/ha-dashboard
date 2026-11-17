@@ -8,6 +8,8 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // Tests ignore stylesheets unless asked; layoutGuard.test.ts reads this one as text.
+    css: { include: [/MaintenanceView\.css/] },
   },
   server: {
     proxy: {
